@@ -7,6 +7,8 @@ import {
   EmployeeDirectory,
   ProcurementTransaction,
   StockLedgerEntry,
+  BudgetAllocationItem,
+  AdminUserItem,
 } from './types';
 
 export const INITIAL_SPPG_UNITS: SppgUnit[] = [
@@ -845,3 +847,68 @@ export const INITIAL_STOCK_LEDGERS: StockLedgerEntry[] = [
     remainingStockAfter: 5,
   },
 ];
+
+export const INITIAL_BUDGET_ALLOCATIONS: BudgetAllocationItem[] = [
+  {
+    id: 'BUD-001',
+    sppgUnitId: 'SPPG-AA02',
+    sppgUnitName: 'SPPG ABAR ABIR 02',
+    fiscalPeriod: 'Oktober 2026',
+    amountAllocated: 250000000,
+    amountRealized: 168450000,
+    remainingBudget: 81550000,
+    allocatedDate: '2026-10-01T08:00:00Z',
+    notes: 'Pagu Kas Operasional Pemenuhan Gizi Dapur AA02 (APBN/Gizi)',
+  },
+  {
+    id: 'BUD-002',
+    sppgUnitId: 'SPPG-BS02',
+    sppgUnitName: 'SPPG BANJARSARI 02 LERAN MANYAR',
+    fiscalPeriod: 'Oktober 2026',
+    amountAllocated: 220000000,
+    amountRealized: 149200000,
+    remainingBudget: 70800000,
+    allocatedDate: '2026-10-01T08:00:00Z',
+    notes: 'Pagu Kas Operasional Pemenuhan Gizi Dapur BS02 (APBN/Gizi)',
+  },
+  {
+    id: 'BUD-003',
+    sppgUnitId: 'SPPG-DR01',
+    sppgUnitName: 'SPPG DAHAN REJO 01',
+    fiscalPeriod: 'Oktober 2026',
+    amountAllocated: 200000000,
+    amountRealized: 132600000,
+    remainingBudget: 67400000,
+    allocatedDate: '2026-10-01T08:00:00Z',
+    notes: 'Pagu Kas Operasional Pemenuhan Gizi Dapur DR01 (APBN/Gizi)',
+  },
+  {
+    id: 'BUD-004',
+    sppgUnitId: 'SPPG-SM01',
+    sppgUnitName: 'SPPG SEMAMPIR',
+    fiscalPeriod: 'Oktober 2026',
+    amountAllocated: 180000000,
+    amountRealized: 112150000,
+    remainingBudget: 67850000,
+    allocatedDate: '2026-10-01T08:00:00Z',
+    notes: 'Pagu Kas Operasional Pemenuhan Gizi Dapur SM01 (APBN/Gizi)',
+  },
+];
+
+export const INITIAL_ADMIN_USERS: AdminUserItem[] = [
+  {
+    id: 'ADM-001',
+    username: 'superadmin',
+    name: 'Superadmin Pengelola SPPG',
+    role: 'SUPERADMIN',
+    createdAt: '2026-10-01T00:00:00Z',
+  },
+  {
+    id: 'ADM-002',
+    username: 'auditor',
+    name: 'Drs. Supriyanto, Ak., CA (Admin 2 / Pemantau)',
+    role: 'EXECUTIVE_AUDITOR',
+    createdAt: '2026-10-01T00:00:00Z',
+  },
+];
+

@@ -1,11 +1,11 @@
-import { PrismaClient, MovementType, AuditStatus } from '@prisma/client';
+import { PrismaClient, MovementType, AuditStatus, UserRole } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('🌱 Memulai proses seeding database Neon PostgreSQL GiziFlow Enterprise...');
 
-  // 1. Bersihkan tabel dalam urutan aman (jika ada data lama)
+  // 1. Bersihkan tabel dalam urutan aman
   try {
     await prisma.procurementItem.deleteMany();
     await prisma.procurementOrder.deleteMany();
@@ -14,13 +14,49 @@ async function main() {
     await prisma.employee.deleteMany();
     await prisma.ingredient.deleteMany();
     await prisma.ingredientCategory.deleteMany();
+    await prisma.masterUnit.deleteMany();
     await prisma.supplier.deleteMany();
     await prisma.sppgUnit.deleteMany();
+    await prisma.adminUser.deleteMany();
   } catch (e) {
-    console.log('Tabel awal bersih / belum ada relasi:', e);
+    console.log('Tabel awal:', e);
   }
 
-  // 2. Masukkan 4 SPPG Units Mandatori
+  // 2. Buat Akun Admin Default (Private Access)
+  console.log('🔐 Menambahkan Akun Admin Default...');
+  await prisma.adminUser.createMany({
+    data: [
+      {
+        username: 'superadmin',
+        password: 'admin123',
+        name: 'Superadmin Pengelola SPPG',
+        role: UserRole.SUPERADMIN,
+      },
+      {
+        username: 'auditor',
+        password: 'auditor123',
+        name: 'Drs. Supriyanto, Ak., CA (Auditor / Pemantau)',
+        role: UserRole.EXECUTIVE_AUDITOR,
+      },
+    ],
+  });
+
+  // 3. Masukkan Master Satuan Ukur
+  console.log('⚖️ Menambahkan Master Satuan Ukur...');
+  await prisma.masterUnit.createMany({
+    data: [
+      { symbol: 'Kg', name: 'Kilogram', type: 'BERAT' },
+      { symbol: 'Pack', name: 'Pack Kemasan', type: 'KEMASAN' },
+      { symbol: 'Karung', name: 'Karung Sak', type: 'KEMASAN' },
+      { symbol: 'Botol', name: 'Botol Kaca/Plastik', type: 'VOLUME' },
+      { symbol: 'Renteng', name: 'Renteng Sachet', type: 'KEMASAN' },
+      { symbol: 'Liter', name: 'Liter Cairan', type: 'VOLUME' },
+      { symbol: 'Ikat', name: 'Ikat Sayuran', type: 'SATUAN' },
+      { symbol: 'Gram', name: 'Gram', type: 'BERAT' },
+    ],
+  });
+
+  // 4. Masukkan 4 SPPG Units Mandatori
   console.log('🏢 Menambahkan 4 Unit SPPG Mandatori...');
   const sppgAA02 = await prisma.sppgUnit.create({
     data: {
@@ -78,7 +114,7 @@ async function main() {
     },
   });
 
-  // 3. Masukkan Kategori Bahan Makanan
+  // 5. Masukkan Kategori Bahan Makanan
   console.log('🏷️ Menambahkan Kategori Bahan...');
   const catHewani = await prisma.ingredientCategory.create({
     data: {
@@ -134,7 +170,7 @@ async function main() {
     },
   });
 
-  // 4. Masukkan Rekanan CV / Suppliers
+  // 6. Masukkan Rekanan CV / Suppliers
   console.log('🏢 Menambahkan CV / Supplier...');
   const supSPA = await prisma.supplier.create({
     data: {
@@ -196,7 +232,7 @@ async function main() {
     },
   });
 
-  // 5. Masukkan Pegawai / Peminta Belanja
+  // 7. Masukkan Pegawai / Peminta Belanja
   console.log('👥 Menambahkan Karyawan Dapur...');
   const empBudi = await prisma.employee.create({
     data: {
@@ -254,7 +290,7 @@ async function main() {
     },
   });
 
-  // 6. Masukkan Alokasi Pagu Anggaran
+  // 8. Masukkan Alokasi Pagu Anggaran
   console.log('💰 Menambahkan Alokasi Pagu Anggaran...');
   await prisma.budgetAllocation.createMany({
     data: [
@@ -265,7 +301,7 @@ async function main() {
     ],
   });
 
-  // 7. Masukkan EXACT 20 Real Client Items
+  // 9. Masukkan EXACT 20 Real Client Items
   console.log('📦 Menambahkan 20 Bahan Makanan Riil Klien...');
   const clientIngredients = [
     { code: 'ING-PRO-001', name: 'Ayam giling', categoryId: catHewani.id, defaultUnit: 'Kg', currentStock: 145, minStockAlert: 30, lastPurchasePrice: 42000, dist: { 'SPPG-AA02': 45, 'SPPG-BS02': 40, 'SPPG-DR01': 35, 'SPPG-SM01': 25 } },
@@ -307,8 +343,8 @@ async function main() {
     createdIngredients[item.name] = created;
   }
 
-  // 8. Masukkan Contoh Transaksi Pengadaan Ratusan Juta Rupiah (ProcurementOrder)
-  console.log('🧾 Menambahkan Transaksi Belanja Ratusan Juta Rupiah...');
+  // 10. Masukkan Transaksi Belanja Ratusan Juta Rupiah
+  console.log('🧾 Menambahkan Transaksi Belanja...');
   const order1 = await prisma.procurementOrder.create({
     data: {
       receiptNumber: 'NOTA-AA02-20261014-089',
@@ -329,7 +365,6 @@ async function main() {
     },
   });
 
-  // Items untuk order 1
   await prisma.procurementItem.createMany({
     data: [
       { procurementOrderId: order1.id, ingredientId: createdIngredients['Ayam giling']?.id, name: 'Ayam giling', category: 'Protein Hewani', quantity: 145, unit: 'Kg', unitPrice: 42000, subtotal: 6090000, isItemVerified: true, hasPriceAnomaly: false },
@@ -357,7 +392,6 @@ async function main() {
     ],
   });
 
-  // Order 2 untuk SPPG Banjarsari
   const order2 = await prisma.procurementOrder.create({
     data: {
       receiptNumber: 'NOTA-BS02-20261015-042',
@@ -383,7 +417,6 @@ async function main() {
     ],
   });
 
-  // Order 3 dengan Anomali Harga untuk demonstrasi Audit Admin 2
   const order3 = await prisma.procurementOrder.create({
     data: {
       receiptNumber: 'NOTA-SM01-20261015-099',
@@ -413,7 +446,7 @@ async function main() {
     ],
   });
 
-  // 9. Masukkan Mutasi Stok Keluar-Masuk Dapur (StockMovement)
+  // 11. Mutasi Stok
   console.log('📊 Menambahkan Mutasi Stok Dapur...');
   await prisma.stockMovement.createMany({
     data: [

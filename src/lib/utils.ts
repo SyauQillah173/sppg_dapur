@@ -15,6 +15,8 @@ export function formatIDR(value: number): string {
   }).format(value);
 }
 
+export const formatRupiah = formatIDR;
+
 export function formatNumber(value: number, decimals: number = 0): string {
   if (value === undefined || value === null || isNaN(value)) return "0";
   return new Intl.NumberFormat("id-ID", {

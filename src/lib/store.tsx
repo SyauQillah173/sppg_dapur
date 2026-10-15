@@ -14,6 +14,8 @@ import {
   StockLedgerEntry,
   KPISummary,
   AuditStatus,
+  BudgetAllocationItem,
+  AdminUserItem,
 } from './types';
 import {
   INITIAL_SPPG_UNITS,
@@ -24,19 +26,43 @@ import {
   INITIAL_INGREDIENTS,
   INITIAL_PROCUREMENTS,
   INITIAL_STOCK_LEDGERS,
+  INITIAL_BUDGET_ALLOCATIONS,
+  INITIAL_ADMIN_USERS,
 } from './initial-data';
 
 interface ModalState {
-  type: 'INSPECT_RECEIPT' | 'AI_SCANNER' | 'ADD_PROCUREMENT' | 'ADD_INGREDIENT' | 'EDIT_INGREDIENT' | 'RECORD_MUTATION' | 'ADD_SUPPLIER' | 'ADD_EMPLOYEE' | null;
+  type:
+    | 'INSPECT_RECEIPT'
+    | 'AI_SCANNER'
+    | 'ADD_PROCUREMENT'
+    | 'ADD_INGREDIENT'
+    | 'EDIT_INGREDIENT'
+    | 'RECORD_MUTATION'
+    | 'ADD_SUPPLIER'
+    | 'ADD_EMPLOYEE'
+    | 'ADD_BUDGET'
+    | 'ADD_SPPG_UNIT'
+    | 'ADD_ADMIN_USER'
+    | null;
   data?: any;
 }
 
+interface CurrentUser {
+  id: string;
+  username: string;
+  name: string;
+  role: UserRole;
+}
+
 interface StoreContextType {
+  currentUser: CurrentUser | null;
   userRole: UserRole;
+  isReadOnly: boolean;
   setUserRole: (role: UserRole) => void;
   selectedSppgUnit: SppgUnitId | 'ALL';
   setSelectedSppgUnit: (unitId: SppgUnitId | 'ALL') => void;
   sppgUnits: SppgUnit[];
+  budgetAllocations: BudgetAllocationItem[];
   procurements: ProcurementTransaction[];
   ingredients: MasterIngredient[];
   categories: IngredientCategory[];
@@ -44,6 +70,7 @@ interface StoreContextType {
   suppliers: SupplierDirectory[];
   employees: EmployeeDirectory[];
   stockLedgers: StockLedgerEntry[];
+  adminUsers: AdminUserItem[];
   modal: ModalState;
   openModal: (type: ModalState['type'], data?: any) => void;
   closeModal: () => void;
@@ -55,10 +82,20 @@ interface StoreContextType {
   updateIngredient: (id: string, ing: Partial<MasterIngredient>) => void;
   deleteIngredient: (id: string) => void;
   addCategory: (cat: Omit<IngredientCategory, 'id'>) => void;
+  deleteCategory: (id: string) => void;
   addUnit: (unit: Omit<MasterUnit, 'id'>) => void;
+  deleteUnit: (id: string) => void;
   recordStockMutation: (entry: Omit<StockLedgerEntry, 'id' | 'timestamp' | 'remainingStockAfter'>) => void;
   addSupplier: (sup: Omit<SupplierDirectory, 'id' | 'code' | 'totalDisbursed' | 'totalTransactions'>) => void;
   addEmployee: (emp: Omit<EmployeeDirectory, 'id' | 'employeeNumber' | 'totalRequested' | 'totalRealized' | 'pendingBalance'>) => void;
+  addBudgetAllocation: (item: Omit<BudgetAllocationItem, 'id' | 'allocatedDate'>) => void;
+  deleteBudgetAllocation: (id: string) => void;
+  addSppgUnit: (unit: Omit<SppgUnit, 'id' | 'totalRealized' | 'totalRemaining'>) => void;
+  updateSppgUnit: (id: string, data: Partial<SppgUnit>) => void;
+  deleteSppgUnit: (id: string) => void;
+  addAdminUser: (user: Omit<AdminUserItem, 'id' | 'createdAt'>) => void;
+  deleteAdminUser: (id: string) => void;
+  logout: () => Promise<void>;
   resetToDefault: () => void;
 
   // Computed
@@ -66,16 +103,24 @@ interface StoreContextType {
   filteredProcurements: ProcurementTransaction[];
   filteredIngredients: MasterIngredient[];
   filteredStockLedgers: StockLedgerEntry[];
+  filteredBudgetAllocations: BudgetAllocationItem[];
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY = 'giziflow_enterprise_store_v1';
+const LOCAL_STORAGE_KEY = 'giziflow_enterprise_store_v2';
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>({
+    id: 'admin-super-01',
+    username: 'superadmin',
+    name: 'Superadmin Pengelola SPPG',
+    role: 'SUPERADMIN',
+  });
   const [userRole, setUserRole] = useState<UserRole>('SUPERADMIN');
   const [selectedSppgUnit, setSelectedSppgUnit] = useState<SppgUnitId | 'ALL'>('ALL');
   const [sppgUnits, setSppgUnits] = useState<SppgUnit[]>(INITIAL_SPPG_UNITS);
+  const [budgetAllocations, setBudgetAllocations] = useState<BudgetAllocationItem[]>(INITIAL_BUDGET_ALLOCATIONS);
   const [procurements, setProcurements] = useState<ProcurementTransaction[]>(INITIAL_PROCUREMENTS);
   const [ingredients, setIngredients] = useState<MasterIngredient[]>(INITIAL_INGREDIENTS);
   const [categories, setCategories] = useState<IngredientCategory[]>(INITIAL_CATEGORIES);
@@ -83,7 +128,39 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [suppliers, setSuppliers] = useState<SupplierDirectory[]>(INITIAL_SUPPLIERS);
   const [employees, setEmployees] = useState<EmployeeDirectory[]>(INITIAL_EMPLOYEES);
   const [stockLedgers, setStockLedgers] = useState<StockLedgerEntry[]>(INITIAL_STOCK_LEDGERS);
+  const [adminUsers, setAdminUsers] = useState<AdminUserItem[]>(INITIAL_ADMIN_USERS);
   const [modal, setModal] = useState<ModalState>({ type: null });
+
+  // Sync role with current user
+  useEffect(() => {
+    // Fetch logged in session from server
+    fetch('/api/auth/me')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && data.success && data.user) {
+          setCurrentUser(data.user);
+          setUserRole(data.user.role);
+        }
+      })
+      .catch(() => {
+        // Fallback to default
+      });
+  }, []);
+
+  // Sync userRole when changed
+  const handleSetUserRole = (newRole: UserRole) => {
+    setUserRole(newRole);
+    if (currentUser) {
+      setCurrentUser({
+        ...currentUser,
+        role: newRole,
+        name:
+          newRole === 'SUPERADMIN'
+            ? 'Superadmin Pengelola SPPG'
+            : 'Drs. Supriyanto, Ak., CA (Admin 2 / Pemantau)',
+      });
+    }
+  };
 
   // Load from localStorage if present
   useEffect(() => {
@@ -99,6 +176,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (parsed.employees) setEmployees(parsed.employees);
         if (parsed.stockLedgers) setStockLedgers(parsed.stockLedgers);
         if (parsed.sppgUnits) setSppgUnits(parsed.sppgUnits);
+        if (parsed.budgetAllocations) setBudgetAllocations(parsed.budgetAllocations);
+        if (parsed.adminUsers) setAdminUsers(parsed.adminUsers);
       }
     } catch {
       // ignore
@@ -115,6 +194,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     employees?: EmployeeDirectory[];
     stockLedgers?: StockLedgerEntry[];
     sppgUnits?: SppgUnit[];
+    budgetAllocations?: BudgetAllocationItem[];
+    adminUsers?: AdminUserItem[];
   }) => {
     try {
       const current = {
@@ -126,6 +207,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         employees: newState.employees || employees,
         stockLedgers: newState.stockLedgers || stockLedgers,
         sppgUnits: newState.sppgUnits || sppgUnits,
+        budgetAllocations: newState.budgetAllocations || budgetAllocations,
+        adminUsers: newState.adminUsers || adminUsers,
       };
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(current));
     } catch {
@@ -139,6 +222,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const closeModal = () => {
     setModal({ type: null });
+  };
+
+  const logout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // ignore
+    }
+    window.location.href = '/login';
   };
 
   const addProcurement = (proc: Omit<ProcurementTransaction, 'id' | 'createdAt'>) => {
@@ -232,9 +324,21 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     saveState({ categories: updated });
   };
 
+  const deleteCategory = (id: string) => {
+    const updated = categories.filter((c) => c.id !== id);
+    setCategories(updated);
+    saveState({ categories: updated });
+  };
+
   const addUnit = (unit: Omit<MasterUnit, 'id'>) => {
     const id = `UNIT-${unit.symbol.toUpperCase()}`;
     const updated = [...units, { ...unit, id }];
+    setUnits(updated);
+    saveState({ units: updated });
+  };
+
+  const deleteUnit = (id: string) => {
+    const updated = units.filter((u) => u.id !== id);
     setUnits(updated);
     saveState({ units: updated });
   };
@@ -314,9 +418,97 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     saveState({ employees: updated });
   };
 
+  const addBudgetAllocation = (item: Omit<BudgetAllocationItem, 'id' | 'allocatedDate'>) => {
+    const id = `BUD-${Date.now().toString().slice(-4)}`;
+    const newBudget: BudgetAllocationItem = {
+      ...item,
+      id,
+      allocatedDate: new Date().toISOString(),
+    };
+    const updated = [newBudget, ...budgetAllocations];
+    setBudgetAllocations(updated);
+
+    // Update SPPG Unit activeBudget
+    const updatedUnits = sppgUnits.map((u) => {
+      if (u.id === item.sppgUnitId) {
+        const newBudgetTotal = u.activeBudget + item.amountAllocated;
+        const newRemaining = newBudgetTotal - u.totalRealized;
+        return { ...u, activeBudget: newBudgetTotal, totalRemaining: newRemaining };
+      }
+      return u;
+    });
+    setSppgUnits(updatedUnits);
+
+    saveState({ budgetAllocations: updated, sppgUnits: updatedUnits });
+  };
+
+  const deleteBudgetAllocation = (id: string) => {
+    const target = budgetAllocations.find((b) => b.id === id);
+    if (!target) return;
+
+    const updated = budgetAllocations.filter((b) => b.id !== id);
+    setBudgetAllocations(updated);
+
+    const updatedUnits = sppgUnits.map((u) => {
+      if (u.id === target.sppgUnitId) {
+        const newBudgetTotal = Math.max(0, u.activeBudget - target.amountAllocated);
+        const newRemaining = newBudgetTotal - u.totalRealized;
+        return { ...u, activeBudget: newBudgetTotal, totalRemaining: newRemaining };
+      }
+      return u;
+    });
+    setSppgUnits(updatedUnits);
+
+    saveState({ budgetAllocations: updated, sppgUnits: updatedUnits });
+  };
+
+  const addSppgUnit = (unit: Omit<SppgUnit, 'id' | 'totalRealized' | 'totalRemaining'>) => {
+    const id = `SPPG-${unit.code.replace('SPPG-', '')}` as SppgUnitId;
+    const newUnit: SppgUnit = {
+      ...unit,
+      id,
+      totalRealized: 0,
+      totalRemaining: unit.activeBudget,
+    };
+    const updated = [...sppgUnits, newUnit];
+    setSppgUnits(updated);
+    saveState({ sppgUnits: updated });
+  };
+
+  const updateSppgUnit = (id: string, data: Partial<SppgUnit>) => {
+    const updated = sppgUnits.map((u) => (u.id === id ? { ...u, ...data } : u));
+    setSppgUnits(updated);
+    saveState({ sppgUnits: updated });
+  };
+
+  const deleteSppgUnit = (id: string) => {
+    const updated = sppgUnits.filter((u) => u.id !== id);
+    setSppgUnits(updated);
+    saveState({ sppgUnits: updated });
+  };
+
+  const addAdminUser = (user: Omit<AdminUserItem, 'id' | 'createdAt'>) => {
+    const id = `ADM-${Date.now().toString().slice(-4)}`;
+    const newAdmin: AdminUserItem = {
+      ...user,
+      id,
+      createdAt: new Date().toISOString(),
+    };
+    const updated = [...adminUsers, newAdmin];
+    setAdminUsers(updated);
+    saveState({ adminUsers: updated });
+  };
+
+  const deleteAdminUser = (id: string) => {
+    const updated = adminUsers.filter((u) => u.id !== id);
+    setAdminUsers(updated);
+    saveState({ adminUsers: updated });
+  };
+
   const resetToDefault = () => {
     localStorage.removeItem(LOCAL_STORAGE_KEY);
     setSppgUnits(INITIAL_SPPG_UNITS);
+    setBudgetAllocations(INITIAL_BUDGET_ALLOCATIONS);
     setProcurements(INITIAL_PROCUREMENTS);
     setIngredients(INITIAL_INGREDIENTS);
     setCategories(INITIAL_CATEGORIES);
@@ -324,6 +516,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setSuppliers(INITIAL_SUPPLIERS);
     setEmployees(INITIAL_EMPLOYEES);
     setStockLedgers(INITIAL_STOCK_LEDGERS);
+    setAdminUsers(INITIAL_ADMIN_USERS);
   };
 
   // Filtered procurements based on selected SPPG Unit
@@ -343,35 +536,39 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return stockLedgers.filter((l) => l.sppgUnitId === selectedSppgUnit);
   }, [stockLedgers, selectedSppgUnit]);
 
+  // Filtered budget allocations
+  const filteredBudgetAllocations = useMemo(() => {
+    if (selectedSppgUnit === 'ALL') return budgetAllocations;
+    return budgetAllocations.filter((b) => b.sppgUnitId === selectedSppgUnit);
+  }, [budgetAllocations, selectedSppgUnit]);
+
   // Computed KPI Summary
   const kpiSummary = useMemo<KPISummary>(() => {
-    const targetUnits = selectedSppgUnit === 'ALL'
-      ? sppgUnits
-      : sppgUnits.filter((u) => u.id === selectedSppgUnit);
+    const targetUnits =
+      selectedSppgUnit === 'ALL'
+        ? sppgUnits
+        : sppgUnits.filter((u) => u.id === selectedSppgUnit);
 
     const totalBudgetIncome = targetUnits.reduce((acc, u) => acc + u.activeBudget, 0);
+    const totalActualSpending = targetUnits.reduce((acc, u) => acc + u.totalRealized, 0);
+    const activeRemainingCash = totalBudgetIncome - totalActualSpending;
+    const budgetUsedPercentage =
+      totalBudgetIncome > 0 ? (totalActualSpending / totalBudgetIncome) * 100 : 0;
 
-    const targetProcurements = selectedSppgUnit === 'ALL'
-      ? procurements
-      : procurements.filter((p) => p.sppgUnitId === selectedSppgUnit);
+    // Total kitchen volume (approximate in Kg)
+    const targetIngredients =
+      selectedSppgUnit === 'ALL'
+        ? ingredients
+        : ingredients.map((ing) => ({
+            ...ing,
+            currentStock: ing.sppgDistribution[selectedSppgUnit] || 0,
+          }));
 
-    const totalActualSpending = targetProcurements.reduce((acc, p) => acc + p.actualReceiptTotal, 0);
-    const activeRemainingCash = Math.max(0, totalBudgetIncome - totalActualSpending);
-    const budgetUsedPercentage = totalBudgetIncome > 0 ? (totalActualSpending / totalBudgetIncome) * 100 : 0;
-
-    // Kitchen Volume in Kg
-    let totalKitchenVolumeKg = 0;
-    ingredients.forEach((ing) => {
-      if (ing.defaultUnit === 'Kg') {
-        if (selectedSppgUnit === 'ALL') {
-          totalKitchenVolumeKg += ing.currentStock;
-        } else {
-          totalKitchenVolumeKg += ing.sppgDistribution[selectedSppgUnit] || 0;
-        }
-      }
-    });
-
-    const totalKitchenItemCount = ingredients.length;
+    const totalKitchenVolumeKg = targetIngredients.reduce((acc, item) => {
+      if (item.defaultUnit === 'Kg') return acc + item.currentStock;
+      if (item.defaultUnit === 'Karung') return acc + item.currentStock * 25;
+      return acc + item.currentStock;
+    }, 0);
 
     return {
       totalBudgetIncome,
@@ -379,18 +576,23 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       activeRemainingCash,
       budgetUsedPercentage,
       totalKitchenVolumeKg,
-      totalKitchenItemCount,
+      totalKitchenItemCount: ingredients.length,
     };
-  }, [selectedSppgUnit, sppgUnits, procurements, ingredients]);
+  }, [selectedSppgUnit, sppgUnits, ingredients]);
+
+  const isReadOnly = userRole === 'EXECUTIVE_AUDITOR';
 
   return (
     <StoreContext.Provider
       value={{
+        currentUser,
         userRole,
-        setUserRole,
+        isReadOnly,
+        setUserRole: handleSetUserRole,
         selectedSppgUnit,
         setSelectedSppgUnit,
         sppgUnits,
+        budgetAllocations,
         procurements,
         ingredients,
         categories,
@@ -398,6 +600,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         suppliers,
         employees,
         stockLedgers,
+        adminUsers,
         modal,
         openModal,
         closeModal,
@@ -407,15 +610,26 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         updateIngredient,
         deleteIngredient,
         addCategory,
+        deleteCategory,
         addUnit,
+        deleteUnit,
         recordStockMutation,
         addSupplier,
         addEmployee,
+        addBudgetAllocation,
+        deleteBudgetAllocation,
+        addSppgUnit,
+        updateSppgUnit,
+        deleteSppgUnit,
+        addAdminUser,
+        deleteAdminUser,
+        logout,
         resetToDefault,
         kpiSummary,
         filteredProcurements,
         filteredIngredients,
         filteredStockLedgers,
+        filteredBudgetAllocations,
       }}
     >
       {children}

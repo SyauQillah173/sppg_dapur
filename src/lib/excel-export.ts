@@ -121,3 +121,12 @@ export function exportAllProcurementsToExcel(transactions: ProcurementTransactio
   const fileName = `Rekap_SPJ_SPPG_${new Date().toISOString().slice(0, 10)}.xlsx`;
   XLSX.writeFile(wb, fileName);
 }
+
+export function exportConsolidatedSPPGSummaryToExcel(
+  units: any[],
+  transactions: ProcurementTransaction[],
+  ingredients: any[]
+) {
+  exportAllProcurementsToExcel(transactions, 'Semua Unit SPPG (Konsolidasi 4 Dapur)');
+}
+

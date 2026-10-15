@@ -151,3 +151,25 @@ export interface KPISummary {
   totalKitchenVolumeKg: number; // Total Volume Bahan Dapur Masuk/Keluar (Kg)
   totalKitchenItemCount: number; // Total items
 }
+
+export interface BudgetAllocationItem {
+  id: string;
+  sppgUnitId: string;
+  sppgUnitName: string;
+  fiscalPeriod: string;
+  amountAllocated: number;
+  amountRealized: number;
+  remainingBudget: number;
+  allocatedDate: string;
+  notes?: string;
+}
+
+export interface AdminUserItem {
+  id: string;
+  username: string;
+  name: string;
+  role: UserRole;
+  createdAt: string;
+  updatedAt?: string;
+}
+

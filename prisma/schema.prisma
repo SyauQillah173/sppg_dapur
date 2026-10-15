@@ -27,19 +27,31 @@ enum UserRole {
   EXECUTIVE_AUDITOR
 }
 
+model AdminUser {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  password  String   // Hashed / secure password
+  name      String
+  role      UserRole @default(EXECUTIVE_AUDITOR) // SUPERADMIN | EXECUTIVE_AUDITOR
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("admin_users")
+}
+
 model SppgUnit {
-  id           String        @id @default(cuid())
-  code         String        @unique // SPPG-AA02, SPPG-BS02, SPPG-DR01, SPPG-SM01
-  name         String        // e.g. "SPPG ABAR ABIR 02"
-  shortName    String
-  location     String
-  picName      String
-  phone        String
-  activeBudget Decimal       @default(0) @db.Decimal(15, 2)
-  totalRealized Decimal      @default(0) @db.Decimal(15, 2)
-  totalRemaining Decimal     @default(0) @db.Decimal(15, 2)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id            String        @id @default(cuid())
+  code          String        @unique // SPPG-AA02, SPPG-BS02, SPPG-DR01, SPPG-SM01
+  name          String        // e.g. "SPPG ABAR ABIR 02"
+  shortName     String
+  location      String
+  picName       String
+  phone         String
+  activeBudget  Decimal       @default(0) @db.Decimal(15, 2)
+  totalRealized Decimal       @default(0) @db.Decimal(15, 2)
+  totalRemaining Decimal      @default(0) @db.Decimal(15, 2)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   budgetAllocations BudgetAllocation[]
   procurementOrders ProcurementOrder[]
@@ -70,19 +82,19 @@ model Employee {
 }
 
 model Supplier {
-  id               String             @id @default(cuid())
-  code             String             @unique // e.g. "CV-SPA-01"
-  name             String             // e.g. "CV Sumber Pangan Abadi"
-  picName          String
-  phone            String
-  address          String
-  bankAccount      String
-  suppliedCategory String             // e.g. "Protein Hewani, Sembako & Tepung"
-  totalDisbursed   Decimal            @default(0) @db.Decimal(15, 2)
-  totalTransactions Int               @default(0)
-  rating           Decimal            @default(5.0) @db.Decimal(3, 1)
-  activeStatus     Boolean            @default(true)
-  createdAt        DateTime           @default(now())
+  id                String             @id @default(cuid())
+  code              String             @unique // e.g. "CV-SPA-01"
+  name              String             // e.g. "CV Sumber Pangan Abadi"
+  picName           String
+  phone             String
+  address           String
+  bankAccount       String
+  suppliedCategory  String             // e.g. "Protein Hewani, Sembako & Tepung"
+  totalDisbursed    Decimal            @default(0) @db.Decimal(15, 2)
+  totalTransactions Int                @default(0)
+  rating            Decimal            @default(5.0) @db.Decimal(3, 1)
+  activeStatus      Boolean            @default(true)
+  createdAt         DateTime           @default(now())
 
   procurementOrders ProcurementOrder[]
 
@@ -100,6 +112,16 @@ model IngredientCategory {
   ingredients Ingredient[]
 
   @@map("ingredient_categories")
+}
+
+model MasterUnit {
+  id        String   @id @default(cuid())
+  symbol    String   @unique // "Kg", "Pack", "Karung", "Botol", "Renteng", "Liter", "Ikat"
+  name      String   // "Kilogram", "Pack", "Karung", dll
+  type      String   @default("BERAT")
+  createdAt DateTime @default(now())
+
+  @@map("master_units")
 }
 
 model Ingredient {
@@ -138,30 +160,30 @@ model BudgetAllocation {
 }
 
 model ProcurementOrder {
-  id                 String            @id @default(cuid())
-  receiptNumber      String            @unique // e.g. "NOTA-AA02-20261014-089"
-  date               DateTime
-  sppgUnitId         String
-  requesterId        String
-  supplierId         String
-  amountRequested    Decimal           @db.Decimal(15, 2) // e.g. Rp 150.000.000
-  actualReceiptTotal Decimal           @db.Decimal(15, 2) // e.g. Rp 147.850.000
-  changeReturned     Decimal           @db.Decimal(15, 2) // e.g. Rp 2.150.000
-  status             AuditStatus       @default(PENDING_AUDIT)
-  receiptPhotoUrl    String?
-  physicalReceiptImage String?         // SVG identifier / image link
-  auditedBy          String?
-  auditedAt          DateTime?
-  auditNotes         String?
-  discrepancyReason  String?
-  notes              String?
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  id                   String            @id @default(cuid())
+  receiptNumber        String            @unique // e.g. "NOTA-AA02-20261014-089"
+  date                 DateTime
+  sppgUnitId           String
+  requesterId          String
+  supplierId           String
+  amountRequested      Decimal           @db.Decimal(15, 2) // e.g. Rp 150.000.000
+  actualReceiptTotal   Decimal           @db.Decimal(15, 2) // e.g. Rp 147.850.000
+  changeReturned       Decimal           @db.Decimal(15, 2) // e.g. Rp 2.150.000
+  status               AuditStatus       @default(PENDING_AUDIT)
+  receiptPhotoUrl      String?
+  physicalReceiptImage String?           // SVG identifier / image link
+  auditedBy            String?
+  auditedAt            DateTime?
+  auditNotes           String?
+  discrepancyReason    String?
+  notes                String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
 
-  sppgUnit           SppgUnit          @relation(fields: [sppgUnitId], references: [id])
-  requester          Employee          @relation(fields: [requesterId], references: [id])
-  supplier           Supplier          @relation(fields: [supplierId], references: [id])
-  items              ProcurementItem[]
+  sppgUnit             SppgUnit          @relation(fields: [sppgUnitId], references: [id])
+  requester            Employee          @relation(fields: [requesterId], references: [id])
+  supplier             Supplier          @relation(fields: [supplierId], references: [id])
+  items                ProcurementItem[]
 
   @@map("procurement_orders")
 }
@@ -188,20 +210,20 @@ model ProcurementItem {
 }
 
 model StockMovement {
-  id              String       @id @default(cuid())
-  timestamp       DateTime     @default(now())
-  sppgUnitId      String
-  ingredientId    String
-  type            MovementType // MASUK / KELUAR
-  quantity        Decimal      @db.Decimal(10, 2)
-  unit            String
-  referenceNumber String       // e.g. MENU-AA02-20261015-SIANG or NOTA-AA02-089
-  purpose         String       // e.g. "Menu Makan Siang Siswa 1.200 Porsi"
-  recordedBy      String
-  remainingStockAfter Decimal  @db.Decimal(10, 2)
+  id                  String       @id @default(cuid())
+  timestamp           DateTime     @default(now())
+  sppgUnitId          String
+  ingredientId        String
+  type                MovementType // MASUK / KELUAR
+  quantity            Decimal      @db.Decimal(10, 2)
+  unit                String
+  referenceNumber     String       // e.g. MENU-AA02-20261015-SIANG or NOTA-AA02-089
+  purpose             String       // e.g. "Menu Makan Siang Siswa 1.200 Porsi"
+  recordedBy          String
+  remainingStockAfter Decimal      @db.Decimal(10, 2)
 
-  sppgUnit        SppgUnit     @relation(fields: [sppgUnitId], references: [id])
-  ingredient      Ingredient   @relation(fields: [ingredientId], references: [id])
+  sppgUnit            SppgUnit     @relation(fields: [sppgUnitId], references: [id])
+  ingredient          Ingredient   @relation(fields: [ingredientId], references: [id])
 
   @@map("stock_movements")
 }
