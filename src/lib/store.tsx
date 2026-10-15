@@ -108,7 +108,7 @@ interface StoreContextType {
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY = 'giziflow_enterprise_store_v2';
+const LOCAL_STORAGE_KEY = 'sppg_private_portal_v1_clean';
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>({
