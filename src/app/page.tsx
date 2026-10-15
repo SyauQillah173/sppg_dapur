@@ -18,7 +18,7 @@ function AppContent() {
   const { modal, closeModal } = useStore();
 
   return (
-    <div className="min-h-screen bg-slate-50/60 text-slate-900 antialiased font-sans flex flex-col selection:bg-slate-900 selection:text-white">
+    <div className="min-h-screen bg-slate-50 text-slate-900 antialiased font-sans flex flex-col selection:bg-slate-900 selection:text-white">
       {/* Top Header with User Info, Role Badge & SPPG Filter */}
       <Header />
 
