@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'GiziFlow Enterprise - Sistem Manajemen Operasional, Logistik & Keuangan SPPG',
-  description: 'Enterprise ERP & Financial Audit Web Application untuk 4 SPPG Dapur: SPPG Abar Abir 02, SPPG Banjarsari 02 Leran Manyar, SPPG Dahan Rejo 01, dan SPPG Semampir.',
+  title: 'SPPG Dapur — Sistem Manajemen Operasional & Keuangan',
+  description: 'Portal internal manajemen operasional, logistik, dan keuangan 4 unit SPPG Dapur.',
 };
 
 export default function RootLayout({
