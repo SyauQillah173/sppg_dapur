@@ -52,6 +52,15 @@ body {
   background: rgba(148, 163, 184, 0.6);
 }
 
+/* Hide scrollbar on nav tabs */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 @media print {
   header, nav, button, .no-print {
     display: none !important;
