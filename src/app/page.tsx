@@ -5,6 +5,7 @@ import { StoreProvider, useStore } from '@/lib/store';
 import { Header } from '@/components/layout/Header';
 import { Navbar, ActiveTab } from '@/components/layout/Navbar';
 import { ExecutiveDashboard } from '@/components/dashboard/ExecutiveDashboard';
+import { AuditorDashboard } from '@/components/dashboard/AuditorDashboard';
 import { BudgetAllocationModule } from '@/components/budget/BudgetAllocationModule';
 import { ProcurementModule } from '@/components/procurement/ProcurementModule';
 import { KitchenInventoryCMS } from '@/components/inventory/KitchenInventoryCMS';
@@ -15,7 +16,8 @@ import { AddProcurementModal } from '@/components/procurement/AddProcurementModa
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
-  const { modal, closeModal } = useStore();
+  const { modal, closeModal, userRole } = useStore();
+  const isAuditor = userRole === 'EXECUTIVE_AUDITOR';
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 antialiased font-sans flex flex-col selection:bg-slate-900 selection:text-white">
@@ -29,10 +31,14 @@ function AppContent() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Menu 1: Ringkasan Dashboard */}
         {activeTab === 'dashboard' && (
-          <ExecutiveDashboard
-            onNavigateToProcurement={() => setActiveTab('procurement')}
-            onNavigateToInventory={() => setActiveTab('inventory')}
-          />
+          isAuditor ? (
+            <AuditorDashboard />
+          ) : (
+            <ExecutiveDashboard
+              onNavigateToProcurement={() => setActiveTab('procurement')}
+              onNavigateToInventory={() => setActiveTab('inventory')}
+            />
+          )
         )}
 
         {/* Menu 2: Uang Masuk & Anggaran */}
