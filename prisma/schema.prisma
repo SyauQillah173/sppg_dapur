@@ -1,0 +1,207 @@
+// GiziFlow Enterprise - Prisma Schema for Neon PostgreSQL
+// SPPG Operational, Logistics & Financial Audit System
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum AuditStatus {
+  VERIFIED
+  PENDING_AUDIT
+  FLAGGED_DISCREPANCY
+}
+
+enum MovementType {
+  MASUK
+  KELUAR
+}
+
+enum UserRole {
+  SUPERADMIN
+  EXECUTIVE_AUDITOR
+}
+
+model SppgUnit {
+  id           String        @id @default(cuid())
+  code         String        @unique // SPPG-AA02, SPPG-BS02, SPPG-DR01, SPPG-SM01
+  name         String        // e.g. "SPPG ABAR ABIR 02"
+  shortName    String
+  location     String
+  picName      String
+  phone        String
+  activeBudget Decimal       @default(0) @db.Decimal(15, 2)
+  totalRealized Decimal      @default(0) @db.Decimal(15, 2)
+  totalRemaining Decimal     @default(0) @db.Decimal(15, 2)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  budgetAllocations BudgetAllocation[]
+  procurementOrders ProcurementOrder[]
+  stockMovements    StockMovement[]
+  employees         Employee[]
+
+  @@map("sppg_units")
+}
+
+model Employee {
+  id              String             @id @default(cuid())
+  employeeNumber  String             @unique // e.g. "EMP-AA02-01"
+  name            String             // e.g. "Budi Santoso"
+  roleTitle       String             // e.g. "Koordinator Pengadaan & Logistik Dapur"
+  sppgUnitId      String
+  phone           String
+  totalRequested  Decimal            @default(0) @db.Decimal(15, 2)
+  totalRealized   Decimal            @default(0) @db.Decimal(15, 2)
+  pendingBalance  Decimal            @default(0) @db.Decimal(15, 2)
+  complianceScore Int                @default(100) // % on-time receipt surrender
+  status          String             @default("ACTIVE")
+  createdAt       DateTime           @default(now())
+
+  sppgUnit          SppgUnit           @relation(fields: [sppgUnitId], references: [id])
+  procurementOrders ProcurementOrder[]
+
+  @@map("employees")
+}
+
+model Supplier {
+  id               String             @id @default(cuid())
+  code             String             @unique // e.g. "CV-SPA-01"
+  name             String             // e.g. "CV Sumber Pangan Abadi"
+  picName          String
+  phone            String
+  address          String
+  bankAccount      String
+  suppliedCategory String             // e.g. "Protein Hewani, Sembako & Tepung"
+  totalDisbursed   Decimal            @default(0) @db.Decimal(15, 2)
+  totalTransactions Int               @default(0)
+  rating           Decimal            @default(5.0) @db.Decimal(3, 1)
+  activeStatus     Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+
+  procurementOrders ProcurementOrder[]
+
+  @@map("suppliers")
+}
+
+model IngredientCategory {
+  id          String       @id @default(cuid())
+  code        String       @unique // e.g. "PRO-HEW"
+  name        String       @unique // e.g. "Protein Hewani"
+  color       String       @default("#ef4444")
+  description String
+  createdAt   DateTime     @default(now())
+
+  ingredients Ingredient[]
+
+  @@map("ingredient_categories")
+}
+
+model Ingredient {
+  id                String             @id @default(cuid())
+  code              String             @unique // e.g. "ING-PRO-001"
+  name              String             // e.g. "Ayam giling"
+  categoryId        String
+  defaultUnit       String             // "Kg", "Pack", "Karung", "Botol", "Renteng", dll
+  currentStock      Decimal            @default(0) @db.Decimal(10, 2)
+  minStockAlert     Decimal            @default(10) @db.Decimal(10, 2)
+  lastPurchasePrice Decimal            @default(0) @db.Decimal(15, 2)
+  sppgDistribution  Json?              // { "SPPG-AA02": 45, "SPPG-BS02": 40, ... }
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  category          IngredientCategory @relation(fields: [categoryId], references: [id])
+  procurementItems  ProcurementItem[]
+  stockMovements    StockMovement[]
+
+  @@map("ingredients")
+}
+
+model BudgetAllocation {
+  id              String      @id @default(cuid())
+  sppgUnitId      String
+  fiscalPeriod    String      // e.g. "Oktober 2026", "Q4-2026"
+  amountAllocated Decimal     @db.Decimal(15, 2)
+  amountRealized  Decimal     @default(0) @db.Decimal(15, 2)
+  remainingBudget Decimal     @default(0) @db.Decimal(15, 2)
+  allocatedDate   DateTime    @default(now())
+  notes           String?
+
+  sppgUnit        SppgUnit    @relation(fields: [sppgUnitId], references: [id], onDelete: Cascade)
+
+  @@map("budget_allocations")
+}
+
+model ProcurementOrder {
+  id                 String            @id @default(cuid())
+  receiptNumber      String            @unique // e.g. "NOTA-AA02-20261014-089"
+  date               DateTime
+  sppgUnitId         String
+  requesterId        String
+  supplierId         String
+  amountRequested    Decimal           @db.Decimal(15, 2) // e.g. Rp 150.000.000
+  actualReceiptTotal Decimal           @db.Decimal(15, 2) // e.g. Rp 147.850.000
+  changeReturned     Decimal           @db.Decimal(15, 2) // e.g. Rp 2.150.000
+  status             AuditStatus       @default(PENDING_AUDIT)
+  receiptPhotoUrl    String?
+  physicalReceiptImage String?         // SVG identifier / image link
+  auditedBy          String?
+  auditedAt          DateTime?
+  auditNotes         String?
+  discrepancyReason  String?
+  notes              String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  sppgUnit           SppgUnit          @relation(fields: [sppgUnitId], references: [id])
+  requester          Employee          @relation(fields: [requesterId], references: [id])
+  supplier           Supplier          @relation(fields: [supplierId], references: [id])
+  items              ProcurementItem[]
+
+  @@map("procurement_orders")
+}
+
+model ProcurementItem {
+  id                 String           @id @default(cuid())
+  procurementOrderId String
+  ingredientId       String?
+  name               String           // e.g. "Ayam giling"
+  category           String           // e.g. "Protein Hewani"
+  quantity           Decimal          @db.Decimal(10, 2) // e.g. 145.00
+  unit               String           // "Kg", "Pack", "Karung", etc
+  unitPrice          Decimal          @db.Decimal(15, 2) // e.g. 42000.00
+  subtotal           Decimal          @db.Decimal(15, 2) // e.g. 6090000.00
+  isOcrMatched       Boolean          @default(true)
+  isItemVerified     Boolean          @default(false)
+  hasPriceAnomaly    Boolean          @default(false)
+  previousAvgPrice   Decimal?         @db.Decimal(15, 2)
+
+  procurementOrder   ProcurementOrder @relation(fields: [procurementOrderId], references: [id], onDelete: Cascade)
+  ingredient         Ingredient?      @relation(fields: [ingredientId], references: [id])
+
+  @@map("procurement_items")
+}
+
+model StockMovement {
+  id              String       @id @default(cuid())
+  timestamp       DateTime     @default(now())
+  sppgUnitId      String
+  ingredientId    String
+  type            MovementType // MASUK / KELUAR
+  quantity        Decimal      @db.Decimal(10, 2)
+  unit            String
+  referenceNumber String       // e.g. MENU-AA02-20261015-SIANG or NOTA-AA02-089
+  purpose         String       // e.g. "Menu Makan Siang Siswa 1.200 Porsi"
+  recordedBy      String
+  remainingStockAfter Decimal  @db.Decimal(10, 2)
+
+  sppgUnit        SppgUnit     @relation(fields: [sppgUnitId], references: [id])
+  ingredient      Ingredient   @relation(fields: [ingredientId], references: [id])
+
+  @@map("stock_movements")
+}
