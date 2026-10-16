@@ -77,7 +77,7 @@ export function PhysicalReceiptView({ transaction }: PhysicalReceiptViewProps) {
             transformOrigin: 'center center',
             transition: 'transform 0.2s cubic-bezier(0.2, 0, 0, 1)',
           }}
-          className="w-[430px] min-h-[580px] bg-[#fffef9] text-slate-900 shadow-2xl p-6 rounded-sm border border-amber-100/60 font-mono text-[11px] relative leading-relaxed"
+          className="w-[320px] xs:w-[380px] sm:w-[430px] min-h-[500px] sm:min-h-[580px] bg-[#fffef9] text-slate-900 shadow-2xl p-4 sm:p-6 rounded-sm border border-amber-100/60 font-mono text-[11px] relative leading-relaxed shrink-0"
         >
           {/* Paper Texture and Perforation Header */}
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-200/40 via-amber-100 to-amber-200/40" />

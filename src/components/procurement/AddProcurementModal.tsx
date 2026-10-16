@@ -557,9 +557,9 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
             ))}
           </datalist>
 
-          {/* Dynamic Itemized Table (Excel/Kasir Style) */}
+          {/* Dynamic Itemized Table & Mobile Cards */}
           <div className="rounded-xl border border-slate-200 overflow-hidden shadow-xs">
-            <div className="px-4 py-2.5 bg-slate-100 border-b border-slate-200 flex items-center justify-between text-xs font-semibold">
+            <div className="px-3 sm:px-4 py-2.5 bg-slate-100 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold">
               <div className="flex items-center gap-2">
                 <span className="text-slate-800 font-bold">Tabel Rincian Bahan Belanja</span>
                 <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-mono text-slate-700">
@@ -570,15 +570,16 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
                 type="button"
                 id="btn-tambah-baris-bahan"
                 onClick={handleAddItem}
-                className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 text-white px-2.5 py-1 text-xs font-semibold shadow-xs hover:bg-slate-800 transition"
+                className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 text-white px-2.5 py-1 text-xs font-semibold shadow-xs hover:bg-slate-800 transition active:scale-98"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>+ Tambah Baris Bahan</span>
               </button>
             </div>
 
-            <div className="max-h-64 overflow-y-auto p-2 bg-white">
-              <table className="w-full text-xs">
+            {/* Desktop Table View (>= md) */}
+            <div className="hidden md:block max-h-64 overflow-y-auto overflow-x-auto p-2 bg-white">
+              <table className="w-full text-xs min-w-[640px]">
                 <thead>
                   <tr className="text-slate-500 text-[10px] uppercase font-semibold border-b border-slate-200">
                     <th className="text-left py-1.5 px-2">Nama Bahan (Pilih CMS / Ketik Baru)</th>
@@ -678,35 +679,160 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
                 </tbody>
               </table>
             </div>
+
+            {/* Mobile Card-Based List View (< md) */}
+            <div className="md:hidden max-h-80 overflow-y-auto p-2.5 space-y-3 bg-slate-50/60">
+              {items.map((item, idx) => {
+                const isAnomaly = isItemAnomaly(item);
+                return (
+                  <div
+                    key={item.id || idx}
+                    className={`p-3 rounded-xl border bg-white shadow-xs space-y-2.5 ${
+                      isAnomaly ? 'border-rose-300 bg-rose-50/30' : 'border-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">
+                          Item #{idx + 1}
+                        </span>
+                        {isAnomaly && (
+                          <span className="text-[10px] text-rose-700 font-bold bg-rose-100 px-1.5 py-0.5 rounded">
+                            ⚠ Harga Naik &gt;20%
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-xs text-slate-900">
+                          {formatRupiah(item.subtotal)}
+                        </span>
+                        {items.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(idx)}
+                            className="text-slate-400 hover:text-rose-600 p-1 rounded hover:bg-rose-50 transition"
+                            title="Hapus baris ini"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Nama Bahan */}
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                        Nama Bahan (Pilih CMS / Ketik Baru):
+                      </label>
+                      <input
+                        list="cms-ingredients-datalist"
+                        type="text"
+                        required
+                        value={item.name}
+                        onChange={(e) => handleItemNameChange(idx, e.target.value)}
+                        placeholder="Pilih dari CMS atau ketik..."
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Kategori & Satuan */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                          Kategori:
+                        </label>
+                        <select
+                          value={item.category}
+                          onChange={(e) => handleItemChange(idx, 'category', e.target.value)}
+                          className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs focus:border-slate-800 focus:outline-none"
+                        >
+                          {categories.map((c) => (
+                            <option key={c.id} value={c.name}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                          Satuan:
+                        </label>
+                        <select
+                          value={item.unit}
+                          onChange={(e) => handleItemChange(idx, 'unit', e.target.value)}
+                          className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs font-mono focus:border-slate-800 focus:outline-none"
+                        >
+                          {units.map((u) => (
+                            <option key={u.id} value={u.symbol}>
+                              {u.symbol}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Banyaknya & Harga Satuan */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                          Banyaknya (Qty):
+                        </label>
+                        <input
+                          type="number"
+                          min={0.1}
+                          step="any"
+                          value={item.quantity}
+                          onChange={(e) => handleItemChange(idx, 'quantity', Number(e.target.value))}
+                          className="w-full rounded-lg border border-slate-300 px-2.5 py-2 text-xs font-mono font-bold tabular-nums text-slate-900 focus:border-slate-800 focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                          Harga Satuan (Rp):
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          step={500}
+                          value={item.unitPrice}
+                          onChange={(e) => handleItemChange(idx, 'unitPrice', Number(e.target.value))}
+                          className="w-full rounded-lg border border-slate-300 px-2.5 py-2 text-xs font-mono font-bold tabular-nums text-slate-900 focus:border-slate-800 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* Automatic Calculation Summary Box (Accurate/Jurnal Style) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 rounded-xl border border-slate-200 bg-slate-50 text-xs">
-            <div className="border-r border-slate-200/80 pr-2">
-              <span className="text-[11px] text-slate-500 uppercase font-semibold block">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 p-3 sm:p-4 rounded-xl border border-slate-200 bg-slate-50 text-xs">
+            <div className="p-3 bg-white rounded-lg border border-slate-200/80 shadow-xs">
+              <span className="text-[11px] text-slate-500 uppercase font-semibold block tracking-wider">
                 Uang Kasbon Dibawa:
               </span>
-              <div className="font-mono font-bold text-slate-800 text-base mt-0.5">
+              <div className="font-mono font-bold text-slate-800 text-base mt-0.5 break-words">
                 {formatRupiah(amountRequested)}
               </div>
               <span className="text-[10px] text-slate-400">Total modal belanja</span>
             </div>
 
-            <div className="border-r border-slate-200/80 pr-2">
-              <span className="text-[11px] text-slate-500 uppercase font-semibold block">
-                Total Belanja Terpakai (Nota):
+            <div className="p-3 bg-white rounded-lg border border-slate-200/80 shadow-xs">
+              <span className="text-[11px] text-slate-500 uppercase font-semibold block tracking-wider">
+                Total Belanja (Nota):
               </span>
-              <div className="font-mono font-bold text-rose-600 text-base mt-0.5">
+              <div className="font-mono font-bold text-rose-600 text-base mt-0.5 break-words">
                 {formatRupiah(actualReceiptTotal)}
               </div>
-              <span className="text-[10px] text-slate-400">Jumlah seluruh item di nota</span>
+              <span className="text-[10px] text-slate-400">Jumlah seluruh item nota</span>
             </div>
 
-            <div>
-              <span className="text-[11px] text-slate-500 uppercase font-semibold block">
+            <div className="p-3 bg-white rounded-lg border border-slate-200/80 shadow-xs">
+              <span className="text-[11px] text-slate-500 uppercase font-semibold block tracking-wider">
                 Sisa Uang Belanja (Kembalian):
               </span>
-              <div className="font-mono font-bold text-emerald-600 text-base mt-0.5">
+              <div className="font-mono font-bold text-emerald-600 text-base mt-0.5 break-words">
                 {formatRupiah(changeReturned)}
               </div>
               <span className="text-[10px] text-emerald-600 font-medium">
@@ -714,15 +840,15 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
               </span>
             </div>
 
-            <div>
-              <span className="text-[11px] text-slate-500 uppercase font-semibold block">
+            <div className="p-3 bg-white rounded-lg border border-slate-200/80 shadow-xs">
+              <span className="text-[11px] text-slate-500 uppercase font-semibold block tracking-wider">
                 Selisih (Nota vs Kasbon):
               </span>
-              <div className={`font-mono font-bold text-base mt-0.5 ${selisih.over ? 'text-rose-600' : 'text-slate-800'}`}>
+              <div className={`font-mono font-bold text-base mt-0.5 break-words ${selisih.over ? 'text-rose-600' : 'text-slate-800'}`}>
                 {selisih.nominalText}
               </div>
               <span className={`text-[10px] font-medium ${selisih.over ? 'text-rose-600' : 'text-slate-500'}`}>
-                {selisih.persenText} dari kasbon · dihitung otomatis
+                {selisih.persenText} dari kasbon · otomatis
               </span>
             </div>
           </div>
@@ -740,21 +866,21 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
             />
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+          <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-3 border-t border-slate-200">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+              className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
             >
               Batal
             </button>
             <button
               type="submit"
               id="btn-simpan-belanja-modal"
-              className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-5 py-2 text-xs font-semibold text-white shadow hover:bg-slate-800 transition"
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-5 py-2 text-xs font-semibold text-white shadow hover:bg-slate-800 transition active:scale-98"
             >
               <CheckCircle2 className="h-4 w-4" />
-              <span>Simpan Data Belanja & Ajukan Audit</span>
+              <span>Simpan Data Belanja &amp; Ajukan Audit</span>
             </button>
           </div>
         </form>

@@ -14,6 +14,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { exportConsolidatedSPPGSummaryToExcel } from '@/lib/excel-export';
+import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal';
 
 export function Header() {
   const {
@@ -30,6 +31,7 @@ export function Header() {
   } = useStore();
 
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
   const handleUnit = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedSppgUnit(e.target.value as SppgUnitId | 'ALL');
@@ -124,8 +126,9 @@ export function Header() {
 
             <button
               type="button"
-              onClick={() => { if (confirm('Keluar dari sistem?')) logout(); }}
+              onClick={() => setIsLogoutModalOpen(true)}
               className="h-8 px-2.5 rounded-md border border-slate-200 text-[12px] text-red-600 hover:bg-red-50 transition"
+              title="Keluar dari sistem"
             >
               <LogOut className="h-3.5 w-3.5" />
             </button>
@@ -193,7 +196,7 @@ export function Header() {
               </button>
               <button
                 type="button"
-                onClick={() => { if (confirm('Keluar?')) logout(); }}
+                onClick={() => setIsLogoutModalOpen(true)}
                 className="flex-1 h-9 flex items-center justify-center gap-1.5 rounded-md border border-red-200 text-[12px] text-red-600 bg-red-50 hover:bg-red-100"
               >
                 <LogOut className="h-3.5 w-3.5" />
@@ -207,6 +210,21 @@ export function Header() {
           </div>
         )}
       </div>
+
+      {/* Modern Logout Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={isLogoutModalOpen}
+        title="Konfirmasi Keluar Akun"
+        description="Apakah Anda yakin ingin keluar dari sesi aplikasi SPPG Dapur?"
+        warningNote="Anda perlu memasukkan kredensial login kembali untuk mengakses data operasional."
+        confirmText="Ya, Keluar Akun"
+        cancelText="Batal"
+        onConfirm={() => {
+          setIsLogoutModalOpen(false);
+          logout();
+        }}
+        onClose={() => setIsLogoutModalOpen(false)}
+      />
     </header>
   );
 }

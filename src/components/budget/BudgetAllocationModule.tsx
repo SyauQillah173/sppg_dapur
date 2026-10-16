@@ -8,6 +8,7 @@ import {
   Wallet, Plus, Building2, TrendingUp, CreditCard, DollarSign,
   AlertCircle, Trash2, FileSpreadsheet, FileText, Calendar, Filter,
 } from 'lucide-react';
+import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal';
 
 export function BudgetAllocationModule() {
   const {
@@ -37,6 +38,8 @@ export function BudgetAllocationModule() {
   const [notes, setNotes] = useState('Pagu Kas Operasional Pemenuhan Gizi');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // ── filter helpers ────────────────────────────────────────────────────────
   const matchesDateFilter = (dateStr: string) => {
@@ -130,11 +133,22 @@ export function BudgetAllocationModule() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     if (isReadOnly) return;
-    if (confirm('Hapus catatan ini?')) {
-      try { await fetch(`/api/budgets/${id}`, { method: 'DELETE' }); } catch { /* ignore */ }
-      deleteBudgetAllocation(id);
+    setDeleteTargetId(id);
+  };
+
+  const handleConfirmDeleteBudget = async () => {
+    if (!deleteTargetId) return;
+    setIsDeleting(true);
+    try {
+      await fetch(`/api/budgets/${deleteTargetId}`, { method: 'DELETE' });
+      deleteBudgetAllocation(deleteTargetId);
+    } catch {
+      // ignore
+    } finally {
+      setIsDeleting(false);
+      setDeleteTargetId(null);
     }
   };
 
@@ -310,7 +324,7 @@ export function BudgetAllocationModule() {
           <span className="text-xs text-slate-500 font-mono">{filteredBudgets.length} Data · {localUnitName}</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+          <table className="w-full text-left text-xs border-collapse min-w-[760px]">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px] uppercase">
               <tr>
                 <th className="py-3 px-4">Tanggal</th>
@@ -379,7 +393,7 @@ export function BudgetAllocationModule() {
           <span className="text-xs text-slate-500 font-mono">{filteredProcurements.length} Transaksi · {localUnitName}</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+          <table className="w-full text-left text-xs border-collapse min-w-[760px]">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px] uppercase">
               <tr>
                 <th className="py-3 px-4">Tanggal</th>
@@ -495,6 +509,18 @@ export function BudgetAllocationModule() {
           </div>
         </div>
       )}
+
+      {/* Modern Confirm Delete Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!deleteTargetId}
+        title="Hapus Catatan Anggaran"
+        description="Apakah Anda yakin ingin menghapus data alokasi kas operasional ini?"
+        warningNote="Data alokasi anggaran kas ini akan dihapus secara permanen dari database."
+        confirmText="Ya, Hapus Anggaran"
+        isDeleting={isDeleting}
+        onConfirm={handleConfirmDeleteBudget}
+        onClose={() => setDeleteTargetId(null)}
+      />
     </div>
   );
 }

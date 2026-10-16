@@ -21,6 +21,7 @@ import {
   KeyRound,
   UserPlus,
 } from 'lucide-react';
+import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal';
 
 export function MasterDataCMS() {
   const {
@@ -125,6 +126,21 @@ export function MasterDataCMS() {
     name: '',
     role: 'EXECUTIVE_AUDITOR',
   });
+
+  const [deleteDialog, setDeleteDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    itemName: string;
+    onConfirm: () => Promise<void> | void;
+  }>({
+    isOpen: false,
+    title: '',
+    description: '',
+    itemName: '',
+    onConfirm: () => {},
+  });
+  const [isDeletingItem, setIsDeletingItem] = useState(false);
 
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -284,21 +300,27 @@ export function MasterDataCMS() {
     }
   };
 
-  const handleDeleteAdmin = async (id: string, username: string) => {
+  const handleDeleteAdmin = (id: string, username: string) => {
     if (isReadOnly) return;
-    if (confirm(`Apakah Anda yakin ingin menghapus akun admin "${username}"?`)) {
-      try {
-        const res = await fetch(`/api/admin-users/${id}`, { method: 'DELETE' });
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          throw new Error(data.error || 'Gagal menghapus admin');
+    setDeleteDialog({
+      isOpen: true,
+      title: 'Hapus Akun Akses Admin',
+      description: 'Apakah Anda yakin ingin menghapus akun akses ini?',
+      itemName: `Akun Admin: ${username}`,
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/admin-users/${id}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.error || 'Gagal menghapus admin');
+          }
+          deleteAdminUser(id);
+          showFeedback(`Akun admin "${username}" berhasil dihapus!`);
+        } catch (err: any) {
+          showFeedback(err.message, 'error');
         }
-        deleteAdminUser(id);
-        showFeedback(`Akun admin "${username}" berhasil dihapus!`);
-      } catch (err: any) {
-        showFeedback(err.message, 'error');
-      }
-    }
+      },
+    });
   };
 
   return (
@@ -495,10 +517,16 @@ export function MasterDataCMS() {
                       <button
                         type="button"
                         onClick={() => {
-                          if (confirm(`Hapus unit "${u.name}"?`)) {
-                            deleteSppgUnit(u.id);
-                            showFeedback('Unit SPPG dihapus!');
-                          }
+                          setDeleteDialog({
+                            isOpen: true,
+                            title: 'Hapus Unit SPPG',
+                            description: 'Apakah Anda yakin ingin menghapus unit pelayanan ini?',
+                            itemName: `Unit: ${u.name} (${u.code})`,
+                            onConfirm: () => {
+                              deleteSppgUnit(u.id);
+                              showFeedback('Unit SPPG dihapus!');
+                            },
+                          });
                         }}
                         className="p-1.5 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
                         title="Hapus SPPG"
@@ -573,10 +601,16 @@ export function MasterDataCMS() {
                     <button
                       type="button"
                       onClick={() => {
-                        if (confirm(`Hapus kategori "${c.name}"?`)) {
-                          deleteCategory(c.id);
-                          showFeedback('Kategori dihapus!');
-                        }
+                        setDeleteDialog({
+                          isOpen: true,
+                          title: 'Hapus Kategori Bahan',
+                          description: 'Apakah Anda yakin ingin menghapus kategori bahan ini?',
+                          itemName: `Kategori: ${c.name}`,
+                          onConfirm: () => {
+                            deleteCategory(c.id);
+                            showFeedback('Kategori dihapus!');
+                          },
+                        });
                       }}
                       className="p-1 text-slate-400 hover:text-rose-600"
                     >
@@ -625,10 +659,16 @@ export function MasterDataCMS() {
                     <button
                       type="button"
                       onClick={() => {
-                        if (confirm(`Hapus satuan "${u.symbol}"?`)) {
-                          deleteUnit(u.id);
-                          showFeedback('Satuan dihapus!');
-                        }
+                        setDeleteDialog({
+                          isOpen: true,
+                          title: 'Hapus Satuan Pengukuran',
+                          description: 'Apakah Anda yakin ingin menghapus satuan ini?',
+                          itemName: `Satuan: ${u.symbol} (${u.name})`,
+                          onConfirm: () => {
+                            deleteUnit(u.id);
+                            showFeedback('Satuan dihapus!');
+                          },
+                        });
                       }}
                       className="p-1 text-slate-400 hover:text-rose-600"
                     >
@@ -736,10 +776,16 @@ export function MasterDataCMS() {
                             <button
                               type="button"
                               onClick={() => {
-                                if (confirm(`Hapus bahan "${item.name}"?`)) {
-                                  deleteIngredient(item.id);
-                                  showFeedback('Bahan makanan dihapus!');
-                                }
+                                setDeleteDialog({
+                                  isOpen: true,
+                                  title: 'Hapus Master Bahan Makanan',
+                                  description: 'Apakah Anda yakin ingin menghapus bahan ini dari katalog CMS?',
+                                  itemName: `${item.name} (${item.category})`,
+                                  onConfirm: () => {
+                                    deleteIngredient(item.id);
+                                    showFeedback('Bahan makanan dihapus!');
+                                  },
+                                });
                               }}
                               className="p-1 rounded text-slate-400 hover:text-rose-600"
                             >
@@ -1604,6 +1650,25 @@ export function MasterDataCMS() {
           </div>
         </div>
       )}
+
+      {/* Modern Confirm Delete Modal */}
+      <ConfirmDeleteModal
+        isOpen={deleteDialog.isOpen}
+        title={deleteDialog.title}
+        description={deleteDialog.description}
+        itemName={deleteDialog.itemName}
+        isDeleting={isDeletingItem}
+        onConfirm={async () => {
+          setIsDeletingItem(true);
+          try {
+            await deleteDialog.onConfirm();
+          } finally {
+            setIsDeletingItem(false);
+            setDeleteDialog((prev) => ({ ...prev, isOpen: false }));
+          }
+        }}
+        onClose={() => setDeleteDialog((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

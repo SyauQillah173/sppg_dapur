@@ -22,6 +22,7 @@ import {
  Building2,
  X,
 } from 'lucide-react';
+import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal';
 
 export function KitchenInventoryCMS() {
  const {
@@ -43,6 +44,7 @@ export function KitchenInventoryCMS() {
  } = useStore();
 
  const [activeSubTab, setActiveSubTab] = useState<'master' | 'ledger' | 'categories' | 'units'>('master');
+ const [deleteTargetIngredient, setDeleteTargetIngredient] = useState<MasterIngredient | null>(null);
  const [searchQuery, setSearchQuery] = useState<string>('');
  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('ALL');
 
@@ -427,11 +429,7 @@ export function KitchenInventoryCMS() {
  </button>
  <button
  type="button"
- onClick={() => {
- if (confirm(`Hapus bahan "${item.name}"?`)) {
- deleteIngredient(item.id);
- }
- }}
+ onClick={() => setDeleteTargetIngredient(item)}
  className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50"
  >
  <Trash2 className="h-3.5 w-3.5" />
@@ -877,6 +875,22 @@ export function KitchenInventoryCMS() {
  </div>
  </div>
  )}
+  {/* Modern Confirm Delete Modal */}
+  <ConfirmDeleteModal
+    isOpen={!!deleteTargetIngredient}
+    title="Hapus Bahan dari Gudang Dapur"
+    description="Apakah Anda yakin ingin menghapus data bahan ini dari inventaris dapur?"
+    itemName={deleteTargetIngredient ? `${deleteTargetIngredient.name} (${deleteTargetIngredient.category})` : undefined}
+    warningNote="Data bahan makanan akan dihapus dari daftar master inventaris dapur."
+    confirmText="Ya, Hapus Bahan"
+    onConfirm={() => {
+      if (deleteTargetIngredient) {
+        deleteIngredient(deleteTargetIngredient.id);
+        setDeleteTargetIngredient(null);
+      }
+    }}
+    onClose={() => setDeleteTargetIngredient(null)}
+  />
  </div>
  );
 }
