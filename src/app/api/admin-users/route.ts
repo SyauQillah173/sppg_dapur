@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, requireSuperadmin, parseSessionToken } from '@/lib/api-auth';
 import { UserRole } from '@prisma/client';
+import { hashPassword } from '@/lib/password';
 
 export async function GET(req: NextRequest) {
   try {
@@ -52,22 +53,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const cleanUsername = String(username).trim().toLowerCase();
+    if (cleanUsername.length < 3 || cleanUsername.length > 64) {
+      return NextResponse.json({ success: false, error: 'Username harus 3-64 karakter.' }, { status: 400 });
+    }
+    if (String(password).length < 8) {
+      return NextResponse.json({ success: false, error: 'Password minimal 8 karakter.' }, { status: 400 });
+    }
+
     const existing = await prisma.adminUser.findUnique({
-      where: { username },
+      where: { username: cleanUsername },
     });
 
     if (existing) {
       return NextResponse.json(
-        { success: false, error: `Username "${username}" sudah digunakan! Silakan gunakan username lain.` },
+        { success: false, error: `Username "${cleanUsername}" sudah digunakan! Silakan gunakan username lain.` },
         { status: 400 }
       );
     }
 
     const newUser = await prisma.adminUser.create({
       data: {
-        username: username.trim().toLowerCase(),
-        password: password.trim(),
-        name: name.trim(),
+        username: cleanUsername,
+        password: hashPassword(String(password)),
+        name: String(name).trim(),
         role: (role === 'SUPERADMIN' ? UserRole.SUPERADMIN : UserRole.EXECUTIVE_AUDITOR),
       },
       select: {

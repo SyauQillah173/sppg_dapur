@@ -97,7 +97,7 @@ interface StoreContextType {
   addSppgUnit: (unit: Omit<SppgUnit, 'id' | 'totalRealized' | 'totalRemaining'>) => void;
   updateSppgUnit: (id: string, data: Partial<SppgUnit>) => void;
   deleteSppgUnit: (id: string) => void;
-  addAdminUser: (user: Omit<AdminUserItem, 'id' | 'createdAt'>) => void;
+  addAdminUser: (user: Omit<AdminUserItem, 'id' | 'createdAt'> & { id?: string }) => void;
   deleteAdminUser: (id: string) => void;
   logout: () => Promise<void>;
   resetToDefault: () => void;
@@ -225,6 +225,29 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const rescued = fromServer ? rescueLocalOnly(fromServer, localRaw) : {};
 
       hydratedRef.current = true;
+
+      // Daftar akun admin diambil dari DB (bukan snapshot) supaya id-nya cocok
+      // saat hapus/ubah dan akun baru langsung muncul.
+      try {
+        const res = await fetch('/api/admin-users', { cache: 'no-store' });
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.success && Array.isArray(json.data)) {
+            setAdminUsers(
+              json.data.map((u: any) => ({
+                id: u.id,
+                username: u.username,
+                name: u.name,
+                role: u.role,
+                createdAt: u.createdAt ?? new Date().toISOString(),
+                updatedAt: u.updatedAt ?? undefined,
+              }))
+            );
+          }
+        }
+      } catch {
+        // offline — pakai daftar dari snapshot
+      }
 
       if (fromServer) {
         applyState({ ...fromServer, ...rescued });
@@ -615,8 +638,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     saveState({ sppgUnits: updated });
   };
 
-  const addAdminUser = (user: Omit<AdminUserItem, 'id' | 'createdAt'>) => {
-    const id = `ADM-${Date.now().toString().slice(-4)}`;
+  const addAdminUser = (user: Omit<AdminUserItem, 'id' | 'createdAt'> & { id?: string }) => {
+    const id = user.id || `ADM-${Date.now().toString().slice(-4)}`;
     const newAdmin: AdminUserItem = {
       ...user,
       id,

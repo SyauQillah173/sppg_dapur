@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, requireSuperadmin, parseSessionToken } from '@/lib/api-auth';
 import { UserRole } from '@prisma/client';
+import { hashPassword } from '@/lib/password';
 
 export async function PATCH(
   req: NextRequest,
@@ -26,8 +27,11 @@ export async function PATCH(
     if (body.role) {
       updateData.role = body.role === 'SUPERADMIN' ? UserRole.SUPERADMIN : UserRole.EXECUTIVE_AUDITOR;
     }
-    if (body.password && body.password.trim().length > 0) {
-      updateData.password = body.password.trim();
+    if (body.password && String(body.password).trim().length > 0) {
+      if (String(body.password).length < 8) {
+        return NextResponse.json({ success: false, error: 'Password minimal 8 karakter.' }, { status: 400 });
+      }
+      updateData.password = hashPassword(String(body.password));
     }
 
     const updated = await prisma.adminUser.update({

@@ -288,9 +288,10 @@ export function MasterDataCMS() {
         throw new Error(data.error || 'Gagal membuat akun admin');
       }
       addAdminUser({
-        username: adminForm.username,
-        name: adminForm.name,
-        role: adminForm.role,
+        id: data.data?.id,
+        username: data.data?.username ?? adminForm.username,
+        name: data.data?.name ?? adminForm.name,
+        role: data.data?.role ?? adminForm.role,
       });
       showFeedback(`Akun login admin "${adminForm.username}" berhasil dibuat!`);
       setModalType(null);
