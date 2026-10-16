@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { createWithCode, normalizeName } from '@/lib/master-helpers';
 import { requireAuth, requireSuperadmin, parseSessionToken } from '@/lib/api-auth';
 
+
 export async function GET() {
   try {
     const categories = await prisma.ingredientCategory.findMany({

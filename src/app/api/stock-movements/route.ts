@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { MovementType } from '@prisma/client';
 import { requireAuth, requireSuperadmin, parseSessionToken } from '@/lib/api-auth';
 
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);

@@ -194,7 +194,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const refreshAdminUsers = async () => {
     try {
-      const res = await fetch('/api/admin-users', { cache: 'no-store' });
+      const res = await fetch(`/api/admin-users?_t=${Date.now()}`, { cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();
         if (json?.success && Array.isArray(json.data)) {
@@ -221,11 +221,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
    */
   const refreshFromDb = async () => {
     try {
+      const t = Date.now();
       const [pRes, bRes, uRes, sRes] = await Promise.all([
-        fetch('/api/procurement', { cache: 'no-store' }),
-        fetch('/api/budgets', { cache: 'no-store' }),
-        fetch('/api/sppg-units', { cache: 'no-store' }),
-        fetch('/api/suppliers', { cache: 'no-store' }),
+        fetch(`/api/procurement?_t=${t}`, { cache: 'no-store' }),
+        fetch(`/api/budgets?_t=${t}`, { cache: 'no-store' }),
+        fetch(`/api/sppg-units?_t=${t}`, { cache: 'no-store' }),
+        fetch(`/api/suppliers?_t=${t}`, { cache: 'no-store' }),
       ]);
       const [pJson, bJson, uJson, sJson] = await Promise.all([
         pRes.json(), bRes.json(), uRes.json(), sRes.json(),
@@ -245,13 +246,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const refreshMasterFromDb = async () => {
     try {
+      const t = Date.now();
       const [sup, emp, ing, cat, unit, stock] = await Promise.all([
-        fetch('/api/suppliers', { cache: 'no-store' }),
-        fetch('/api/employees', { cache: 'no-store' }),
-        fetch('/api/ingredients', { cache: 'no-store' }),
-        fetch('/api/categories', { cache: 'no-store' }),
-        fetch('/api/master-units', { cache: 'no-store' }),
-        fetch('/api/stock-movements', { cache: 'no-store' }),
+        fetch(`/api/suppliers?_t=${t}`, { cache: 'no-store' }),
+        fetch(`/api/employees?_t=${t}`, { cache: 'no-store' }),
+        fetch(`/api/ingredients?_t=${t}`, { cache: 'no-store' }),
+        fetch(`/api/categories?_t=${t}`, { cache: 'no-store' }),
+        fetch(`/api/master-units?_t=${t}`, { cache: 'no-store' }),
+        fetch(`/api/stock-movements?_t=${t}`, { cache: 'no-store' }),
       ]);
       const [sJ, eJ, iJ, cJ, uJ, kJ] = await Promise.all([
         sup.json(), emp.json(), ing.json(), cat.json(), unit.json(), stock.json(),
@@ -288,6 +290,40 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // Realtime Live Sync: auto-polling setiap 3 detik agar sinkron seketika saat DB diedit/dihapus
+  useEffect(() => {
+    let isFetching = false;
+    const interval = setInterval(async () => {
+      if (document.visibilityState === 'visible' && hydratedRef.current && !isFetching) {
+        isFetching = true;
+        try {
+          await refreshFromDb();
+        } finally {
+          isFetching = false;
+        }
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Realtime Master Data Sync: auto-polling setiap 8 detik
+  useEffect(() => {
+    let isMasterFetching = false;
+    const interval = setInterval(async () => {
+      if (document.visibilityState === 'visible' && hydratedRef.current && !isMasterFetching) {
+        isMasterFetching = true;
+        try {
+          await refreshMasterFromDb();
+        } finally {
+          isMasterFetching = false;
+        }
+      }
+    }, 8000);
+
+    return () => clearInterval(interval);
   }, []);
 
   // Segarkan saat tab kembali aktif — selalu baca dari database, anti-hilang

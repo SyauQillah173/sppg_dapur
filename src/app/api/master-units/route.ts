@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { normalizeName } from '@/lib/master-helpers';
 import { requireAuth, requireSuperadmin, parseSessionToken } from '@/lib/api-auth';
 
+
 export async function GET() {
   try {
     const units = await prisma.masterUnit.findMany({

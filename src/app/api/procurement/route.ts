@@ -4,6 +4,7 @@ import { AuditStatus } from '@prisma/client';
 import { requireAuth, requireSuperadmin } from '@/lib/api-auth';
 import { applyOrderAggregates, orderToApp, withAnomalyCheck } from '@/lib/procurement-db';
 
+
 /** Daftar pembelanjaan + rincian bahannya (tabel procurement_orders & procurement_items). */
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req);
@@ -36,10 +37,13 @@ export async function GET(req: NextRequest) {
       supMap: new Map(sups.map((s) => [s.id, { name: s.name, address: s.address }])),
     };
 
-    return NextResponse.json({
-      success: true,
-      data: orders.map((o) => orderToApp(o, o.items, lookups)),
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        data: orders.map((o) => orderToApp(o, o.items, lookups)),
+      },
+      { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate' } }
+    );
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
   }

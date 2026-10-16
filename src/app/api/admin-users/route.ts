@@ -4,6 +4,7 @@ import { requireAuth, requireSuperadmin, parseSessionToken } from '@/lib/api-aut
 import { UserRole } from '@prisma/client';
 import { hashPassword } from '@/lib/password';
 
+
 export async function GET(req: NextRequest) {
   try {
     const token = req.cookies.get('giziflow_session')?.value;

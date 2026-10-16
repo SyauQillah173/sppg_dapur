@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { requireAuth, requireSuperadmin } from '@/lib/api-auth';
 import { applyBudgetToUnits, budgetToApp } from '@/lib/budget-db';
 
+
 /** Daftar dana masuk / pagu kas (tabel budget_allocations). */
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req);
@@ -28,7 +29,10 @@ export async function GET(req: NextRequest) {
 
     const unitMap = new Map(units.map((u) => [u.id, u.name]));
 
-    return NextResponse.json({ success: true, data: rows.map((r) => budgetToApp(r, unitMap)) });
+    return NextResponse.json(
+      { success: true, data: rows.map((r) => budgetToApp(r, unitMap)) },
+      { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate' } }
+    );
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
   }

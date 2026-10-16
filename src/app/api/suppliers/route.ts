@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { requireAuth, requireSuperadmin } from '@/lib/api-auth';
 import { createWithCode, normalizeName } from '@/lib/master-helpers';
 
+
 /** Daftar supplier / CV. */
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req);
