@@ -217,6 +217,15 @@ model AppState {
   @@map("app_state")
 }
 
+model NotaPhoto {
+  name      String   @id
+  mime      String
+  data      Bytes
+  createdAt DateTime @default(now())
+
+  @@map("nota_photos")
+}
+
 model StockMovement {
   id                  String       @id @default(cuid())
   timestamp           DateTime     @default(now())

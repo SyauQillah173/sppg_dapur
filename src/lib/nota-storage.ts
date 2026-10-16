@@ -1,7 +1,4 @@
-import path from 'path';
-
-/** Foto nota disimpan di luar public/ supaya bisa dibaca route handler (bukan static). */
-export const NOTA_DIR = path.join(process.cwd(), '.data', 'uploads');
+/** Foto nota disimpan sebagai baris Postgres (bytea) — aman di Vercel/serverless yang FS-nya read-only. */
 export const NOTA_URL_PREFIX = '/api/nota/';
 
 const MIME: Record<string, string> = {

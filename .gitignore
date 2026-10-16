@@ -39,7 +39,6 @@ yarn-error.log*
 
 # upload nota (isi runtime, bukan artefak repo)
 /public/uploads/
-/.data/
 
 # typescript
 *.tsbuildinfo

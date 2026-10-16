@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/api-auth';
-import { readFile } from 'fs/promises';
-import path from 'path';
-import { NOTA_DIR, notaMime, safeNotaName } from '@/lib/nota-storage';
+import prisma from '@/lib/prisma';
+import { safeNotaName } from '@/lib/nota-storage';
 
 /** Sajikan foto nota ke user yang sudah login (nota tidak boleh publik). */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ name: string }> }) {
@@ -14,14 +13,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ name
   if (!safe) return NextResponse.json({ success: false, error: 'Nama file tidak valid.' }, { status: 400 });
 
   try {
-    const file = await readFile(path.join(NOTA_DIR, safe));
-    return new NextResponse(new Uint8Array(file), {
+    const row = await prisma.notaPhoto.findUnique({ where: { name: safe } });
+    if (!row) {
+      return NextResponse.json({ success: false, error: 'Foto tidak ditemukan.' }, { status: 404 });
+    }
+    return new NextResponse(new Uint8Array(row.data), {
       headers: {
-        'Content-Type': notaMime(safe),
+        'Content-Type': row.mime || 'image/jpeg',
         'Cache-Control': 'private, max-age=86400',
       },
     });
-  } catch {
-    return NextResponse.json({ success: false, error: 'Foto tidak ditemukan.' }, { status: 404 });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
   }
 }

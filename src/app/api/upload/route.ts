@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSuperadmin } from '@/lib/api-auth';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
-import { NOTA_DIR, NOTA_URL_PREFIX } from '@/lib/nota-storage';
+import prisma from '@/lib/prisma';
+import { NOTA_URL_PREFIX } from '@/lib/nota-storage';
 
 const MAX_BYTES = 8 * 1024 * 1024; // 8 MB
 const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
 
 /**
- * Simpan foto nota di disk server, di luar public/ (file yang masuk public/ setelah
- * build tidak disajikan oleh `next start`). URL blob: juga tidak ikut tersinkron.
+ * Foto nota masuk Postgres (bytea), bukan disk: FS serverless Vercel read-only dan
+ * sementara, dan URL blob: cuma hidup di browser pengunggah.
  */
 export async function POST(req: NextRequest) {
   const auth = await requireSuperadmin(req);
@@ -30,9 +29,13 @@ export async function POST(req: NextRequest) {
 
     const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg';
     const name = `nota-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const dir = NOTA_DIR;
-    await mkdir(dir, { recursive: true });
-    await writeFile(path.join(dir, name), Buffer.from(await file.arrayBuffer()));
+    await prisma.notaPhoto.create({
+      data: {
+        name,
+        mime: file.type || 'image/jpeg',
+        data: Buffer.from(await file.arrayBuffer()),
+      },
+    });
 
     return NextResponse.json({ success: true, url: `${NOTA_URL_PREFIX}${name}` });
   } catch (error: any) {
