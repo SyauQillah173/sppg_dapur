@@ -147,8 +147,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       });
   }, []);
 
-  // Sync userRole when changed
+  // Sync userRole when changed — AUDITOR cannot escalate to SUPERADMIN
   const handleSetUserRole = (newRole: UserRole) => {
+    // Server-verified role is the ceiling — auditor stays auditor
+    if (userRole === 'EXECUTIVE_AUDITOR' && newRole === 'SUPERADMIN') return;
     setUserRole(newRole);
     if (currentUser) {
       setCurrentUser({
@@ -157,7 +159,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         name:
           newRole === 'SUPERADMIN'
             ? 'Superadmin Pengelola SPPG'
-            : 'Drs. Supriyanto, Ak., CA (Admin 2 / Pemantau)',
+            : currentUser.name,
       });
     }
   };

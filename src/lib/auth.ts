@@ -1,5 +1,4 @@
 import { cookies } from 'next/headers';
-import prisma from './prisma';
 import { UserRole } from './types';
 
 export interface SessionUser {
@@ -10,32 +9,54 @@ export interface SessionUser {
 }
 
 const SESSION_COOKIE_NAME = 'giziflow_session';
+const SESSION_SECRET = process.env.SESSION_SECRET || 'sppg-dapur-secret-key-change-in-production-32chars';
 
-export function createSessionToken(user: SessionUser): string {
-  // Simple Base64-encoded JSON session with secret check
-  const payload = {
-    ...user,
-    issuedAt: Date.now(),
-  };
-  return Buffer.from(JSON.stringify(payload)).toString('base64');
+// ─── HMAC helpers (Node.js crypto, available in Edge/Node runtimes) ───────────
+
+async function hmacSign(payload: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw', enc.encode(SESSION_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(payload));
+  return Buffer.from(sig).toString('base64url');
 }
 
-export function parseSessionToken(token: string): SessionUser | null {
+async function hmacVerify(payload: string, sig: string): Promise<boolean> {
   try {
-    const raw = Buffer.from(token, 'base64').toString('utf-8');
-    const parsed = JSON.parse(raw);
-    if (parsed.username && parsed.role) {
-      return {
-        id: parsed.id,
-        username: parsed.username,
-        name: parsed.name,
-        role: parsed.role as UserRole,
-      };
-    }
-    return null;
-  } catch {
-    return null;
-  }
+    const expected = await hmacSign(payload);
+    // constant-time compare
+    if (expected.length !== sig.length) return false;
+    let diff = 0;
+    for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ sig.charCodeAt(i);
+    return diff === 0;
+  } catch { return false; }
+}
+
+// Token format: base64url(payload).base64url(hmac)
+export async function createSessionToken(user: SessionUser): Promise<string> {
+  const payload = Buffer.from(JSON.stringify({
+    id: user.id, username: user.username, name: user.name, role: user.role,
+    iat: Math.floor(Date.now() / 1000),
+  })).toString('base64url');
+  const sig = await hmacSign(payload);
+  return `${payload}.${sig}`;
+}
+
+export async function parseSessionToken(token: string): Promise<SessionUser | null> {
+  try {
+    const dot = token.lastIndexOf('.');
+    if (dot < 1) return null;
+    const payload = token.slice(0, dot);
+    const sig = token.slice(dot + 1);
+    const valid = await hmacVerify(payload, sig);
+    if (!valid) return null;
+    const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8'));
+    // Token max age: 7 days
+    if (!parsed.iat || Date.now() / 1000 - parsed.iat > 60 * 60 * 24 * 7) return null;
+    if (!parsed.username || !parsed.role) return null;
+    return { id: parsed.id, username: parsed.username, name: parsed.name, role: parsed.role as UserRole };
+  } catch { return null; }
 }
 
 export async function getCurrentUser(): Promise<SessionUser | null> {
@@ -45,15 +66,14 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   return parseSessionToken(token);
 }
 
-export async function setSessionCookie(user: SessionUser) {
-  const cookieStore = await cookies();
-  const token = createSessionToken(user);
-  cookieStore.set(SESSION_COOKIE_NAME, token, {
+export async function setSessionCookie(res: { cookies: { set: Function } }, user: SessionUser) {
+  const token = await createSessionToken(user);
+  res.cookies.set(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    sameSite: 'strict',
     path: '/',
-    maxAge: 60 * 60 * 24 * 7, // 7 days
+    maxAge: 60 * 60 * 24 * 7,
   });
 }
 

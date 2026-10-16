@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { AuditStatus } from '@prisma/client';
+import { requireAuth, requireSuperadmin } from '@/lib/api-auth';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if ('error' in auth) return auth.error;
+
   try {
     const orders = await prisma.procurementOrder.findMany({
       include: {
@@ -23,6 +27,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireSuperadmin(req);
+  if ('error' in auth) return auth.error;
+
   try {
     const body = await req.json();
     const {

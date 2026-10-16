@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { parseSessionToken } from '@/lib/auth';
+import { requireAuth, requireSuperadmin, parseSessionToken } from '@/lib/api-auth';
 
 export async function GET() {
   try {
@@ -21,7 +21,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const token = req.cookies.get('giziflow_session')?.value;
-    const session = token ? parseSessionToken(token) : null;
+    const session = token ? await parseSessionToken(token) : null;
 
     if (!session || session.role !== 'SUPERADMIN') {
       return NextResponse.json(
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const token = req.cookies.get('giziflow_session')?.value;
-    const session = token ? parseSessionToken(token) : null;
+    const session = token ? await parseSessionToken(token) : null;
 
     if (!session || session.role !== 'SUPERADMIN') {
       return NextResponse.json(

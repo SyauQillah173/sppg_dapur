@@ -81,27 +81,31 @@ export function Header() {
 
           {/* Right: controls (desktop) */}
           <div className="hidden md:flex items-center gap-1.5">
-            {/* Role toggle */}
-            <div className="flex items-center rounded-md border border-slate-200 p-0.5 text-[12px]">
-              <button
-                type="button"
-                onClick={() => setUserRole('SUPERADMIN')}
-                className={`px-2.5 py-1 rounded-[5px] font-medium transition ${
-                  userRole === 'SUPERADMIN' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                Admin
-              </button>
-              <button
-                type="button"
-                onClick={() => setUserRole('EXECUTIVE_AUDITOR')}
-                className={`px-2.5 py-1 rounded-[5px] font-medium transition ${
-                  userRole === 'EXECUTIVE_AUDITOR' ? 'bg-amber-500 text-white' : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                Pemantau
-              </button>
-            </div>
+            {/* Role toggle — SUPERADMIN can switch to Pemantau view; AUDITOR cannot switch up */}
+            {userRole === 'SUPERADMIN' && (
+              <div className="flex items-center rounded-md border border-slate-200 p-0.5 text-[12px]">
+                <button
+                  type="button"
+                  onClick={() => setUserRole('SUPERADMIN')}
+                  className={`px-2.5 py-1 rounded-[5px] font-medium transition bg-slate-900 text-white`}
+                >
+                  Admin
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUserRole('EXECUTIVE_AUDITOR')}
+                  className="px-2.5 py-1 rounded-[5px] font-medium transition text-slate-500 hover:text-slate-700"
+                >
+                  Pemantau
+                </button>
+              </div>
+            )}
+            {userRole === 'EXECUTIVE_AUDITOR' && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-amber-200 bg-amber-50 text-[12px] text-amber-700 font-medium">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                Mode Pemantau
+              </div>
+            )}
 
             <button
               type="button"
@@ -137,7 +141,7 @@ export function Header() {
           </button>
         </div>
 
-        {/* Mobile panel */}
+            {/* Mobile panel */}
         {mobileOpen && (
           <div className="md:hidden border-t border-slate-100 py-3 space-y-3">
             <select
@@ -151,26 +155,31 @@ export function Header() {
               ))}
             </select>
 
-            <div className="flex rounded-md border border-slate-200 p-0.5 text-[12px]">
-              <button
-                type="button"
-                onClick={() => { setUserRole('SUPERADMIN'); setMobileOpen(false); }}
-                className={`flex-1 py-1.5 rounded-[5px] font-medium text-center transition ${
-                  userRole === 'SUPERADMIN' ? 'bg-slate-900 text-white' : 'text-slate-500'
-                }`}
-              >
-                Admin
-              </button>
-              <button
-                type="button"
-                onClick={() => { setUserRole('EXECUTIVE_AUDITOR'); setMobileOpen(false); }}
-                className={`flex-1 py-1.5 rounded-[5px] font-medium text-center transition ${
-                  userRole === 'EXECUTIVE_AUDITOR' ? 'bg-amber-500 text-white' : 'text-slate-500'
-                }`}
-              >
-                Pemantau
-              </button>
-            </div>
+            {/* Role toggle — only for SUPERADMIN */}
+            {userRole === 'SUPERADMIN' && (
+              <div className="flex rounded-md border border-slate-200 p-0.5 text-[12px]">
+                <button
+                  type="button"
+                  onClick={() => { setUserRole('SUPERADMIN'); setMobileOpen(false); }}
+                  className={`flex-1 py-1.5 rounded-[5px] font-medium text-center transition bg-slate-900 text-white`}
+                >
+                  Admin
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setUserRole('EXECUTIVE_AUDITOR'); setMobileOpen(false); }}
+                  className="flex-1 py-1.5 rounded-[5px] font-medium text-center transition text-slate-500"
+                >
+                  Pemantau
+                </button>
+              </div>
+            )}
+            {userRole === 'EXECUTIVE_AUDITOR' && (
+              <div className="flex items-center justify-center gap-2 py-1.5 rounded-md border border-amber-200 bg-amber-50 text-[12px] text-amber-700 font-medium">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                Mode Pemantau — Read Only
+              </div>
+            )}
 
             <div className="flex gap-2">
               <button

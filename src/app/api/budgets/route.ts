@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { parseSessionToken } from '@/lib/auth';
+import { requireAuth, requireSuperadmin } from '@/lib/api-auth';
 
 export async function GET(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if ('error' in auth) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const sppgUnitId = searchParams.get('sppgUnitId');
@@ -29,17 +32,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireSuperadmin(req);
+  if ('error' in auth) return auth.error;
+
   try {
-    const token = req.cookies.get('giziflow_session')?.value;
-    const session = token ? parseSessionToken(token) : null;
-
-    if (!session || session.role !== 'SUPERADMIN') {
-      return NextResponse.json(
-        { success: false, error: 'Hanya Superadmin yang berhak mencatat Anggaran/Kas Masuk!' },
-        { status: 403 }
-      );
-    }
-
     const body = await req.json();
     const { sppgUnitId, fiscalPeriod, amountAllocated, notes } = body;
 

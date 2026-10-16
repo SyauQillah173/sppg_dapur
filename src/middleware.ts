@@ -1,74 +1,88 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+const SESSION_SECRET = process.env.SESSION_SECRET || 'sppg-dapur-secret-key-change-in-production-32chars';
 
-  // 1. Bypass Next.js internal files, static assets, and favicon
-  if (
-    pathname.startsWith('/_next') ||
-    pathname.startsWith('/static') ||
-    pathname === '/favicon.ico' ||
-    pathname.includes('.') // file extension like .png, .jpg, .ico
-  ) {
-    return NextResponse.next();
-  }
-
-  // 2. Bypass public auth API endpoints
-  if (
-    pathname === '/api/auth/login' ||
-    pathname === '/api/auth/logout'
-  ) {
-    return NextResponse.next();
-  }
-
-  // 3. Inspect session cookie
-  const sessionCookie = request.cookies.get('giziflow_session')?.value;
-  let isAuthenticated = false;
-
-  if (sessionCookie) {
-    try {
-      // Decode base64 JSON payload
-      const jsonStr = atob(sessionCookie);
-      const parsed = JSON.parse(jsonStr);
-      if (parsed && parsed.username && parsed.role) {
-        isAuthenticated = true;
-      }
-    } catch {
-      isAuthenticated = false;
-    }
-  }
-
-  const isLoginPage = pathname === '/login';
-
-  // If not authenticated and trying to access any protected route
-  if (!isAuthenticated && !isLoginPage) {
-    // If it's an API route, return 401 JSON
-    if (pathname.startsWith('/api/')) {
-      return NextResponse.json(
-        { success: false, error: 'Akses ditolak. Silakan login terlebih dahulu.' },
-        { status: 401 }
-      );
-    }
-    // Otherwise redirect to /login
-    const loginUrl = new URL('/login', request.url);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  // If already authenticated and trying to access /login, redirect to dashboard /
-  if (isAuthenticated && isLoginPage) {
-    const homeUrl = new URL('/', request.url);
-    return NextResponse.redirect(homeUrl);
-  }
-
-  return NextResponse.next();
+async function verifyToken(token: string): Promise<{ username: string; role: string } | null> {
+  try {
+    const dot = token.lastIndexOf('.');
+    if (dot < 1) return null;
+    const payload = token.slice(0, dot);
+    const sig = token.slice(dot + 1);
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw', enc.encode(SESSION_SECRET),
+      { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+    );
+    const sigBuf = await crypto.subtle.sign('HMAC', key, enc.encode(payload));
+    const expected = Buffer.from(sigBuf).toString('base64url');
+    if (expected.length !== sig.length) return null;
+    let diff = 0;
+    for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ sig.charCodeAt(i);
+    if (diff !== 0) return null;
+    const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8'));
+    if (!parsed.iat || Date.now() / 1000 - parsed.iat > 60 * 60 * 24 * 7) return null;
+    if (!parsed.username || !parsed.role) return null;
+    return { username: parsed.username, role: parsed.role };
+  } catch { return null; }
 }
 
-export const config = {
-  matcher: [
-    /*
-     * Match all request paths except static files
-     */
-    '/((?!_next/static|_next/image|favicon.ico).*)',
-  ],
+const SEC: Record<string, string> = {
+  'X-Frame-Options': 'DENY',
+  'X-Content-Type-Options': 'nosniff',
+  'X-XSS-Protection': '1; mode=block',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
+  'Content-Security-Policy': [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "connect-src 'self' https:",
+    "font-src 'self' data:",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    "base-uri 'self'",
+  ].join('; '),
 };
+
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  if (
+    pathname.startsWith('/_next') || pathname.startsWith('/static') ||
+    pathname === '/favicon.ico' ||
+    /\.(png|jpg|jpeg|gif|webp|svg|ico|woff2?|ttf|otf|css|js|map)$/.test(pathname)
+  ) return NextResponse.next();
+
+  if (pathname === '/api/auth/login' || pathname === '/api/auth/logout') {
+    const res = NextResponse.next();
+    Object.entries(SEC).forEach(([k, v]) => res.headers.set(k, v));
+    return res;
+  }
+
+  const token = request.cookies.get('giziflow_session')?.value;
+  const session = token ? await verifyToken(token) : null;
+  const isAuthenticated = !!session;
+  const isLoginPage = pathname === '/login';
+
+  if (!isAuthenticated && !isLoginPage) {
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        { success: false, error: 'Akses ditolak. Silakan login.' }, { status: 401 }
+      );
+    }
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  if (isAuthenticated && isLoginPage) {
+    return NextResponse.redirect(new URL('/', request.url));
+  }
+
+  const res = NextResponse.next();
+  Object.entries(SEC).forEach(([k, v]) => res.headers.set(k, v));
+  return res;
+}
+
+export const config = { matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'] };
