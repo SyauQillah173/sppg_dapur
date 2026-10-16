@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { useStore } from '@/lib/store';
 import { ProcurementTransaction, AuditStatus, SppgUnitId } from '@/lib/types';
-import { formatIDR, formatDateIndo } from '@/lib/utils';
+import { formatIDR, formatDateIndo, hitungSelisih } from '@/lib/utils';
 import { exportAllProcurementsToExcel } from '@/lib/excel-export';
 import {
  Receipt,
@@ -22,6 +22,7 @@ import {
  FileSpreadsheet,
  AlertOctagon,
  Lock,
+ Trash2,
 } from 'lucide-react';
 
 export function ProcurementModule() {
@@ -32,6 +33,8 @@ export function ProcurementModule() {
  sppgUnits,
  openModal,
  userRole,
+ serverRole,
+ deleteProcurement,
  } = useStore();
 
  const [searchQuery, setSearchQuery] = useState<string>('');
@@ -262,7 +265,7 @@ export function ProcurementModule() {
  <ArrowUpDown className="h-3 w-3" />
  </div>
  </th>
- <th className="py-2.5 px-3 text-right">Uang Kembali</th>
+ <th className="py-2.5 px-3 text-right">Uang Kembali / Selisih</th>
  <th className="py-2.5 px-3 text-center">Status Audit</th>
  <th className="py-2.5 px-3 text-right">Aksi</th>
  </tr>
@@ -277,6 +280,7 @@ export function ProcurementModule() {
  ) : (
  processedTransactions.map((trx) => {
  const anomalyDetected = hasAnomaly(trx);
+ const sel = hitungSelisih(trx.amountRequested, trx.actualReceiptTotal);
  return (
  <tr
  key={trx.id}
@@ -319,8 +323,13 @@ export function ProcurementModule() {
  <td className="py-2.5 px-3 text-right font-mono tabular-nums font-bold text-rose-600 whitespace-nowrap">
  {formatIDR(trx.actualReceiptTotal)}
  </td>
- <td className="py-2.5 px-3 text-right font-mono tabular-nums font-medium text-emerald-600 whitespace-nowrap">
+ <td className="py-2.5 px-3 text-right whitespace-nowrap">
+ <div className="font-mono tabular-nums font-medium text-emerald-600">
  {formatIDR(trx.changeReturned)}
+ </div>
+ <div className={`text-[10px] font-mono tabular-nums ${sel.over ? 'text-rose-600 font-bold' : 'text-slate-400'}`}>
+ {sel.persenText} selisih
+ </div>
  </td>
  <td className="py-2.5 px-3 text-center whitespace-nowrap">
  {trx.status === 'VERIFIED' && (
@@ -343,6 +352,7 @@ export function ProcurementModule() {
  )}
  </td>
  <td className="py-2.5 px-3 text-right whitespace-nowrap">
+ <div className="flex items-center justify-end gap-1.5">
  <button
  type="button"
  onClick={() => openModal('INSPECT_RECEIPT', trx)}
@@ -351,6 +361,21 @@ export function ProcurementModule() {
  <FileCheck2 className="h-3.5 w-3.5 text-blue-600" />
  <span>Inspeksi Nota</span>
  </button>
+ {serverRole === 'SUPERADMIN' && (
+ <button
+ type="button"
+ onClick={() => {
+ if (confirm(`Hapus catatan belanja ${trx.receiptNumber}? Data yang dihapus tidak bisa dikembalikan.`)) {
+ deleteProcurement(trx.id);
+ }
+ }}
+ title="Hapus catatan belanja"
+ className="inline-flex items-center rounded border border-rose-200 bg-white px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50 shadow-sm transition"
+ >
+ <Trash2 className="h-3.5 w-3.5" />
+ </button>
+ )}
+ </div>
  </td>
  </tr>
  );

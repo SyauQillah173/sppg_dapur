@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useStore } from '@/lib/store';
 import { ProcurementTransaction, AuditStatus } from '@/lib/types';
 import { PhysicalReceiptView } from './PhysicalReceiptView';
-import { formatIDR, formatKg, formatDateIndo } from '@/lib/utils';
+import { formatIDR, formatKg, formatDateIndo, hitungSelisih } from '@/lib/utils';
 import { exportProcurementToExcel } from '@/lib/excel-export';
 import {
  X,
@@ -41,6 +41,7 @@ export function SplitScreenReceiptModal({ transaction, onClose }: SplitScreenRec
  // Check balance variance
  const calculatedChange = transaction.amountRequested - transaction.actualReceiptTotal;
  const isBalanceMatch = Math.abs(calculatedChange - transaction.changeReturned) < 1;
+ const selisih = hitungSelisih(transaction.amountRequested, transaction.actualReceiptTotal);
 
  // Price Anomaly Detection helper: checks if price exceeds 20% of ingredient benchmark
  const getItemAnomaly = (item: any) => {
@@ -197,9 +198,11 @@ export function SplitScreenReceiptModal({ transaction, onClose }: SplitScreenRec
  <div className="text-base sm:text-lg font-bold font-mono tabular-nums text-emerald-600 mt-0.5">
  {formatIDR(transaction.changeReturned)}
  </div>
- <div className="flex items-center gap-1 text-[10px] text-emerald-700 font-medium">
+ <div className={`flex items-center gap-1 text-[10px] font-medium ${selisih.over ? 'text-rose-600' : 'text-emerald-700'}`}>
  <CheckCircle2 className="h-3 w-3" />
- <span>{isBalanceMatch ? 'Klop (Selisih Rp 0)' : 'Ada Varian'}</span>
+ <span>
+ Selisih {selisih.nominalText} ({selisih.persenText}) {isBalanceMatch ? '· klop' : '· ada varian'}
+ </span>
  </div>
  </div>
  </div>

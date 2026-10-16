@@ -121,8 +121,8 @@ export function AIScannerModal({ onClose }: AIScannerModalProps) {
  actualReceiptTotal: currentResult.actualReceiptTotal,
  changeReturned: currentResult.changeReturned,
  status: 'PENDING_AUDIT',
- receiptPhotoUrl: '/receipts/nota-scanned.webp',
- physicalReceiptImage: 'PHYSICAL_SCANNED',
+ receiptPhotoUrl: '',
+ physicalReceiptImage: '',
  notes: `Di-import otomatis via AI Smart Nota Scanner (Akurasi ${currentResult.confidence}%). Memerlukan verifikasi fisik akhir oleh Auditor.`,
  items: currentResult.items,
  });

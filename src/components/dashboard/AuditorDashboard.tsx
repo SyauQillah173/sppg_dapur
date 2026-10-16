@@ -221,18 +221,14 @@ export function AuditorDashboard() {
                       </span>
                     </td>
                     <td className="py-3 px-4 text-center">
-                      {p.receiptPhotoUrl || p.physicalReceiptImage ? (
-                        <button
-                          type="button"
-                          onClick={() => openModal('INSPECT_RECEIPT', p)}
-                          title="Lihat nota"
-                          className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-400 transition"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                        </button>
-                      ) : (
-                        <span className="text-[11px] text-slate-300">—</span>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => openModal('INSPECT_RECEIPT', p)}
+                        title="Lihat nota"
+                        className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-400 transition"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </button>
                     </td>
                   </tr>
                 ))

@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useStore } from '@/lib/store';
 import { SppgUnitId, ProcurementItem } from '@/lib/types';
-import { formatIDR, formatRupiah } from '@/lib/utils';
+import { formatIDR, formatRupiah, hitungSelisih } from '@/lib/utils';
 import {
   X,
   Plus,
@@ -39,10 +39,8 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
   } = useStore();
 
   const [date, setDate] = useState<string>(new Date().toISOString().slice(0, 10));
-  const [receiptNumber, setReceiptNumber] = useState<string>(
-    `NOTA-${sppgUnits[0]?.code.replace('SPPG-', '') || 'AA02'}-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(100 + Math.random() * 900)}`
-  );
-  const [sppgUnitId, setSppgUnitId] = useState<SppgUnitId>(sppgUnits[0]?.id || 'SPPG-AA02');
+  const [receiptNumber, setReceiptNumber] = useState<string>(''); // opsional — boleh dikosongkan
+  const [sppgUnitId, setSppgUnitId] = useState<SppgUnitId | 'ALL'>(sppgUnits[0]?.id || 'SPPG-AA02');
 
   // Supplier state (Dropdown or custom input)
   const [supplierId, setSupplierId] = useState<string>(suppliers[0]?.id || '');
@@ -58,10 +56,8 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
   const [amountRequested, setAmountRequested] = useState<number>(150000000);
   const [notes, setNotes] = useState<string>('Pengadaan bahan dapur operasional gizi harian.');
 
-  // Receipt photos (multi-photo)
-  const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([
-    '/receipts/nota-sample-01.webp',
-  ]);
+  // Receipt photos — empty by default, only filled after real upload
+  const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
 
   // AI OCR state
   const [isScanning, setIsScanning] = useState<boolean>(false);
@@ -78,6 +74,8 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
 
   const actualReceiptTotal = items.reduce((acc, it) => acc + it.subtotal, 0);
   const changeReturned = Math.max(0, amountRequested - actualReceiptTotal);
+  const selisih = hitungSelisih(amountRequested, actualReceiptTotal);
+  const isAllUnits = sppgUnitId === 'ALL';
 
   // Check price anomaly (>20% price increase)
   const isItemAnomaly = (item: ProcurementItem) => {
@@ -214,7 +212,8 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const selectedUnitObj = sppgUnits.find((u) => u.id === sppgUnitId);
+    const selectedUnitObj = isAllUnits ? undefined : sppgUnits.find((u) => u.id === sppgUnitId);
+    const targetUnitName = isAllUnits ? 'Semua SPPG (Gabungan 4 Unit)' : selectedUnitObj?.name || sppgUnitId;
 
     // Supplier resolution
     let finalSupplierId = supplierId;
@@ -253,8 +252,8 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
       addEmployee({
         name: finalRequesterName,
         roleTitle: 'Petugas Pengadaan Lapangan',
-        sppgUnitId: sppgUnitId,
-        sppgUnitName: selectedUnitObj?.name || sppgUnitId,
+        sppgUnitId: isAllUnits ? sppgUnits[0]?.id || 'SPPG-AA02' : sppgUnitId,
+        sppgUnitName: targetUnitName,
         phone: '-',
         complianceScore: 100,
         status: 'ACTIVE',
@@ -267,10 +266,10 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
     }
 
     addProcurement({
-      receiptNumber,
+      receiptNumber: receiptNumber.trim() || '-',
       date,
       sppgUnitId,
-      sppgUnitName: selectedUnitObj?.name || '',
+      sppgUnitName: targetUnitName,
       requesterId: finalRequesterId,
       requesterName: finalRequesterName,
       requesterRole: finalRequesterRole,
@@ -281,8 +280,8 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
       actualReceiptTotal,
       changeReturned,
       status: 'PENDING_AUDIT',
-      receiptPhotoUrl: uploadedPhotos[0] || '/receipts/nota-sample-01.webp',
-      physicalReceiptImage: 'PHYSICAL_RECEIPT_NEW',
+      receiptPhotoUrl: uploadedPhotos[0] || '',
+      physicalReceiptImage: uploadedPhotos[0] ? 'PHYSICAL_RECEIPT_NEW' : '',
       notes,
       items,
     });
@@ -402,6 +401,7 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
                     {u.name}
                   </option>
                 ))}
+                <option value="ALL">Semua SPPG (Gabungan 4 Unit)</option>
               </select>
             </div>
 
@@ -420,13 +420,13 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
 
             <div>
               <label className="font-semibold text-slate-700 uppercase tracking-wider block mb-1">
-                Nomor Nota / Kwitansi:
+                Nomor Nota / Kwitansi: <span className="text-slate-400 font-normal normal-case">(opsional)</span>
               </label>
               <input
                 type="text"
-                required
                 value={receiptNumber}
                 onChange={(e) => setReceiptNumber(e.target.value)}
+                placeholder="Boleh dikosongkan"
                 className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-2 font-mono text-xs text-slate-800 focus:border-slate-800 focus:outline-none"
               />
             </div>
@@ -668,7 +668,7 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
           </div>
 
           {/* Automatic Calculation Summary Box (Accurate/Jurnal Style) */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-xl border border-slate-200 bg-slate-50 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 rounded-xl border border-slate-200 bg-slate-50 text-xs">
             <div className="border-r border-slate-200/80 pr-2">
               <span className="text-[11px] text-slate-500 uppercase font-semibold block">
                 Uang Kasbon Dibawa:
@@ -698,6 +698,18 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
               </div>
               <span className="text-[10px] text-emerald-600 font-medium">
                 {actualReceiptTotal <= amountRequested ? '✓ Kasbon tertutup sempurna' : '⚠ Belanja melebihi kasbon'}
+              </span>
+            </div>
+
+            <div>
+              <span className="text-[11px] text-slate-500 uppercase font-semibold block">
+                Selisih (Nota vs Kasbon):
+              </span>
+              <div className={`font-mono font-bold text-base mt-0.5 ${selisih.over ? 'text-rose-600' : 'text-slate-800'}`}>
+                {selisih.nominalText}
+              </div>
+              <span className={`text-[10px] font-medium ${selisih.over ? 'text-rose-600' : 'text-slate-500'}`}>
+                {selisih.persenText} dari kasbon · dihitung otomatis
               </span>
             </div>
           </div>

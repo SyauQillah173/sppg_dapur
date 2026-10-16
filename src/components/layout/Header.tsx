@@ -19,6 +19,7 @@ export function Header() {
   const {
     currentUser,
     userRole,
+    serverRole,
     setUserRole,
     selectedSppgUnit,
     setSelectedSppgUnit,
@@ -43,7 +44,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white">
       {/* Auditor banner */}
-      {userRole === 'EXECUTIVE_AUDITOR' && (
+      {serverRole === 'EXECUTIVE_AUDITOR' && (
         <div className="bg-amber-50 border-b border-amber-200 px-4 py-1.5 text-[12px] text-amber-700 flex items-center gap-2">
           <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
           <span>Mode Pemantau — akses baca saja, perubahan data nonaktif</span>
@@ -82,7 +83,7 @@ export function Header() {
           {/* Right: controls (desktop) */}
           <div className="hidden md:flex items-center gap-1.5">
             {/* Role toggle — SUPERADMIN can switch to Pemantau view; AUDITOR cannot switch up */}
-            {userRole === 'SUPERADMIN' && (
+            {serverRole === 'SUPERADMIN' && (
               <div className="flex items-center rounded-md border border-slate-200 p-0.5 text-[12px]">
                 <button
                   type="button"
@@ -100,7 +101,7 @@ export function Header() {
                 </button>
               </div>
             )}
-            {userRole === 'EXECUTIVE_AUDITOR' && (
+            {serverRole === 'EXECUTIVE_AUDITOR' && (
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-amber-200 bg-amber-50 text-[12px] text-amber-700 font-medium">
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                 Mode Pemantau
@@ -156,7 +157,7 @@ export function Header() {
             </select>
 
             {/* Role toggle — only for SUPERADMIN */}
-            {userRole === 'SUPERADMIN' && (
+            {serverRole === 'SUPERADMIN' && (
               <div className="flex rounded-md border border-slate-200 p-0.5 text-[12px]">
                 <button
                   type="button"
@@ -174,7 +175,7 @@ export function Header() {
                 </button>
               </div>
             )}
-            {userRole === 'EXECUTIVE_AUDITOR' && (
+            {serverRole === 'EXECUTIVE_AUDITOR' && (
               <div className="flex items-center justify-center gap-2 py-1.5 rounded-md border border-amber-200 bg-amber-50 text-[12px] text-amber-700 font-medium">
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                 Mode Pemantau — Read Only

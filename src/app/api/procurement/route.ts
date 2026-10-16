@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
       changeReturned,
       notes,
       items,
+      receiptPhotoUrl,
     } = body;
 
     // Check price anomaly for each item against ingredient benchmark
@@ -97,8 +98,8 @@ export async function POST(req: NextRequest) {
         actualReceiptTotal: Number(actualReceiptTotal) || 0,
         changeReturned: Number(changeReturned) || 0,
         status: AuditStatus.PENDING_AUDIT,
-        receiptPhotoUrl: '/receipts/nota-sample-01.webp',
-        physicalReceiptImage: 'PHYSICAL_RECEIPT_NEW',
+        receiptPhotoUrl: receiptPhotoUrl || '',
+        physicalReceiptImage: receiptPhotoUrl ? 'PHYSICAL_RECEIPT_NEW' : '',
         notes: notes || '',
         items: {
           create: itemsWithAnomalyCheck,

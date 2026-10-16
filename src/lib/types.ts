@@ -35,7 +35,7 @@ export interface ProcurementTransaction {
   id: string;
   receiptNumber: string; // e.g. NOTA/2026/AA02/1042
   date: string; // YYYY-MM-DD
-  sppgUnitId: SppgUnitId;
+  sppgUnitId: SppgUnitId | 'ALL'; // 'ALL' = nota belanja gabungan semua unit
   sppgUnitName: string;
   requesterId: string;
   requesterName: string;

@@ -17,6 +17,19 @@ export function formatIDR(value: number): string {
 
 export const formatRupiah = formatIDR;
 
+/** Selisih nota vs kasbon: nominal + persen, dihitung otomatis sistem. */
+export function hitungSelisih(amountRequested: number, actualReceiptTotal: number) {
+  const nominal = actualReceiptTotal - amountRequested; // + = over, - = sisa kasbon
+  const persen = amountRequested > 0 ? (nominal / amountRequested) * 100 : 0;
+  return {
+    nominal,
+    persen,
+    persenText: `${nominal >= 0 ? '+' : ''}${persen.toFixed(1)}%`,
+    nominalText: `${nominal >= 0 ? '+' : '-'}${formatIDR(Math.abs(nominal))}`,
+    over: nominal > 0,
+  };
+}
+
 export function formatNumber(value: number, decimals: number = 0): string {
   if (value === undefined || value === null || isNaN(value)) return "0";
   return new Intl.NumberFormat("id-ID", {

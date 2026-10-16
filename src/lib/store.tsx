@@ -57,6 +57,7 @@ interface CurrentUser {
 interface StoreContextType {
   currentUser: CurrentUser | null;
   userRole: UserRole;
+  serverRole: UserRole;
   isReadOnly: boolean;
   setUserRole: (role: UserRole) => void;
   selectedSppgUnit: SppgUnitId | 'ALL';
@@ -77,6 +78,7 @@ interface StoreContextType {
 
   // Actions
   addProcurement: (proc: Omit<ProcurementTransaction, 'id' | 'createdAt'>) => void;
+  deleteProcurement: (id: string) => void;
   updateAuditStatus: (id: string, status: AuditStatus, auditorNotes: string, auditorName: string) => void;
   addIngredient: (ing: Omit<MasterIngredient, 'id' | 'code' | 'updatedAt'>) => void;
   updateIngredient: (id: string, ing: Partial<MasterIngredient>) => void;
@@ -118,6 +120,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     role: 'SUPERADMIN',
   });
   const [userRole, setUserRole] = useState<UserRole>('SUPERADMIN');
+  // serverRole = actual role from DB — ceiling for UI switching
+  const [serverRole, setServerRole] = useState<UserRole>('SUPERADMIN');
   const [selectedSppgUnit, setSelectedSppgUnit] = useState<SppgUnitId | 'ALL'>('ALL');
   const [sppgUnits, setSppgUnits] = useState<SppgUnit[]>(INITIAL_SPPG_UNITS);
   const [budgetAllocations, setBudgetAllocations] = useState<BudgetAllocationItem[]>(INITIAL_BUDGET_ALLOCATIONS);
@@ -140,6 +144,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (data && data.success && data.user) {
           setCurrentUser(data.user);
           setUserRole(data.user.role);
+          setServerRole(data.user.role); // lock ceiling
         }
       })
       .catch(() => {
@@ -149,8 +154,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   // Sync userRole when changed — AUDITOR cannot escalate to SUPERADMIN
   const handleSetUserRole = (newRole: UserRole) => {
-    // Server-verified role is the ceiling — auditor stays auditor
-    if (userRole === 'EXECUTIVE_AUDITOR' && newRole === 'SUPERADMIN') return;
+    // Server-verified role is the ceiling — auditor can never switch up
+    if (serverRole === 'EXECUTIVE_AUDITOR' && newRole === 'SUPERADMIN') return;
     setUserRole(newRole);
     if (currentUser) {
       setCurrentUser({
@@ -246,9 +251,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setProcurements(updated);
 
     // Also update SPPG unit realized spending
+    // Nota 'ALL' dibagi rata ke tiap unit supaya total KPI tidak berlipat.
+    // ponytail: asumsi bagi rata; ganti ke rincian per unit kalau nanti diminta.
+    const share = proc.sppgUnitId === 'ALL' ? proc.actualReceiptTotal / (sppgUnits.length || 1) : proc.actualReceiptTotal;
     const updatedUnits = sppgUnits.map((u) => {
-      if (u.id === proc.sppgUnitId) {
-        const totalRealized = u.totalRealized + proc.actualReceiptTotal;
+      if (proc.sppgUnitId === 'ALL' || u.id === proc.sppgUnitId) {
+        const totalRealized = u.totalRealized + share;
         const totalRemaining = u.activeBudget - totalRealized;
         return { ...u, totalRealized, totalRemaining };
       }
@@ -269,6 +277,35 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     });
     setSuppliers(updatedSuppliers);
 
+    saveState({ procurements: updated, sppgUnits: updatedUnits, suppliers: updatedSuppliers });
+  };
+
+  const deleteProcurement = (id: string) => {
+    const target = procurements.find((p) => p.id === id);
+    if (!target) return;
+
+    const updated = procurements.filter((p) => p.id !== id);
+    const share = target.sppgUnitId === 'ALL' ? target.actualReceiptTotal / (sppgUnits.length || 1) : target.actualReceiptTotal;
+    const updatedUnits = sppgUnits.map((u) => {
+      if (target.sppgUnitId === 'ALL' || u.id === target.sppgUnitId) {
+        const totalRealized = Math.max(0, u.totalRealized - share);
+        return { ...u, totalRealized, totalRemaining: u.activeBudget - totalRealized };
+      }
+      return u;
+    });
+    const updatedSuppliers = suppliers.map((s) =>
+      s.id === target.supplierId
+        ? {
+            ...s,
+            totalDisbursed: Math.max(0, s.totalDisbursed - target.actualReceiptTotal),
+            totalTransactions: Math.max(0, s.totalTransactions - 1),
+          }
+        : s
+    );
+
+    setProcurements(updated);
+    setSppgUnits(updatedUnits);
+    setSuppliers(updatedSuppliers);
     saveState({ procurements: updated, sppgUnits: updatedUnits, suppliers: updatedSuppliers });
   };
 
@@ -524,7 +561,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   // Filtered procurements based on selected SPPG Unit
   const filteredProcurements = useMemo(() => {
     if (selectedSppgUnit === 'ALL') return procurements;
-    return procurements.filter((p) => p.sppgUnitId === selectedSppgUnit);
+    // Nota 'ALL' (gabungan semua unit) tetap tampil saat satu unit dipilih
+    return procurements.filter((p) => p.sppgUnitId === selectedSppgUnit || p.sppgUnitId === 'ALL');
   }, [procurements, selectedSppgUnit]);
 
   // Filtered ingredients
@@ -589,6 +627,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       value={{
         currentUser,
         userRole,
+        serverRole,
         isReadOnly,
         setUserRole: handleSetUserRole,
         selectedSppgUnit,
@@ -607,6 +646,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         openModal,
         closeModal,
         addProcurement,
+        deleteProcurement,
         updateAuditStatus,
         addIngredient,
         updateIngredient,
