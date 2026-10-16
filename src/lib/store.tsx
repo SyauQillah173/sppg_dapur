@@ -85,12 +85,19 @@ interface StoreContextType {
   updateIngredient: (id: string, ing: Partial<MasterIngredient>) => Promise<{ ok: boolean; error?: string }>;
   deleteIngredient: (id: string) => Promise<{ ok: boolean; error?: string }>;
   addCategory: (cat: Omit<IngredientCategory, 'id'>) => Promise<{ ok: boolean; error?: string }>;
+  updateCategory: (id: string, cat: Partial<IngredientCategory>) => Promise<{ ok: boolean; error?: string }>;
   deleteCategory: (id: string) => Promise<{ ok: boolean; error?: string }>;
   addUnit: (unit: Omit<MasterUnit, 'id'>) => Promise<{ ok: boolean; error?: string }>;
   deleteUnit: (id: string) => Promise<{ ok: boolean; error?: string }>;
   recordStockMutation: (entry: Omit<StockLedgerEntry, 'id' | 'timestamp' | 'remainingStockAfter'>) => Promise<{ ok: boolean; error?: string }>;
+  updateStockMutation: (id: string, entry: Partial<StockLedgerEntry>) => Promise<{ ok: boolean; error?: string }>;
+  deleteStockMutation: (id: string) => Promise<{ ok: boolean; error?: string }>;
   addSupplier: (sup: Omit<SupplierDirectory, 'id' | 'code' | 'totalDisbursed' | 'totalTransactions'>) => Promise<{ ok: boolean; error?: string }>;
+  updateSupplier: (id: string, sup: Partial<SupplierDirectory>) => Promise<{ ok: boolean; error?: string }>;
+  deleteSupplier: (id: string) => Promise<{ ok: boolean; error?: string }>;
   addEmployee: (emp: Omit<EmployeeDirectory, 'id' | 'employeeNumber' | 'totalRequested' | 'totalRealized' | 'pendingBalance'>) => Promise<{ ok: boolean; error?: string }>;
+  updateEmployee: (id: string, emp: Partial<EmployeeDirectory>) => Promise<{ ok: boolean; error?: string }>;
+  deleteEmployee: (id: string) => Promise<{ ok: boolean; error?: string }>;
   addBudgetAllocation: (item: Omit<BudgetAllocationItem, 'id' | 'allocatedDate'> & { allocatedDate?: string }) => Promise<{ ok: boolean; error?: string }>;
   addBudgetAllocationsBulk: (items: Array<Omit<BudgetAllocationItem, 'id' | 'allocatedDate'> & { allocatedDate?: string }>) => Promise<{ ok: boolean; error?: string }>;
   deleteBudgetAllocation: (id: string) => Promise<{ ok: boolean; error?: string }>;
@@ -98,6 +105,7 @@ interface StoreContextType {
   updateSppgUnit: (id: string, data: Partial<SppgUnit>) => Promise<{ ok: boolean; error?: string }>;
   deleteSppgUnit: (id: string) => Promise<{ ok: boolean; error?: string }>;
   addAdminUser: (user: Omit<AdminUserItem, 'id' | 'createdAt'> & { id?: string }) => void;
+  updateAdminUser: (id: string, user: { username?: string; name?: string; role?: string; password?: string }) => Promise<{ ok: boolean; error?: string }>;
   deleteAdminUser: (id: string) => void;
   logout: () => Promise<void>;
   resetToDefault: () => void;
@@ -435,8 +443,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return failNotify(result);
   };
 
+  const updateCategory = async (id: string, cat: Partial<IngredientCategory>) => {
+    const result = await postJson(`/api/categories/${id}`, cat, 'PATCH');
+    if (result.ok) await refreshMasterFromDb();
+    return failNotify(result);
+  };
+
   const deleteCategory = async (id: string) => {
-    const result = await postJson(`/api/categories?id=${encodeURIComponent(id)}`, null, 'DELETE');
+    const result = await postJson(`/api/categories/${id}`, null, 'DELETE');
     if (result.ok) await refreshMasterFromDb();
     return failNotify(result);
   };
@@ -472,6 +486,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return failNotify(result);
   };
 
+  const updateStockMutation = async (id: string, entry: Partial<StockLedgerEntry>) => {
+    const result = await postJson(`/api/stock-movements/${id}`, entry, 'PATCH');
+    if (result.ok) await refreshMasterFromDb();
+    return failNotify(result);
+  };
+
+  const deleteStockMutation = async (id: string) => {
+    const result = await postJson(`/api/stock-movements/${id}`, null, 'DELETE');
+    if (result.ok) await refreshMasterFromDb();
+    return failNotify(result);
+  };
+
   const addSupplier = async (sup: Omit<SupplierDirectory, 'id' | 'code' | 'totalDisbursed' | 'totalTransactions'>) => {
     const result = await postJson('/api/suppliers', {
       name: sup.name,
@@ -487,6 +513,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return failNotify(result);
   };
 
+  const updateSupplier = async (id: string, sup: Partial<SupplierDirectory>) => {
+    const result = await postJson(`/api/suppliers/${id}`, sup, 'PATCH');
+    if (result.ok) await refreshMasterFromDb();
+    return failNotify(result);
+  };
+
+  const deleteSupplier = async (id: string) => {
+    const result = await postJson(`/api/suppliers/${id}`, null, 'DELETE');
+    if (result.ok) await refreshMasterFromDb();
+    return failNotify(result);
+  };
+
   const addEmployee = async (emp: Omit<EmployeeDirectory, 'id' | 'employeeNumber' | 'totalRequested' | 'totalRealized' | 'pendingBalance'>) => {
     const result = await postJson('/api/employees', {
       name: emp.name,
@@ -496,6 +534,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       complianceScore: emp.complianceScore,
       status: emp.status,
     });
+    if (result.ok) await refreshMasterFromDb();
+    return failNotify(result);
+  };
+
+  const updateEmployee = async (id: string, emp: Partial<EmployeeDirectory>) => {
+    const result = await postJson(`/api/employees/${id}`, emp, 'PATCH');
+    if (result.ok) await refreshMasterFromDb();
+    return failNotify(result);
+  };
+
+  const deleteEmployee = async (id: string) => {
+    const result = await postJson(`/api/employees/${id}`, null, 'DELETE');
     if (result.ok) await refreshMasterFromDb();
     return failNotify(result);
   };
@@ -568,6 +618,25 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       createdAt: new Date().toISOString(),
     };
     setAdminUsers((prev) => [...prev, newAdmin]);
+  };
+
+  const updateAdminUser = async (id: string, user: { username?: string; name?: string; role?: string; password?: string }) => {
+    const result = await postJson(`/api/admin-users/${id}`, user, 'PATCH');
+    if (result.ok) {
+      setAdminUsers((prev) =>
+        prev.map((u) =>
+          u.id === id
+            ? {
+                ...u,
+                username: user.username || u.username,
+                name: user.name || u.name,
+                role: (user.role as any) || u.role,
+              }
+            : u
+        )
+      );
+    }
+    return failNotify(result);
   };
 
   const deleteAdminUser = (id: string) => {
@@ -689,12 +758,19 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         updateIngredient,
         deleteIngredient,
         addCategory,
+        updateCategory,
         deleteCategory,
         addUnit,
         deleteUnit,
         recordStockMutation,
+        updateStockMutation,
+        deleteStockMutation,
         addSupplier,
+        updateSupplier,
+        deleteSupplier,
         addEmployee,
+        updateEmployee,
+        deleteEmployee,
         addBudgetAllocation,
         addBudgetAllocationsBulk,
         deleteBudgetAllocation,
@@ -702,6 +778,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         updateSppgUnit,
         deleteSppgUnit,
         addAdminUser,
+        updateAdminUser,
         deleteAdminUser,
         logout,
         resetToDefault,

@@ -50,6 +50,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 }
 
+export const PUT = PATCH;
+
 /** Hapus supplier. Ditolak kalau sudah dipakai di nota belanja. */
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireSuperadmin(req);

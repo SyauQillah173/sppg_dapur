@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useStore } from '@/lib/store';
 import { formatRupiah, formatNumber } from '@/lib/utils';
 import {
@@ -20,6 +20,9 @@ import {
   AlertCircle,
   KeyRound,
   UserPlus,
+  Sparkles,
+  Calculator,
+  Share2,
 } from 'lucide-react';
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal';
 
@@ -31,6 +34,7 @@ export function MasterDataCMS() {
     deleteSppgUnit,
     categories,
     addCategory,
+    updateCategory,
     deleteCategory,
     units,
     addUnit,
@@ -41,10 +45,15 @@ export function MasterDataCMS() {
     deleteIngredient,
     suppliers,
     addSupplier,
+    updateSupplier,
+    deleteSupplier,
     employees,
     addEmployee,
+    updateEmployee,
+    deleteEmployee,
     adminUsers,
     addAdminUser,
+    updateAdminUser,
     deleteAdminUser,
     isReadOnly,
     userRole,
@@ -72,13 +81,23 @@ export function MasterDataCMS() {
   });
 
   // Form states for Category
-  const [catForm, setCatForm] = useState({ name: '', code: '', description: '', color: '#0284c7' });
+  const [catForm, setCatForm] = useState({ id: '', name: '', code: '', description: '', color: '#0284c7' });
 
   // Form states for Unit
   const [unitForm, setUnitForm] = useState({ symbol: '', name: '', type: 'BERAT' as const });
 
   // Form states for Ingredient
-  const [ingForm, setIngForm] = useState({
+  const [ingForm, setIngForm] = useState<{
+    id: string;
+    name: string;
+    category: string;
+    categoryId: string;
+    defaultUnit: string;
+    currentStock: string;
+    minStockAlert: string;
+    lastPurchasePrice: string;
+    sppgDistribution: Record<string, number>;
+  }>({
     id: '',
     name: '',
     category: 'Protein Hewani',
@@ -87,10 +106,12 @@ export function MasterDataCMS() {
     currentStock: '0',
     minStockAlert: '5',
     lastPurchasePrice: '0',
+    sppgDistribution: {},
   });
 
   // Form states for Supplier
   const [supForm, setSupForm] = useState({
+    id: '',
     name: '',
     picName: '',
     phone: '',
@@ -101,12 +122,14 @@ export function MasterDataCMS() {
 
   // Form states for Employee
   const [empForm, setEmpForm] = useState<{
+    id: string;
     name: string;
     roleTitle: string;
     sppgUnitId: string;
     phone: string;
     status: 'ACTIVE' | 'FLAGGED' | 'ON_LEAVE';
   }>({
+    id: '',
     name: '',
     roleTitle: 'Koordinator Pengadaan & Dapur',
     sppgUnitId: sppgUnits[0]?.id || 'SPPG-AA02',
@@ -116,16 +139,53 @@ export function MasterDataCMS() {
 
   // Form states for Admin User
   const [adminForm, setAdminForm] = useState<{
+    id: string;
     username: string;
     password: string;
     name: string;
     role: 'SUPERADMIN' | 'EXECUTIVE_AUDITOR';
   }>({
+    id: '',
     username: '',
     password: '',
     name: '',
     role: 'EXECUTIVE_AUDITOR',
   });
+
+  // Sebaran helpers for Ingredient Form
+  const totalIngDistribution = useMemo(() => {
+    return Object.values(ingForm.sppgDistribution || {}).reduce((sum, val) => sum + (Number(val) || 0), 0);
+  }, [ingForm.sppgDistribution]);
+
+  const handleIngDistributionChange = (unitId: string, val: number) => {
+    setIngForm((prev) => ({
+      ...prev,
+      sppgDistribution: {
+        ...(prev.sppgDistribution || {}),
+        [unitId]: Math.max(0, val),
+      },
+    }));
+  };
+
+  const handleIngDistributeEvenly = () => {
+    if (sppgUnits.length === 0) return;
+    const total = Number(ingForm.currentStock) || 0;
+    const perUnit = Math.floor((total / sppgUnits.length) * 100) / 100;
+    const newDist: Record<string, number> = {};
+    sppgUnits.forEach((u, idx) => {
+      if (idx === sppgUnits.length - 1) {
+        const currentSum = Object.values(newDist).reduce((a, b) => a + b, 0);
+        newDist[u.id] = Math.max(0, Math.round((total - currentSum) * 100) / 100);
+      } else {
+        newDist[u.id] = perUnit;
+      }
+    });
+    setIngForm((prev) => ({ ...prev, sppgDistribution: newDist }));
+  };
+
+  const handleIngCalcTotalFromDistribution = () => {
+    setIngForm((prev) => ({ ...prev, currentStock: String(totalIngDistribution) }));
+  };
 
   const [deleteDialog, setDeleteDialog] = useState<{
     isOpen: boolean;
@@ -182,16 +242,30 @@ export function MasterDataCMS() {
     }
   };
 
-  const handleSaveCategory = (e: React.FormEvent) => {
+  const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isReadOnly) return;
-    addCategory({
-      name: catForm.name,
-      code: catForm.code || `CAT-${(categories.length + 1).toString().padStart(2, '0')}`,
-      color: catForm.color,
-      description: catForm.description || 'Kategori nutrisi gizi SPPG',
-    });
-    showFeedback('Kategori bahan baru berhasil ditambahkan!');
+    if (catForm.id) {
+      const res = await updateCategory(catForm.id, {
+        name: catForm.name,
+        code: catForm.code,
+        color: catForm.color,
+        description: catForm.description,
+      });
+      if (res.ok) {
+        showFeedback('Kategori nutrisi berhasil diperbarui!');
+      }
+    } else {
+      const res = await addCategory({
+        name: catForm.name,
+        code: catForm.code || `CAT-${(categories.length + 1).toString().padStart(2, '0')}`,
+        color: catForm.color,
+        description: catForm.description || 'Kategori nutrisi gizi SPPG',
+      });
+      if (res.ok) {
+        showFeedback('Kategori bahan baru berhasil ditambahkan!');
+      }
+    }
     setModalType(null);
   };
 
@@ -207,20 +281,24 @@ export function MasterDataCMS() {
     setModalType(null);
   };
 
-  const handleSaveIngredient = (e: React.FormEvent) => {
+  const handleSaveIngredient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isReadOnly) return;
     if (ingForm.id) {
-      updateIngredient(ingForm.id, {
+      const res = await updateIngredient(ingForm.id, {
         name: ingForm.name,
         category: ingForm.category,
         defaultUnit: ingForm.defaultUnit,
+        currentStock: Number(ingForm.currentStock) || 0,
         minStockAlert: Number(ingForm.minStockAlert) || 5,
         lastPurchasePrice: Number(ingForm.lastPurchasePrice) || 0,
+        sppgDistribution: ingForm.sppgDistribution,
       });
-      showFeedback('Data bahan makanan berhasil diperbarui!');
+      if (res.ok) {
+        showFeedback('Data bahan makanan & sebaran stok berhasil diperbarui!');
+      }
     } else {
-      addIngredient({
+      const res = await addIngredient({
         name: ingForm.name,
         category: ingForm.category,
         categoryId: ingForm.categoryId,
@@ -228,49 +306,79 @@ export function MasterDataCMS() {
         currentStock: Number(ingForm.currentStock) || 0,
         minStockAlert: Number(ingForm.minStockAlert) || 5,
         lastPurchasePrice: Number(ingForm.lastPurchasePrice) || 0,
-        sppgDistribution: {
-          'SPPG-AA02': 0,
-          'SPPG-BS02': 0,
-          'SPPG-DR01': 0,
-          'SPPG-SM01': 0,
-        },
+        sppgDistribution: ingForm.sppgDistribution,
       });
-      showFeedback('Bahan makanan baru berhasil didaftarkan ke CMS!');
+      if (res.ok) {
+        showFeedback('Bahan makanan baru berhasil didaftarkan ke CMS!');
+      }
     }
     setModalType(null);
   };
 
-  const handleSaveSupplier = (e: React.FormEvent) => {
+  const handleSaveSupplier = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isReadOnly) return;
-    addSupplier({
-      name: supForm.name,
-      picName: supForm.picName,
-      phone: supForm.phone,
-      address: supForm.address,
-      bankAccount: supForm.bankAccount,
-      suppliedCategory: supForm.suppliedCategory,
-      activeStatus: true,
-      rating: 5.0,
-    });
-    showFeedback('Data CV / Supplier baru berhasil ditambahkan!');
+    if (supForm.id) {
+      const res = await updateSupplier(supForm.id, {
+        name: supForm.name,
+        picName: supForm.picName,
+        phone: supForm.phone,
+        address: supForm.address,
+        bankAccount: supForm.bankAccount,
+        suppliedCategory: supForm.suppliedCategory,
+      });
+      if (res.ok) {
+        showFeedback('Data CV / Supplier berhasil diperbarui!');
+      }
+    } else {
+      const res = await addSupplier({
+        name: supForm.name,
+        picName: supForm.picName,
+        phone: supForm.phone,
+        address: supForm.address,
+        bankAccount: supForm.bankAccount,
+        suppliedCategory: supForm.suppliedCategory,
+        activeStatus: true,
+        rating: 5.0,
+      });
+      if (res.ok) {
+        showFeedback('Data CV / Supplier baru berhasil ditambahkan!');
+      }
+    }
     setModalType(null);
   };
 
-  const handleSaveEmployee = (e: React.FormEvent) => {
+  const handleSaveEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isReadOnly) return;
-    const targetUnit = sppgUnits.find((u) => u.id === empForm.sppgUnitId);
-    addEmployee({
-      name: empForm.name,
-      roleTitle: empForm.roleTitle,
-      sppgUnitId: empForm.sppgUnitId as any,
-      sppgUnitName: targetUnit?.name || empForm.sppgUnitId,
-      phone: empForm.phone,
-      complianceScore: 100,
-      status: empForm.status,
-    });
-    showFeedback('Karyawan peminta belanja baru berhasil ditambahkan!');
+    if (empForm.id) {
+      const targetUnit = sppgUnits.find((u) => u.id === empForm.sppgUnitId);
+      const res = await updateEmployee(empForm.id, {
+        name: empForm.name,
+        roleTitle: empForm.roleTitle,
+        sppgUnitId: empForm.sppgUnitId as any,
+        sppgUnitName: targetUnit?.shortName || targetUnit?.name || 'SPPG Unit',
+        phone: empForm.phone,
+        status: empForm.status,
+      });
+      if (res.ok) {
+        showFeedback('Data karyawan peminta belanja berhasil diperbarui!');
+      }
+    } else {
+      const targetUnit = sppgUnits.find((u) => u.id === empForm.sppgUnitId);
+      const res = await addEmployee({
+        name: empForm.name,
+        roleTitle: empForm.roleTitle,
+        sppgUnitId: empForm.sppgUnitId as any,
+        sppgUnitName: targetUnit?.shortName || targetUnit?.name || 'SPPG Unit',
+        phone: empForm.phone,
+        complianceScore: 100,
+        status: empForm.status,
+      });
+      if (res.ok) {
+        showFeedback('Karyawan peminta belanja baru berhasil ditambahkan!');
+      }
+    }
     setModalType(null);
   };
 
@@ -278,24 +386,38 @@ export function MasterDataCMS() {
     e.preventDefault();
     if (isReadOnly) return;
     try {
-      const res = await fetch('/api/admin-users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(adminForm),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Gagal membuat akun admin');
+      if (adminForm.id) {
+        const updatePayload: any = {
+          username: adminForm.username,
+          name: adminForm.name,
+          role: adminForm.role,
+        };
+        if (adminForm.password && adminForm.password.trim().length > 0) {
+          updatePayload.password = adminForm.password;
+        }
+        const res = await updateAdminUser(adminForm.id, updatePayload);
+        if (!res.ok) throw new Error(res.error || 'Gagal memperbarui akun admin');
+        showFeedback(`Akun admin "${adminForm.username}" berhasil diperbarui!`);
+      } else {
+        const res = await fetch('/api/admin-users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(adminForm),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'Gagal membuat akun admin');
+        }
+        addAdminUser({
+          id: data.data?.id,
+          username: data.data?.username ?? adminForm.username,
+          name: data.data?.name ?? adminForm.name,
+          role: data.data?.role ?? adminForm.role,
+        });
+        showFeedback(`Akun login admin "${adminForm.username}" berhasil dibuat!`);
       }
-      addAdminUser({
-        id: data.data?.id,
-        username: data.data?.username ?? adminForm.username,
-        name: data.data?.name ?? adminForm.name,
-        role: data.data?.role ?? adminForm.role,
-      });
-      showFeedback(`Akun login admin "${adminForm.username}" berhasil dibuat!`);
       setModalType(null);
-      setAdminForm({ username: '', password: '', name: '', role: 'EXECUTIVE_AUDITOR' });
+      setAdminForm({ id: '', username: '', password: '', name: '', role: 'EXECUTIVE_AUDITOR' });
     } catch (err: any) {
       showFeedback(err.message, 'error');
     }
@@ -574,7 +696,7 @@ export function MasterDataCMS() {
                 <button
                   type="button"
                   onClick={() => {
-                    setCatForm({ name: '', code: '', description: '', color: '#0284c7' });
+                    setCatForm({ id: '', name: '', code: '', description: '', color: '#0284c7' });
                     setModalType('category');
                   }}
                   className="rounded-md bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white hover:bg-slate-800"
@@ -599,24 +721,44 @@ export function MasterDataCMS() {
                     </div>
                   </div>
                   {!isReadOnly && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDeleteDialog({
-                          isOpen: true,
-                          title: 'Hapus Kategori Bahan',
-                          description: 'Apakah Anda yakin ingin menghapus kategori bahan ini?',
-                          itemName: `Kategori: ${c.name}`,
-                          onConfirm: () => {
-                            deleteCategory(c.id);
-                            showFeedback('Kategori dihapus!');
-                          },
-                        });
-                      }}
-                      className="p-1 text-slate-400 hover:text-rose-600"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCatForm({
+                            id: c.id,
+                            name: c.name,
+                            code: c.code,
+                            description: c.description || '',
+                            color: c.color || '#0284c7',
+                          });
+                          setModalType('category');
+                        }}
+                        className="p-1 text-slate-400 hover:text-slate-800 rounded hover:bg-slate-100"
+                        title="Edit Kategori"
+                      >
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDeleteDialog({
+                            isOpen: true,
+                            title: 'Hapus Kategori Bahan',
+                            description: 'Apakah Anda yakin ingin menghapus kategori bahan ini?',
+                            itemName: `Kategori: ${c.name}`,
+                            onConfirm: () => {
+                              deleteCategory(c.id);
+                              showFeedback('Kategori dihapus!');
+                            },
+                          });
+                        }}
+                        className="p-1 text-slate-400 hover:text-rose-600 rounded hover:bg-rose-50"
+                        title="Hapus Kategori"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   )}
                 </div>
               ))}
@@ -708,6 +850,7 @@ export function MasterDataCMS() {
                     currentStock: '0',
                     minStockAlert: '5',
                     lastPurchasePrice: '25000',
+                    sppgDistribution: {},
                   });
                   setModalType('ingredient');
                 }}
@@ -767,6 +910,7 @@ export function MasterDataCMS() {
                                   currentStock: item.currentStock.toString(),
                                   minStockAlert: item.minStockAlert.toString(),
                                   lastPurchasePrice: item.lastPurchasePrice.toString(),
+                                  sppgDistribution: item.sppgDistribution || {},
                                 });
                                 setModalType('ingredient');
                               }}
@@ -819,6 +963,7 @@ export function MasterDataCMS() {
                 type="button"
                 onClick={() => {
                   setSupForm({
+                    id: '',
                     name: '',
                     picName: '',
                     phone: '',
@@ -847,9 +992,57 @@ export function MasterDataCMS() {
                     <h3 className="font-bold text-slate-900 text-base">{sup.name}</h3>
                     <p className="text-xs text-slate-500 mt-0.5">{sup.address}</p>
                   </div>
-                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                    Aktif
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                      Aktif
+                    </span>
+                    {!isReadOnly && (
+                      <div className="flex items-center gap-1 ml-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSupForm({
+                              id: sup.id,
+                              name: sup.name,
+                              picName: sup.picName,
+                              phone: sup.phone,
+                              address: sup.address,
+                              bankAccount: sup.bankAccount,
+                              suppliedCategory: sup.suppliedCategory,
+                            });
+                            setModalType('supplier');
+                          }}
+                          title="Edit CV / Supplier"
+                          className="p-1 rounded text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition"
+                        >
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeleteDialog({
+                              isOpen: true,
+                              title: 'Hapus Rekanan CV / Toko Supplier',
+                              description: 'Apakah Anda yakin ingin menghapus rekanan CV ini dari sistem?',
+                              itemName: `${sup.name} (${sup.picName})`,
+                              onConfirm: async () => {
+                                const res = await deleteSupplier(sup.id);
+                                if (res.ok) {
+                                  showFeedback('Rekanan CV berhasil dihapus!');
+                                } else {
+                                  showFeedback(res.error || 'Gagal menghapus rekanan CV', 'error');
+                                }
+                              },
+                            });
+                          }}
+                          title="Hapus CV / Supplier"
+                          className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-xs pt-3 border-t border-slate-100">
@@ -889,6 +1082,7 @@ export function MasterDataCMS() {
                 type="button"
                 onClick={() => {
                   setEmpForm({
+                    id: '',
                     name: '',
                     roleTitle: 'Koordinator Pengadaan & Logistik Dapur',
                     sppgUnitId: sppgUnits[0]?.id || 'SPPG-AA02',
@@ -916,9 +1110,56 @@ export function MasterDataCMS() {
                     <h3 className="font-bold text-slate-900 text-base">{emp.name}</h3>
                     <p className="text-xs text-slate-500 mt-0.5">{emp.roleTitle}</p>
                   </div>
-                  <span className="rounded bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-800">
-                    {emp.sppgUnitName}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="rounded bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-800">
+                      {emp.sppgUnitName}
+                    </span>
+                    {!isReadOnly && (
+                      <div className="flex items-center gap-1 ml-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEmpForm({
+                              id: emp.id,
+                              name: emp.name,
+                              roleTitle: emp.roleTitle,
+                              sppgUnitId: emp.sppgUnitId,
+                              phone: emp.phone || '',
+                              status: emp.status as any,
+                            });
+                            setModalType('employee');
+                          }}
+                          title="Edit Karyawan"
+                          className="p-1 rounded text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition"
+                        >
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeleteDialog({
+                              isOpen: true,
+                              title: 'Hapus Data Karyawan Peminta Belanja',
+                              description: 'Apakah Anda yakin ingin menghapus karyawan ini?',
+                              itemName: `${emp.name} (${emp.roleTitle})`,
+                              onConfirm: async () => {
+                                const res = await deleteEmployee(emp.id);
+                                if (res.ok) {
+                                  showFeedback('Data karyawan berhasil dihapus!');
+                                } else {
+                                  showFeedback(res.error || 'Gagal menghapus karyawan', 'error');
+                                }
+                              },
+                            });
+                          }}
+                          title="Hapus Karyawan"
+                          className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-xs pt-3 border-t border-slate-100">
@@ -956,6 +1197,7 @@ export function MasterDataCMS() {
                 type="button"
                 onClick={() => {
                   setAdminForm({
+                    id: '',
                     username: '',
                     password: '',
                     name: '',
@@ -1022,18 +1264,35 @@ export function MasterDataCMS() {
                       </td>
                       {!isReadOnly && (
                         <td className="py-3 px-4 text-center">
-                          {user.username !== 'superadmin' ? (
+                          <div className="flex items-center justify-center gap-1">
                             <button
                               type="button"
-                              onClick={() => handleDeleteAdmin(user.id, user.username)}
-                              title="Hapus Akun"
-                              className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                              onClick={() => {
+                                setAdminForm({
+                                  id: user.id,
+                                  username: user.username,
+                                  name: user.name,
+                                  role: user.role,
+                                  password: '',
+                                });
+                                setModalType('admin_user');
+                              }}
+                              title="Edit Username & Password"
+                              className="p-1 rounded text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition"
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              <Edit2 className="h-3.5 w-3.5" />
                             </button>
-                          ) : (
-                            <span className="text-[10px] text-slate-400 font-mono">Utama</span>
-                          )}
+                            {user.username !== 'superadmin' ? (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteAdmin(user.id, user.username)}
+                                title="Hapus Akun"
+                                className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            ) : null}
+                          </div>
                         </td>
                       )}
                     </tr>
@@ -1280,7 +1539,7 @@ export function MasterDataCMS() {
                     &times;
                   </button>
                 </div>
-                <div className="p-6 space-y-3 text-xs">
+                <div className="p-6 space-y-3 text-xs max-h-[75vh] overflow-y-auto">
                   <div>
                     <label className="block font-semibold text-slate-700 uppercase mb-1">
                       Nama Bahan Makanan
@@ -1335,19 +1594,126 @@ export function MasterDataCMS() {
                       </select>
                     </div>
                   </div>
-                  <div>
-                    <label className="block font-semibold text-slate-700 uppercase mb-1">
-                      Patokan Harga Pembelian (Rp)
-                    </label>
-                    <input
-                      type="number"
-                      value={ingForm.lastPurchasePrice}
-                      onChange={(e) =>
-                        setIngForm({ ...ingForm, lastPurchasePrice: e.target.value })
-                      }
-                      placeholder="Harga per satuan"
-                      className="w-full rounded border border-slate-300 p-2 text-sm font-mono text-slate-800"
-                    />
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block font-semibold text-slate-700 uppercase mb-1">
+                        Stok Total
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={ingForm.currentStock}
+                        onChange={(e) => setIngForm({ ...ingForm, currentStock: e.target.value })}
+                        placeholder="0"
+                        className="w-full rounded border border-slate-300 p-2 text-sm font-mono text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 uppercase mb-1">
+                        Alert Min
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={ingForm.minStockAlert}
+                        onChange={(e) => setIngForm({ ...ingForm, minStockAlert: e.target.value })}
+                        placeholder="5"
+                        className="w-full rounded border border-slate-300 p-2 text-sm font-mono text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 uppercase mb-1">
+                        Harga (Rp)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={500}
+                        value={ingForm.lastPurchasePrice}
+                        onChange={(e) =>
+                          setIngForm({ ...ingForm, lastPurchasePrice: e.target.value })
+                        }
+                        placeholder="Harga per satuan"
+                        className="w-full rounded border border-slate-300 p-2 text-sm font-mono text-slate-800"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Sebaran Stok per Unit SPPG */}
+                  <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3.5 space-y-2.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <label className="font-semibold text-slate-900 text-xs flex items-center gap-1.5">
+                          <Share2 className="h-3.5 w-3.5 text-blue-600" />
+                          Alokasi & Sebaran Stok per SPPG
+                        </label>
+                        <p className="text-[11px] text-slate-500">
+                          Tentukan kuantitas alokasi stok untuk masing-masing dapur SPPG ({ingForm.defaultUnit})
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={handleIngDistributeEvenly}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-white border border-slate-200 text-[11px] font-medium text-slate-700 hover:bg-slate-100 shadow-xs transition"
+                          title="Bagi rata total stok ke semua unit SPPG"
+                        >
+                          <Sparkles className="h-3 w-3 text-amber-500" />
+                          Bagi Rata Otomatis
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleIngCalcTotalFromDistribution}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-white border border-slate-200 text-[11px] font-medium text-slate-700 hover:bg-slate-100 shadow-xs transition"
+                          title="Hitung dan sesuaikan total stok dari penjumlahan sebaran unit"
+                        >
+                          <Calculator className="h-3 w-3 text-blue-500" />
+                          Hitung Total
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                      {sppgUnits.map((unit) => (
+                        <div key={unit.id} className="rounded-md border border-slate-200 bg-white p-2 text-[11px]">
+                          <div className="font-semibold text-slate-800 truncate" title={unit.name}>
+                            {unit.shortName || unit.name}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono mb-1">{unit.code}</div>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min={0}
+                              step="any"
+                              value={ingForm.sppgDistribution?.[unit.id] ?? 0}
+                              onChange={(e) =>
+                                handleIngDistributionChange(unit.id, Number(e.target.value))
+                              }
+                              className="w-full rounded border border-slate-200 px-1.5 py-1 text-right font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+                            />
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              {ingForm.defaultUnit}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] font-mono pt-1 text-slate-600 border-t border-slate-200/60">
+                      <span>Total Sebaran Unit:</span>
+                      <span
+                        className={`font-bold ${
+                          totalIngDistribution !== Number(ingForm.currentStock)
+                            ? 'text-amber-600'
+                            : 'text-emerald-600'
+                        }`}
+                      >
+                        {totalIngDistribution} {ingForm.defaultUnit}{' '}
+                        {totalIngDistribution !== Number(ingForm.currentStock) &&
+                          `(Selisih: ${Number(ingForm.currentStock) - totalIngDistribution})`}
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <div className="border-t border-slate-100 p-4 flex justify-end gap-2">
@@ -1362,7 +1728,7 @@ export function MasterDataCMS() {
                     type="submit"
                     className="px-4 py-2 bg-slate-900 text-white rounded text-xs font-semibold"
                   >
-                    Simpan Bahan
+                    {ingForm.id ? 'Simpan Perubahan Bahan' : 'Simpan Bahan'}
                   </button>
                 </div>
               </form>
@@ -1374,7 +1740,9 @@ export function MasterDataCMS() {
                 <div className="border-b border-slate-200 px-6 py-4 flex items-center justify-between bg-slate-50">
                   <div className="flex items-center gap-2">
                     <KeyRound className="h-4 w-4 text-slate-800" />
-                    <h3 className="font-bold text-slate-900">Buat Akun Login Admin Baru</h3>
+                    <h3 className="font-bold text-slate-900">
+                      {adminForm.id ? 'Edit Akun & Password Admin' : 'Buat Akun Login Admin Baru'}
+                    </h3>
                   </div>
                   <button
                     type="button"
@@ -1415,14 +1783,20 @@ export function MasterDataCMS() {
                   </div>
                   <div>
                     <label className="block font-semibold text-slate-700 uppercase mb-1">
-                      Password Login
+                      {adminForm.id
+                        ? 'Password Baru (Kosongkan jika tidak diganti)'
+                        : 'Password Login'}
                     </label>
                     <input
                       type="password"
-                      required
+                      required={!adminForm.id}
                       value={adminForm.password}
                       onChange={(e) => setAdminForm({ ...adminForm, password: e.target.value })}
-                      placeholder="Masukkan password aman..."
+                      placeholder={
+                        adminForm.id
+                          ? 'Kosongkan jika password lama tetap dipakai...'
+                          : 'Masukkan password aman...'
+                      }
                       className="w-full rounded border border-slate-300 p-2 text-sm text-slate-800"
                     />
                   </div>
@@ -1461,7 +1835,7 @@ export function MasterDataCMS() {
                     type="submit"
                     className="px-4 py-2 bg-slate-900 text-white rounded text-xs font-semibold shadow hover:bg-slate-800"
                   >
-                    Buat Akun Admin
+                    {adminForm.id ? 'Simpan Perubahan Akun' : 'Buat Akun Admin'}
                   </button>
                 </div>
               </form>
@@ -1471,7 +1845,9 @@ export function MasterDataCMS() {
             {modalType === 'supplier' && (
               <form onSubmit={handleSaveSupplier}>
                 <div className="border-b border-slate-200 px-6 py-4 flex items-center justify-between bg-slate-50">
-                  <h3 className="font-bold text-slate-900">Tambah CV / Supplier Baru</h3>
+                  <h3 className="font-bold text-slate-900">
+                    {supForm.id ? 'Edit Rekanan CV / Toko Supplier' : 'Tambah CV / Supplier Baru'}
+                  </h3>
                   <button
                     type="button"
                     onClick={() => setModalType(null)}
@@ -1557,7 +1933,7 @@ export function MasterDataCMS() {
                     type="submit"
                     className="px-4 py-2 bg-slate-900 text-white rounded text-xs font-semibold"
                   >
-                    Simpan Supplier
+                    {supForm.id ? 'Simpan Perubahan CV' : 'Simpan Supplier'}
                   </button>
                 </div>
               </form>
@@ -1567,7 +1943,11 @@ export function MasterDataCMS() {
             {modalType === 'employee' && (
               <form onSubmit={handleSaveEmployee}>
                 <div className="border-b border-slate-200 px-6 py-4 flex items-center justify-between bg-slate-50">
-                  <h3 className="font-bold text-slate-900">Tambah Karyawan Peminta Belanja</h3>
+                  <h3 className="font-bold text-slate-900">
+                    {empForm.id
+                      ? 'Edit Data Karyawan Peminta Belanja'
+                      : 'Tambah Karyawan Peminta Belanja'}
+                  </h3>
                   <button
                     type="button"
                     onClick={() => setModalType(null)}
@@ -1643,7 +2023,7 @@ export function MasterDataCMS() {
                     type="submit"
                     className="px-4 py-2 bg-slate-900 text-white rounded text-xs font-semibold"
                   >
-                    Simpan Karyawan
+                    {empForm.id ? 'Simpan Perubahan Karyawan' : 'Simpan Karyawan'}
                   </button>
                 </div>
               </form>

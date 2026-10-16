@@ -44,10 +44,12 @@ export default function LoginPage() {
         {/* Brand */}
         <div className="mb-10">
           <div className="flex items-center gap-2.5 mb-8">
-            <div className="h-8 w-8 rounded-md bg-slate-900 flex items-center justify-center">
-              <span className="text-white text-xs font-semibold">GF</span>
-            </div>
-            <span className="text-sm font-medium text-slate-900">SPPG Dapur</span>
+            <img
+              src="/icon-192.png"
+              alt="SPPG Dapur Logo"
+              className="h-10 w-10 rounded-xl object-contain shadow-sm border border-slate-200/80 shrink-0 bg-white"
+            />
+            <span className="text-sm font-semibold text-slate-900">SPPG Dapur</span>
           </div>
           <h1 className="text-[22px] font-semibold text-slate-900 leading-tight">
             Masuk ke sistem

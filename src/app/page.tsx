@@ -75,9 +75,6 @@ function AppContent() {
             <span>&bull;</span>
             <span>Sistem Manajemen Operasional & Keuangan Pemenuhan Gizi</span>
           </div>
-          <div className="font-mono text-[11px] text-slate-400">
-            4 SPPG Sentra &bull; 20 Client Ingredients Pre-seeded &bull; Neon PostgreSQL ORM
-          </div>
         </div>
       </footer>
     </div>

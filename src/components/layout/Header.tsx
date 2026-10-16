@@ -66,9 +66,11 @@ export function Header({ onNavigateTab }: HeaderProps) {
         <div className="flex h-14 items-center justify-between gap-3">
           {/* Left: logo */}
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="h-7 w-7 rounded-md bg-slate-900 flex items-center justify-center shrink-0">
-              <span className="text-white text-[10px] font-semibold">GF</span>
-            </div>
+            <img
+              src="/icon-192.png"
+              alt="SPPG Dapur Logo"
+              className="h-8 w-8 rounded-lg object-contain shadow-sm border border-slate-200/80 shrink-0 bg-white"
+            />
             <div className="min-w-0">
               <span className="text-sm font-semibold text-slate-900 truncate block">SPPG Dapur</span>
               <span className="text-[11px] text-slate-500 hidden sm:block">Manajemen Operasional & Keuangan</span>

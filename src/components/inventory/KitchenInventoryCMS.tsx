@@ -21,8 +21,12 @@ import {
  PackageCheck,
  Building2,
  X,
+ Sparkles,
+ Calculator,
+ Share2,
 } from 'lucide-react';
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal';
+import { StockLedgerEntry, IngredientCategory } from '@/lib/types';
 
 export function KitchenInventoryCMS() {
  const {
@@ -37,8 +41,12 @@ export function KitchenInventoryCMS() {
  updateIngredient,
  deleteIngredient,
  addCategory,
+ updateCategory,
+ deleteCategory,
  addUnit,
  recordStockMutation,
+ updateStockMutation,
+ deleteStockMutation,
  openModal,
  userRole,
  } = useStore();
@@ -62,6 +70,7 @@ export function KitchenInventoryCMS() {
  const [ingStock, setIngStock] = useState<number>(10);
  const [ingMinAlert, setIngMinAlert] = useState<number>(5);
  const [ingPrice, setIngPrice] = useState<number>(25000);
+ const [ingDistribution, setIngDistribution] = useState<Record<string, number>>({});
 
  // Mutation form state
  const [mutationType, setMutationType] = useState<StockMutationType>('KELUAR');
@@ -72,16 +81,61 @@ export function KitchenInventoryCMS() {
  const [mutationPurpose, setMutationPurpose] = useState<string>('Porsi Makan Siang Siswa (1.200 Porsi)');
  const [mutationOfficer, setMutationOfficer] = useState<string>('Dewi Lestari (Juru Masak)');
 
- // New Category form state
+ // Edit & Delete Mutation state
+ const [editingMutation, setEditingMutation] = useState<StockLedgerEntry | null>(null);
+ const [showEditMutationModal, setShowEditMutationModal] = useState<boolean>(false);
+ const [editMutationType, setEditMutationType] = useState<StockMutationType>('KELUAR');
+ const [editMutationQty, setEditMutationQty] = useState<number>(1);
+ const [editMutationSppgUnit, setEditMutationSppgUnit] = useState<SppgUnitId>('SPPG-AA02');
+ const [editMutationRef, setEditMutationRef] = useState<string>('');
+ const [editMutationPurpose, setEditMutationPurpose] = useState<string>('');
+ const [editMutationOfficer, setEditMutationOfficer] = useState<string>('');
+ const [deleteTargetMutation, setDeleteTargetMutation] = useState<StockLedgerEntry | null>(null);
+
+ // New & Edit Category form state
  const [newCatName, setNewCatName] = useState<string>('');
  const [newCatCode, setNewCatCode] = useState<string>('');
  const [newCatColor, setNewCatColor] = useState<string>('#3b82f6');
  const [newCatDesc, setNewCatDesc] = useState<string>('');
+ const [editingCategory, setEditingCategory] = useState<IngredientCategory | null>(null);
+ const [showEditCategoryModal, setShowEditCategoryModal] = useState<boolean>(false);
+ const [deleteTargetCategory, setDeleteTargetCategory] = useState<IngredientCategory | null>(null);
 
  // New Unit form state
  const [newUnitName, setNewUnitName] = useState<string>('');
  const [newUnitSymbol, setNewUnitSymbol] = useState<string>('');
  const [newUnitType, setNewUnitType] = useState<'WEIGHT' | 'VOLUME' | 'PIECE' | 'PACKAGING'>('WEIGHT');
+
+ // Helpers for sebaran
+ const totalDistribution = useMemo(() => {
+   return Object.values(ingDistribution).reduce((sum, val) => sum + (Number(val) || 0), 0);
+ }, [ingDistribution]);
+
+ const handleDistributionChange = (unitId: string, val: number) => {
+   setIngDistribution((prev) => ({
+     ...prev,
+     [unitId]: Math.max(0, val),
+   }));
+ };
+
+ const handleDistributeEvenly = () => {
+   if (sppgUnits.length === 0) return;
+   const perUnit = Math.floor((ingStock / sppgUnits.length) * 100) / 100;
+   const newDist: Record<string, number> = {};
+   sppgUnits.forEach((u, idx) => {
+     if (idx === sppgUnits.length - 1) {
+       const currentSum = Object.values(newDist).reduce((a, b) => a + b, 0);
+       newDist[u.id] = Math.max(0, Math.round((ingStock - currentSum) * 100) / 100);
+     } else {
+       newDist[u.id] = perUnit;
+     }
+   });
+   setIngDistribution(newDist);
+ };
+
+ const handleCalcTotalFromDistribution = () => {
+   setIngStock(totalDistribution);
+ };
 
  // Filtered ingredients
  const filteredList = useMemo(() => {
@@ -113,6 +167,7 @@ export function KitchenInventoryCMS() {
  currentStock: ingStock,
  minStockAlert: ingMinAlert,
  lastPurchasePrice: ingPrice,
+ sppgDistribution: ingDistribution,
  });
  setEditingIngredient(null);
  } else {
@@ -124,12 +179,7 @@ export function KitchenInventoryCMS() {
  currentStock: ingStock,
  minStockAlert: ingMinAlert,
  lastPurchasePrice: ingPrice,
- sppgDistribution: {
- 'SPPG-AA02': Math.round(ingStock * 0.35),
- 'SPPG-BS02': Math.round(ingStock * 0.3),
- 'SPPG-DR01': Math.round(ingStock * 0.2),
- 'SPPG-SM01': Math.round(ingStock * 0.15),
- },
+ sppgDistribution: ingDistribution,
  });
  }
  setShowAddIngredientModal(false);
@@ -143,6 +193,59 @@ export function KitchenInventoryCMS() {
  setIngStock(10);
  setIngMinAlert(5);
  setIngPrice(25000);
+ const initialDist: Record<string, number> = {};
+ sppgUnits.forEach((u) => {
+   initialDist[u.id] = 0;
+ });
+ setIngDistribution(initialDist);
+ };
+
+ const handleOpenEditMutation = (l: StockLedgerEntry) => {
+   setEditingMutation(l);
+   setEditMutationType(l.type);
+   setEditMutationQty(l.quantity);
+   setEditMutationSppgUnit(l.sppgUnitId);
+   setEditMutationRef(l.referenceNumber);
+   setEditMutationPurpose(l.purpose);
+   setEditMutationOfficer(l.recordedBy);
+   setShowEditMutationModal(true);
+ };
+
+ const handleSaveEditMutation = async (e: React.FormEvent) => {
+   e.preventDefault();
+   if (!editingMutation) return;
+   await updateStockMutation(editingMutation.id, {
+     type: editMutationType,
+     quantity: editMutationQty,
+     sppgUnitId: editMutationSppgUnit,
+     referenceNumber: editMutationRef,
+     purpose: editMutationPurpose,
+     recordedBy: editMutationOfficer,
+   });
+   setShowEditMutationModal(false);
+   setEditingMutation(null);
+ };
+
+ const handleOpenEditCategory = (cat: IngredientCategory) => {
+   setEditingCategory(cat);
+   setNewCatName(cat.name);
+   setNewCatCode(cat.code);
+   setNewCatColor(cat.color);
+   setNewCatDesc(cat.description);
+   setShowEditCategoryModal(true);
+ };
+
+ const handleSaveEditCategory = async (e: React.FormEvent) => {
+   e.preventDefault();
+   if (!editingCategory) return;
+   await updateCategory(editingCategory.id, {
+     name: newCatName,
+     code: newCatCode,
+     color: newCatColor,
+     description: newCatDesc,
+   });
+   setShowEditCategoryModal(false);
+   setEditingCategory(null);
  };
 
  const handleRecordMutation = (e: React.FormEvent) => {
@@ -421,9 +524,15 @@ export function KitchenInventoryCMS() {
  setIngStock(item.currentStock);
  setIngMinAlert(item.minStockAlert);
  setIngPrice(item.lastPurchasePrice);
+ const dist: Record<string, number> = {};
+ sppgUnits.forEach((u) => {
+   dist[u.id] = (item.sppgDistribution && item.sppgDistribution[u.id] !== undefined) ? item.sppgDistribution[u.id] : 0;
+ });
+ setIngDistribution(dist);
  setShowAddIngredientModal(true);
  }}
  className="p-1 rounded text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+ title="Edit Bahan & Sebaran"
  >
  <Edit2 className="h-3.5 w-3.5" />
  </button>
@@ -482,6 +591,7 @@ export function KitchenInventoryCMS() {
  <th className="py-2.5 px-3">Referensi Dokumen / Menu</th>
  <th className="py-2.5 px-3">Keperluan / Keterangan</th>
  <th className="py-2.5 px-3">Petugas Pencatat</th>
+ {userRole === 'SUPERADMIN' && <th className="py-2.5 px-3 text-right">Aksi</th>}
  </tr>
  </thead>
  <tbody className="divide-y divide-slate-100">
@@ -509,6 +619,28 @@ export function KitchenInventoryCMS() {
  <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600">{l.referenceNumber}</td>
  <td className="py-2.5 px-3 text-slate-700">{l.purpose}</td>
  <td className="py-2.5 px-3 text-slate-600">{l.recordedBy}</td>
+ {userRole === 'SUPERADMIN' && (
+ <td className="py-2.5 px-3 text-right">
+ <div className="flex items-center justify-end gap-1">
+ <button
+ type="button"
+ onClick={() => handleOpenEditMutation(l)}
+ className="p-1 rounded text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+ title="Edit Mutasi"
+ >
+ <Edit2 className="h-3.5 w-3.5" />
+ </button>
+ <button
+ type="button"
+ onClick={() => setDeleteTargetMutation(l)}
+ className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+ title="Hapus Mutasi (Stok Kembali)"
+ >
+ <Trash2 className="h-3.5 w-3.5" />
+ </button>
+ </div>
+ </td>
+ )}
  </tr>
  ))}
  </tbody>
@@ -543,9 +675,31 @@ export function KitchenInventoryCMS() {
  <span className="h-3 w-3 rounded-full" style={{ backgroundColor: cat.color }} />
  <h3 className="font-bold text-sm text-slate-900">{cat.name}</h3>
  </div>
+ <div className="flex items-center gap-1.5">
  <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
  {cat.code}
  </span>
+ {userRole === 'SUPERADMIN' && (
+ <div className="flex items-center gap-0.5 ml-1">
+ <button
+ type="button"
+ onClick={() => handleOpenEditCategory(cat)}
+ className="p-1 rounded text-slate-400 hover:text-slate-900 hover:bg-slate-100"
+ title="Edit Kategori"
+ >
+ <Edit2 className="h-3.5 w-3.5" />
+ </button>
+ <button
+ type="button"
+ onClick={() => setDeleteTargetCategory(cat)}
+ className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+ title="Hapus Kategori"
+ >
+ <Trash2 className="h-3.5 w-3.5" />
+ </button>
+ </div>
+ )}
+ </div>
  </div>
  <p className="text-xs text-slate-500">{cat.description}</p>
  <div className="pt-2 border-t border-slate-100 flex justify-between text-[11px] font-mono text-slate-500">
@@ -670,6 +824,68 @@ export function KitchenInventoryCMS() {
  />
  </div>
  </div>
+
+ {/* Sebaran Stok per Unit SPPG */}
+ <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3.5 space-y-2.5">
+ <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+ <div>
+ <label className="font-semibold text-slate-900 text-xs flex items-center gap-1.5">
+ <Share2 className="h-3.5 w-3.5 text-blue-600" />
+ Alokasi & Sebaran Stok per Dapur SPPG
+ </label>
+ <p className="text-[11px] text-slate-500">
+ Tentukan nominal kuantitas stok untuk tiap sentra dapur SPPG ({ingUnit})
+ </p>
+ </div>
+ <div className="flex items-center gap-1.5 shrink-0">
+ <button
+ type="button"
+ onClick={handleDistributeEvenly}
+ className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-white border border-slate-200 text-[11px] font-medium text-slate-700 hover:bg-slate-100 shadow-xs transition"
+ title="Bagi rata total stok ke semua unit SPPG"
+ >
+ <Sparkles className="h-3 w-3 text-amber-500" />
+ Bagi Rata Otomatis
+ </button>
+ <button
+ type="button"
+ onClick={handleCalcTotalFromDistribution}
+ className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-white border border-slate-200 text-[11px] font-medium text-slate-700 hover:bg-slate-100 shadow-xs transition"
+ title="Hitung dan sesuaikan total stok dari penjumlahan sebaran unit"
+ >
+ <Calculator className="h-3 w-3 text-blue-500" />
+ Hitung Total
+ </button>
+ </div>
+ </div>
+
+ <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+ {sppgUnits.map((unit) => (
+ <div key={unit.id} className="rounded-md border border-slate-200 bg-white p-2 text-[11px]">
+ <div className="font-semibold text-slate-800 truncate" title={unit.name}>{unit.shortName || unit.name}</div>
+ <div className="text-[10px] text-slate-400 font-mono mb-1">{unit.code}</div>
+ <div className="flex items-center gap-1">
+ <input
+ type="number"
+ min={0}
+ step="any"
+ value={ingDistribution[unit.id] ?? 0}
+ onChange={(e) => handleDistributionChange(unit.id, Number(e.target.value))}
+ className="w-full rounded border border-slate-200 px-1.5 py-1 text-right font-mono text-xs font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+ />
+ <span className="text-[10px] text-slate-400 font-mono">{ingUnit}</span>
+ </div>
+ </div>
+ ))}
+ </div>
+ <div className="flex items-center justify-between text-[11px] font-mono pt-1 text-slate-600 border-t border-slate-200/60">
+ <span>Total Sebaran Unit:</span>
+ <span className={`font-bold ${totalDistribution !== ingStock ? 'text-amber-600' : 'text-emerald-600'}`}>
+ {totalDistribution} {ingUnit} {totalDistribution !== ingStock && `(Selisih: ${ingStock - totalDistribution})`}
+ </span>
+ </div>
+ </div>
+
  <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
  <button
  type="button"
@@ -875,7 +1091,148 @@ export function KitchenInventoryCMS() {
  </div>
  </div>
  )}
-  {/* Modern Confirm Delete Modal */}
+  {/* MODAL: EDIT STOCK MUTATION */}
+  {showEditMutationModal && editingMutation && (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-lg bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50">
+          <h3 className="font-bold text-sm text-slate-900">
+            Edit Catatan Mutasi: {editingMutation.ingredientName}
+          </h3>
+          <button onClick={() => setShowEditMutationModal(false)}><X className="h-4 w-4 text-slate-400" /></button>
+        </div>
+        <form onSubmit={handleSaveEditMutation} className="p-5 space-y-3 text-xs">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="font-semibold text-slate-700">Jenis Mutasi:</label>
+              <select
+                value={editMutationType}
+                onChange={(e) => setEditMutationType(e.target.value as StockMutationType)}
+                className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+              >
+                <option value="MASUK">MASUK (Pasokan Baru / Belanja)</option>
+                <option value="KELUAR">KELUAR (Masak / Distribusi Menu)</option>
+              </select>
+            </div>
+            <div>
+              <label className="font-semibold text-slate-700">Unit Dapur SPPG:</label>
+              <select
+                value={editMutationSppgUnit}
+                onChange={(e) => setEditMutationSppgUnit(e.target.value as SppgUnitId)}
+                className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+              >
+                {sppgUnits.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="font-semibold text-slate-700">Volume / Kuantitas ({editingMutation.unit}):</label>
+            <input
+              type="number"
+              min={0.1}
+              step="any"
+              required
+              value={editMutationQty}
+              onChange={(e) => setEditMutationQty(Number(e.target.value))}
+              className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 font-mono"
+            />
+          </div>
+          <div>
+            <label className="font-semibold text-slate-700">Referensi Dokumen / Menu:</label>
+            <input
+              type="text"
+              required
+              value={editMutationRef}
+              onChange={(e) => setEditMutationRef(e.target.value)}
+              className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 font-mono"
+            />
+          </div>
+          <div>
+            <label className="font-semibold text-slate-700">Keperluan / Keterangan Masak:</label>
+            <input
+              type="text"
+              required
+              value={editMutationPurpose}
+              onChange={(e) => setEditMutationPurpose(e.target.value)}
+              className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+            />
+          </div>
+          <div>
+            <label className="font-semibold text-slate-700">Petugas Pencatat:</label>
+            <input
+              type="text"
+              required
+              value={editMutationOfficer}
+              onChange={(e) => setEditMutationOfficer(e.target.value)}
+              className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+            <button
+              type="button"
+              onClick={() => setShowEditMutationModal(false)}
+              className="rounded px-3 py-1.5 border border-slate-300 text-slate-600"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              className="rounded bg-slate-900 text-white px-4 py-1.5 font-semibold"
+            >
+              Simpan Perubahan Mutasi
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )}
+
+  {/* MODAL: EDIT CATEGORY */}
+  {showEditCategoryModal && editingCategory && (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm bg-white rounded-xl shadow-2xl border border-slate-200 p-5 space-y-3 text-xs">
+        <h3 className="font-bold text-sm text-slate-900">Edit Kategori Nutrisi Bahan</h3>
+        <form onSubmit={handleSaveEditCategory} className="space-y-3">
+          <div>
+            <label className="font-medium text-slate-700">Nama Kategori:</label>
+            <input
+              type="text"
+              required
+              value={newCatName}
+              onChange={(e) => setNewCatName(e.target.value)}
+              className="mt-1 w-full rounded border border-slate-300 px-2.5 py-1.5"
+            />
+          </div>
+          <div>
+            <label className="font-medium text-slate-700">Kode Singkat:</label>
+            <input
+              type="text"
+              value={newCatCode}
+              onChange={(e) => setNewCatCode(e.target.value)}
+              className="mt-1 w-full rounded border border-slate-300 px-2.5 py-1.5 font-mono"
+            />
+          </div>
+          <div>
+            <label className="font-medium text-slate-700">Keterangan Nutrisi:</label>
+            <input
+              type="text"
+              value={newCatDesc}
+              onChange={(e) => setNewCatDesc(e.target.value)}
+              className="mt-1 w-full rounded border border-slate-300 px-2.5 py-1.5"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={() => setShowEditCategoryModal(false)} className="rounded px-3 py-1 border border-slate-300">Batal</button>
+            <button type="submit" className="rounded bg-slate-900 text-white px-3 py-1 font-semibold">Simpan Perubahan</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )}
+
+  {/* Modern Confirm Delete Modal: Ingredient */}
   <ConfirmDeleteModal
     isOpen={!!deleteTargetIngredient}
     title="Hapus Bahan dari Gudang Dapur"
@@ -890,6 +1247,40 @@ export function KitchenInventoryCMS() {
       }
     }}
     onClose={() => setDeleteTargetIngredient(null)}
+  />
+
+  {/* Modern Confirm Delete Modal: Stock Mutation */}
+  <ConfirmDeleteModal
+    isOpen={!!deleteTargetMutation}
+    title="Hapus Catatan Mutasi Stok"
+    description="Apakah Anda yakin ingin menghapus catatan mutasi stok ini?"
+    itemName={deleteTargetMutation ? `${deleteTargetMutation.type}: ${deleteTargetMutation.quantity} ${deleteTargetMutation.unit} ${deleteTargetMutation.ingredientName} (${deleteTargetMutation.sppgUnitName})` : undefined}
+    warningNote="Stok bahan di gudang akan otomatis dikembalikan (revert) secara presisi ke dalam inventaris gudang."
+    confirmText="Ya, Hapus Mutasi & Revert Stok"
+    onConfirm={async () => {
+      if (deleteTargetMutation) {
+        await deleteStockMutation(deleteTargetMutation.id);
+        setDeleteTargetMutation(null);
+      }
+    }}
+    onClose={() => setDeleteTargetMutation(null)}
+  />
+
+  {/* Modern Confirm Delete Modal: Category */}
+  <ConfirmDeleteModal
+    isOpen={!!deleteTargetCategory}
+    title="Hapus Kategori Nutrisi Bahan"
+    description="Apakah Anda yakin ingin menghapus kategori bahan ini?"
+    itemName={deleteTargetCategory ? `Kategori: ${deleteTargetCategory.name}` : undefined}
+    warningNote="Kategori hanya dapat dihapus jika tidak ada bahan makanan yang terdaftar di dalamnya."
+    confirmText="Ya, Hapus Kategori"
+    onConfirm={async () => {
+      if (deleteTargetCategory) {
+        await deleteCategory(deleteTargetCategory.id);
+        setDeleteTargetCategory(null);
+      }
+    }}
+    onClose={() => setDeleteTargetCategory(null)}
   />
  </div>
  );
