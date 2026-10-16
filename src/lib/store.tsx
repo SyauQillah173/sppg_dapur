@@ -29,6 +29,7 @@ import {
   INITIAL_BUDGET_ALLOCATIONS,
   INITIAL_ADMIN_USERS,
 } from './initial-data';
+import { rescueLocalOnly } from './state-merge';
 
 interface ModalState {
   type:
@@ -187,20 +188,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     if (parsed.adminUsers) setAdminUsers(parsed.adminUsers);
   };
 
-  // Ambil snapshot terbaru dari server (dipakai semua perangkat)
-  const syncFromServer = async () => {
+  // Ambil snapshot terbaru dari server (dipakai semua perangkat); null = tidak ada/gagal
+  const syncFromServer = async (): Promise<any | null> => {
     try {
       const res = await fetch('/api/state', { cache: 'no-store' });
-      if (!res.ok) return false;
+      if (!res.ok) return null;
       const json = await res.json();
       if (json?.success && json.state) {
         applyState(json.state);
-        return true;
+        return json.state;
       }
     } catch {
       // offline / server mati
     }
-    return false;
+    return null;
   };
 
   // Load awal: server dulu, fallback cache lokal
@@ -211,16 +212,28 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const fromServer = await syncFromServer();
       if (cancelled) return;
 
-      if (!fromServer) {
-        try {
-          const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-          if (saved) applyState(JSON.parse(saved));
-        } catch {
-          // ignore
-        }
+      let localRaw: any = null;
+      try {
+        const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (saved) localRaw = JSON.parse(saved);
+      } catch {
+        // ignore
       }
 
+      // Penyelamat data: server masih kosong untuk jenis data ini, tapi perangkat ini
+      // punya isinya (mis. input lama sebelum sinkron server aktif) → pakai milik lokal.
+      const rescued = fromServer ? rescueLocalOnly(fromServer, localRaw) : {};
+
       hydratedRef.current = true;
+
+      if (fromServer) {
+        applyState({ ...fromServer, ...rescued });
+        // Kirim seluruh snapshot gabungan (bukan sebagian) supaya data server lain tidak tertimpa seed.
+        if (Object.keys(rescued).length > 0) saveState({ ...fromServer, ...rescued });
+      } else if (localRaw) {
+        applyState(localRaw);
+      }
+
       // Server belum punya snapshot → kirim seed awal supaya perangkat lain ikut.
       if (!fromServer) saveState({});
     })();

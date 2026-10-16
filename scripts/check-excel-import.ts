@@ -4,6 +4,7 @@
  */
 import * as XLSX from 'xlsx';
 import { parseAngka, parseBudgetWorkbook } from '../src/lib/excel-import';
+import { rescueLocalOnly } from '../src/lib/state-merge';
 import { SppgUnit } from '../src/lib/types';
 
 const units: SppgUnit[] = [
@@ -52,6 +53,22 @@ async function main() {
   assert('tanggal dd/mm/yyyy terbaca sebagai 5 Okt lokal', new Date(rows[1]?.allocatedDate).getDate() === 5, rows[1]?.allocatedDate);
   assert('filter tanggal ISO cocok', rows[1]?.allocatedDate?.startsWith('2026-10-05') === true, rows[1]?.allocatedDate);
   assert('2 baris bermasalah dilaporkan', errors.length === 2, errors);
+
+  // rescueLocalOnly: server kosong + perangkat punya data → data lokal dipakai
+  const rescuedEmpty = rescueLocalOnly(
+    { procurements: [], budgetAllocations: [], ingredients: [1, 2] },
+    { procurements: [{ id: 'a' }], budgetAllocations: [{ id: 'b' }] }
+  );
+  assert('server kosong → 2 jenis data diselamatkan', rescuedEmpty.procurements?.length === 1 && rescuedEmpty.budgetAllocations?.length === 1, rescuedEmpty);
+  assert('kunci lain tidak ikut diselamatkan', rescuedEmpty.ingredients === undefined, Object.keys(rescuedEmpty));
+
+  const rescuedFull = rescueLocalOnly(
+    { procurements: [{ id: 'server' }], budgetAllocations: [] },
+    { procurements: [{ id: 'lokal1' }, { id: 'lokal2' }] }
+  );
+  assert('server sudah ada isi → tidak ditimpa cache lama', rescuedFull.procurements === undefined, rescuedFull);
+
+  assert('tanpa cache lokal → tidak ada yang diselamatkan', Object.keys(rescueLocalOnly({ procurements: [] }, null)).length === 0);
 
   console.log(failed === 0 ? '\nSEMUA CEK LULUS' : `\n${failed} CEK GAGAL`);
   process.exit(failed === 0 ? 0 : 1);
