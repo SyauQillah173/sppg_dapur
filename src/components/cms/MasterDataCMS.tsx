@@ -68,7 +68,7 @@ export function MasterDataCMS() {
     location: '',
     picName: '',
     phone: '',
-    activeBudget: '150000000',
+    activeBudget: '0',
   });
 
   // Form states for Category
@@ -172,7 +172,7 @@ export function MasterDataCMS() {
           location: sppgForm.location,
           picName: sppgForm.picName,
           phone: sppgForm.phone,
-          activeBudget: Number(sppgForm.activeBudget) || 150000000,
+          activeBudget: Number(sppgForm.activeBudget) || 0,
         });
         showFeedback('Unit SPPG baru berhasil ditambahkan!');
       }
@@ -470,7 +470,7 @@ export function MasterDataCMS() {
                     location: 'Gresik, Jawa Timur',
                     picName: '',
                     phone: '',
-                    activeBudget: '150000000',
+                    activeBudget: '0',
                   });
                   setModalType('sppg');
                 }}

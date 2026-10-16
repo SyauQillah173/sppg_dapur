@@ -39,34 +39,49 @@ interface ExecutiveDashboardProps {
 
 export function ExecutiveDashboard({ onNavigateToProcurement, onNavigateToInventory }: ExecutiveDashboardProps) {
  const {
- kpiSummary,
- selectedSppgUnit,
- setSelectedSppgUnit,
- sppgUnits,
- procurements,
- categories,
- openModal,
- userRole,
- } = useStore();
+    kpiSummary,
+    selectedSppgUnit,
+    setSelectedSppgUnit,
+    sppgUnits,
+    budgetAllocations,
+    procurements,
+    categories,
+    openModal,
+    userRole,
+  } = useStore();
 
- // Unit Spending Comparison Chart Data
- const unitComparisonData = useMemo(() => {
- return sppgUnits.map((u) => {
- // Find actual procurements in this unit
- const unitProcurements = procurements.filter((p) => p.sppgUnitId === u.id);
- const realized = unitProcurements.reduce((acc, p) => acc + p.actualReceiptTotal, 0);
- const remaining = Math.max(0, u.activeBudget - realized);
+  // Unit Spending Comparison Chart Data (Single Source of Truth from budgetAllocations & procurements)
+  const unitComparisonData = useMemo(() => {
+    const totalAllBudget = budgetAllocations
+      .filter((b) => b.sppgUnitId === 'ALL')
+      .reduce((acc, b) => acc + b.amountAllocated, 0);
+    const unitCount = sppgUnits.length || 1;
+    const shareOfAll = totalAllBudget / unitCount;
 
- return {
- unitCode: u.code.replace('SPPG-', ''),
- shortName: u.shortName,
- fullName: u.name,
- anggaran: u.activeBudget,
- realisasi: realized,
- sisaKas: remaining,
- };
- });
- }, [sppgUnits, procurements]);
+    return sppgUnits.map((u) => {
+      // Find actual procurements in this unit
+      const unitProcurements = procurements.filter(
+        (p) => p.sppgUnitId === u.id || p.sppgUnitId === u.code
+      );
+      const realized = unitProcurements.reduce((acc, p) => acc + p.actualReceiptTotal, 0);
+
+      // Unit's direct budget + equal share of general ALL budget
+      const directBudget = budgetAllocations
+        .filter((b) => b.sppgUnitId === u.id || b.sppgUnitId === u.code)
+        .reduce((acc, b) => acc + b.amountAllocated, 0);
+      const totalUnitBudget = directBudget + shareOfAll;
+      const remaining = Math.max(0, totalUnitBudget - realized);
+
+      return {
+        unitCode: u.code.replace('SPPG-', ''),
+        shortName: u.shortName,
+        fullName: u.name,
+        anggaran: totalUnitBudget,
+        realisasi: realized,
+        sisaKas: remaining,
+      };
+    });
+  }, [sppgUnits, budgetAllocations, procurements]);
 
  // Category Spending Breakdown Chart Data
  const categorySpendingData = useMemo(() => {

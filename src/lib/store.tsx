@@ -601,15 +601,31 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return budgetAllocations.filter((b) => b.sppgUnitId === selectedSppgUnit || b.sppgUnitId === 'ALL');
   }, [budgetAllocations, selectedSppgUnit]);
 
-  // Computed KPI Summary
+  // Computed KPI Summary (Single Source of Truth: derive directly from budgetAllocations & procurements)
   const kpiSummary = useMemo<KPISummary>(() => {
-    const targetUnits =
-      selectedSppgUnit === 'ALL'
-        ? sppgUnits
-        : sppgUnits.filter((u) => u.id === selectedSppgUnit);
+    const activeUnit = selectedSppgUnit === 'ALL' ? null : sppgUnits.find((u) => u.id === selectedSppgUnit);
 
-    const totalBudgetIncome = targetUnits.reduce((acc, u) => acc + u.activeBudget, 0);
-    const totalActualSpending = targetUnits.reduce((acc, u) => acc + u.totalRealized, 0);
+    const totalAllBudget = budgetAllocations
+      .filter((b) => b.sppgUnitId === 'ALL')
+      .reduce((acc, b) => acc + b.amountAllocated, 0);
+    const unitCount = sppgUnits.length || 1;
+    const shareOfAll = totalAllBudget / unitCount;
+
+    const totalBudgetIncome =
+      selectedSppgUnit === 'ALL'
+        ? budgetAllocations.reduce((acc, b) => acc + b.amountAllocated, 0)
+        : (budgetAllocations
+            .filter((b) => b.sppgUnitId === selectedSppgUnit || (activeUnit && b.sppgUnitId === activeUnit.code))
+            .reduce((acc, b) => acc + b.amountAllocated, 0) + shareOfAll);
+
+    const targetProcurements =
+      selectedSppgUnit === 'ALL'
+        ? procurements
+        : procurements.filter(
+            (p) => p.sppgUnitId === selectedSppgUnit || (activeUnit && p.sppgUnitId === activeUnit.code)
+          );
+
+    const totalActualSpending = targetProcurements.reduce((acc, p) => acc + p.actualReceiptTotal, 0);
     const activeRemainingCash = totalBudgetIncome - totalActualSpending;
     const budgetUsedPercentage =
       totalBudgetIncome > 0 ? (totalActualSpending / totalBudgetIncome) * 100 : 0;
@@ -637,7 +653,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       totalKitchenVolumeKg,
       totalKitchenItemCount: ingredients.length,
     };
-  }, [selectedSppgUnit, sppgUnits, ingredients]);
+  }, [selectedSppgUnit, sppgUnits, ingredients, budgetAllocations, procurements]);
 
   const isReadOnly = userRole === 'EXECUTIVE_AUDITOR';
 
