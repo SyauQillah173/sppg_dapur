@@ -12,9 +12,11 @@ import {
   Menu,
   X,
   ChevronDown,
+  KeyRound,
 } from 'lucide-react';
 import { exportConsolidatedSPPGSummaryToExcel } from '@/lib/excel-export';
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal';
+import { AccountSettingsModal } from './AccountSettingsModal';
 
 export function Header() {
   const {
@@ -32,6 +34,7 @@ export function Header() {
 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
 
   const handleUnit = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedSppgUnit(e.target.value as SppgUnitId | 'ALL');
@@ -126,6 +129,16 @@ export function Header() {
 
             <button
               type="button"
+              onClick={() => setIsAccountModalOpen(true)}
+              className="h-8 px-2.5 rounded-md border border-slate-200 text-[12px] text-slate-600 hover:bg-slate-50 transition inline-flex items-center gap-1.5"
+              title="Ubah username & password akun saya"
+            >
+              <KeyRound className="h-3.5 w-3.5" />
+              <span className="hidden xl:inline">Akun</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setIsLogoutModalOpen(true)}
               className="h-8 px-2.5 rounded-md border border-slate-200 text-[12px] text-red-600 hover:bg-red-50 transition"
               title="Keluar dari sistem"
@@ -196,6 +209,14 @@ export function Header() {
               </button>
               <button
                 type="button"
+                onClick={() => { setIsAccountModalOpen(true); setMobileOpen(false); }}
+                className="flex-1 h-9 flex items-center justify-center gap-1.5 rounded-md border border-slate-200 text-[12px] text-slate-600 hover:bg-slate-50"
+              >
+                <KeyRound className="h-3.5 w-3.5" />
+                Akun
+              </button>
+              <button
+                type="button"
                 onClick={() => setIsLogoutModalOpen(true)}
                 className="flex-1 h-9 flex items-center justify-center gap-1.5 rounded-md border border-red-200 text-[12px] text-red-600 bg-red-50 hover:bg-red-100"
               >
@@ -225,6 +246,8 @@ export function Header() {
         }}
         onClose={() => setIsLogoutModalOpen(false)}
       />
+
+      {isAccountModalOpen && <AccountSettingsModal onClose={() => setIsAccountModalOpen(false)} />}
     </header>
   );
 }

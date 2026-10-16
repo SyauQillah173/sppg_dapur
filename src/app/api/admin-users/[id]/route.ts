@@ -13,9 +13,16 @@ export async function PATCH(
     const token = req.cookies.get('giziflow_session')?.value;
     const session = token ? await parseSessionToken(token) : null;
 
-    if (!session || session.role !== 'SUPERADMIN') {
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Silakan login terlebih dahulu.' }, { status: 401 });
+    }
+
+    const isSuperadmin = session.role === 'SUPERADMIN';
+    const isSelf = session.id === id;
+    // Superadmin boleh mengubah akun siapa pun; setiap admin boleh mengubah akunnya sendiri.
+    if (!isSuperadmin && !isSelf) {
       return NextResponse.json(
-        { success: false, error: 'Hanya Superadmin yang berhak mengubah data admin!' },
+        { success: false, error: 'Hanya Superadmin yang berhak mengubah akun admin lain!' },
         { status: 403 }
       );
     }
@@ -23,15 +30,36 @@ export async function PATCH(
     const body = await req.json();
     const updateData: any = {};
 
-    if (body.name) updateData.name = body.name.trim();
-    if (body.role) {
+    if (body.username !== undefined && String(body.username).trim() !== '') {
+      const cleanUsername = String(body.username).trim().toLowerCase();
+      if (cleanUsername.length < 3 || cleanUsername.length > 64) {
+        return NextResponse.json({ success: false, error: 'Username harus 3-64 karakter.' }, { status: 400 });
+      }
+      const taken = await prisma.adminUser.findFirst({
+        where: { username: cleanUsername, NOT: { id } },
+      });
+      if (taken) {
+        return NextResponse.json({ success: false, error: `Username "${cleanUsername}" sudah dipakai akun lain.` }, { status: 400 });
+      }
+      updateData.username = cleanUsername;
+    }
+
+    if (body.name) updateData.name = String(body.name).trim();
+
+    // Peran hanya boleh diubah oleh superadmin — akun tidak bisa menaikkan haknya sendiri.
+    if (body.role && isSuperadmin) {
       updateData.role = body.role === 'SUPERADMIN' ? UserRole.SUPERADMIN : UserRole.EXECUTIVE_AUDITOR;
     }
+
     if (body.password && String(body.password).trim().length > 0) {
       if (String(body.password).length < 8) {
         return NextResponse.json({ success: false, error: 'Password minimal 8 karakter.' }, { status: 400 });
       }
       updateData.password = hashPassword(String(body.password));
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json({ success: false, error: 'Tidak ada perubahan yang dikirim.' }, { status: 400 });
     }
 
     const updated = await prisma.adminUser.update({
