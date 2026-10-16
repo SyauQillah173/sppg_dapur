@@ -209,6 +209,14 @@ model ProcurementItem {
   @@map("procurement_items")
 }
 
+model AppState {
+  id        String   @id @default("singleton")
+  payload   Json
+  updatedAt DateTime @updatedAt
+
+  @@map("app_state")
+}
+
 model StockMovement {
   id                  String       @id @default(cuid())
   timestamp           DateTime     @default(now())

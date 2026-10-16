@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import {
   UserRole,
   SppgUnitId,
@@ -134,6 +134,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [stockLedgers, setStockLedgers] = useState<StockLedgerEntry[]>(INITIAL_STOCK_LEDGERS);
   const [adminUsers, setAdminUsers] = useState<AdminUserItem[]>(INITIAL_ADMIN_USERS);
   const [modal, setModal] = useState<ModalState>({ type: null });
+  // Jangan push ke server sebelum state awal selesai dimuat (hindari seed menimpa data server)
+  const hydratedRef = useRef(false);
 
   // Sync role with current user
   useEffect(() => {
@@ -169,26 +171,75 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Load from localStorage if present
-  useEffect(() => {
+  // Terapkan snapshot dari server/localStorage ke state
+  const applyState = (parsed: any) => {
+    if (!parsed) return;
+    if (parsed.procurements) setProcurements(parsed.procurements);
+    if (parsed.ingredients) setIngredients(parsed.ingredients);
+    if (parsed.categories) setCategories(parsed.categories);
+    if (parsed.units) setUnits(parsed.units);
+    if (parsed.suppliers) setSuppliers(parsed.suppliers);
+    if (parsed.employees) setEmployees(parsed.employees);
+    if (parsed.stockLedgers) setStockLedgers(parsed.stockLedgers);
+    if (parsed.sppgUnits) setSppgUnits(parsed.sppgUnits);
+    if (parsed.budgetAllocations) setBudgetAllocations(parsed.budgetAllocations);
+    if (parsed.adminUsers) setAdminUsers(parsed.adminUsers);
+  };
+
+  // Ambil snapshot terbaru dari server (dipakai semua perangkat)
+  const syncFromServer = async () => {
     try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.procurements) setProcurements(parsed.procurements);
-        if (parsed.ingredients) setIngredients(parsed.ingredients);
-        if (parsed.categories) setCategories(parsed.categories);
-        if (parsed.units) setUnits(parsed.units);
-        if (parsed.suppliers) setSuppliers(parsed.suppliers);
-        if (parsed.employees) setEmployees(parsed.employees);
-        if (parsed.stockLedgers) setStockLedgers(parsed.stockLedgers);
-        if (parsed.sppgUnits) setSppgUnits(parsed.sppgUnits);
-        if (parsed.budgetAllocations) setBudgetAllocations(parsed.budgetAllocations);
-        if (parsed.adminUsers) setAdminUsers(parsed.adminUsers);
+      const res = await fetch('/api/state', { cache: 'no-store' });
+      if (!res.ok) return false;
+      const json = await res.json();
+      if (json?.success && json.state) {
+        applyState(json.state);
+        return true;
       }
     } catch {
-      // ignore
+      // offline / server mati
     }
+    return false;
+  };
+
+  // Load awal: server dulu, fallback cache lokal
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      const fromServer = await syncFromServer();
+      if (cancelled) return;
+
+      if (!fromServer) {
+        try {
+          const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+          if (saved) applyState(JSON.parse(saved));
+        } catch {
+          // ignore
+        }
+      }
+
+      hydratedRef.current = true;
+      // Server belum punya snapshot → kirim seed awal supaya perangkat lain ikut.
+      if (!fromServer) saveState({});
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Segarkan saat tab kembali aktif — supaya input dari perangkat lain langsung muncul
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && hydratedRef.current) syncFromServer();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
   }, []);
 
   // Save changes to localStorage
@@ -204,23 +255,35 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     budgetAllocations?: BudgetAllocationItem[];
     adminUsers?: AdminUserItem[];
   }) => {
+    const current = {
+      procurements: newState.procurements || procurements,
+      ingredients: newState.ingredients || ingredients,
+      categories: newState.categories || categories,
+      units: newState.units || units,
+      suppliers: newState.suppliers || suppliers,
+      employees: newState.employees || employees,
+      stockLedgers: newState.stockLedgers || stockLedgers,
+      sppgUnits: newState.sppgUnits || sppgUnits,
+      budgetAllocations: newState.budgetAllocations || budgetAllocations,
+      adminUsers: newState.adminUsers || adminUsers,
+    };
+
     try {
-      const current = {
-        procurements: newState.procurements || procurements,
-        ingredients: newState.ingredients || ingredients,
-        categories: newState.categories || categories,
-        units: newState.units || units,
-        suppliers: newState.suppliers || suppliers,
-        employees: newState.employees || employees,
-        stockLedgers: newState.stockLedgers || stockLedgers,
-        sppgUnits: newState.sppgUnits || sppgUnits,
-        budgetAllocations: newState.budgetAllocations || budgetAllocations,
-        adminUsers: newState.adminUsers || adminUsers,
-      };
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(current));
     } catch {
       // ignore
     }
+
+    // Simpan ke server supaya PC dan HP lihat data yang sama.
+    // ponytail: whole-document last-write-wins; pecah ke endpoint per-entitas kalau nanti perlu edit bersamaan.
+    if (!hydratedRef.current) return;
+    fetch('/api/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state: current }),
+    }).catch(() => {
+      // offline — data tetap aman di cache lokal
+    });
   };
 
   const openModal = (type: ModalState['type'], data?: any) => {
@@ -556,6 +619,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setEmployees(INITIAL_EMPLOYEES);
     setStockLedgers(INITIAL_STOCK_LEDGERS);
     setAdminUsers(INITIAL_ADMIN_USERS);
+    saveState({
+      sppgUnits: INITIAL_SPPG_UNITS,
+      budgetAllocations: INITIAL_BUDGET_ALLOCATIONS,
+      procurements: INITIAL_PROCUREMENTS,
+      ingredients: INITIAL_INGREDIENTS,
+      categories: INITIAL_CATEGORIES,
+      units: INITIAL_UNITS,
+      suppliers: INITIAL_SUPPLIERS,
+      employees: INITIAL_EMPLOYEES,
+      stockLedgers: INITIAL_STOCK_LEDGERS,
+      adminUsers: INITIAL_ADMIN_USERS,
+    });
   };
 
   // Filtered procurements based on selected SPPG Unit

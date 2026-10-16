@@ -37,6 +37,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# upload nota (isi runtime, bukan artefak repo)
+/public/uploads/
+/.data/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

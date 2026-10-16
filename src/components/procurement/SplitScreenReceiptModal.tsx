@@ -163,6 +163,17 @@ export function SplitScreenReceiptModal({ transaction, onClose }: SplitScreenRec
  <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
  {/* LEFT PANE (5 Columns): Physical Receipt Inspector */}
  <div className="lg:col-span-5 h-[360px] lg:h-full border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-950 p-2 sm:p-3 overflow-hidden flex flex-col">
+ {transaction.receiptPhotoUrl && (
+ <a
+ href={transaction.receiptPhotoUrl}
+ target="_blank"
+ rel="noreferrer"
+ title="Buka foto nota ukuran penuh"
+ className="mb-2 block shrink-0 rounded-md border border-slate-700 bg-black/40 overflow-hidden"
+ >
+ <img src={transaction.receiptPhotoUrl} alt="Foto nota asli" className="w-full h-40 object-contain" />
+ </a>
+ )}
  <PhysicalReceiptView transaction={transaction} />
  </div>
 

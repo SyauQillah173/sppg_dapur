@@ -159,6 +159,19 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
       const localUrl = URL.createObjectURL(file);
       setUploadedPhotos((prev) => [localUrl, ...prev]);
 
+      // Upload ke server: URL blob: hanya hidup di perangkat ini, jadi tidak ikut tersinkron.
+      try {
+        const uploadData = new FormData();
+        uploadData.append('file', file);
+        const uploadRes = await fetch('/api/upload', { method: 'POST', body: uploadData });
+        const uploadJson = await uploadRes.json();
+        if (uploadJson?.success && uploadJson.url) {
+          setUploadedPhotos((prev) => [uploadJson.url, ...prev.filter((p) => p !== localUrl)]);
+        }
+      } catch {
+        // gagal upload — preview lokal tetap dipakai
+      }
+
       const res = await fetch('/api/scan-receipt', {
         method: 'POST',
         body: formData,
