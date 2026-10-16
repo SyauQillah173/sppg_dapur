@@ -22,7 +22,19 @@ export async function POST(req: NextRequest) {
   if ('error' in auth) return auth.error;
 
   try {
-    const body = await req.json();
+    // Batasi ukuran snapshot: seluruh state aplikasi masuk ke satu dokumen.
+    const raw = await req.text();
+    if (raw.length > 8 * 1024 * 1024) {
+      return NextResponse.json({ success: false, error: 'State terlalu besar (maks 8 MB).' }, { status: 413 });
+    }
+
+    let body: any;
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      return NextResponse.json({ success: false, error: 'Payload bukan JSON valid.' }, { status: 400 });
+    }
+
     const state = body?.state;
     if (!state || typeof state !== 'object') {
       return NextResponse.json({ success: false, error: 'Payload state tidak valid.' }, { status: 400 });

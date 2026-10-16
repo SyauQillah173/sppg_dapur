@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { createSessionToken } from '@/lib/auth';
 import { checkRateLimit, getRateLimitHeaders } from '@/lib/rate-limit';
+import { hashPassword, isLegacyPassword, verifyPassword } from '@/lib/password';
 
 export async function POST(req: NextRequest) {
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown';
@@ -39,9 +40,19 @@ export async function POST(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ success: false, error: 'Username atau Password salah.' }, { status: 401 });
     }
-    const passwordMatch = user.password === password;
-    if (!passwordMatch) {
+    if (!verifyPassword(password, user.password)) {
       return NextResponse.json({ success: false, error: 'Username atau Password salah.' }, { status: 401 });
+    }
+    // Password lama (masih plaintext) langsung di-upgrade ke scrypt setelah login berhasil
+    if (isLegacyPassword(user.password)) {
+      try {
+        await prisma.adminUser.update({
+          where: { id: user.id },
+          data: { password: hashPassword(password) },
+        });
+      } catch (e) {
+        console.error('Gagal upgrade hash password:', e);
+      }
     }
     const sessionUser = { id: user.id, username: user.username, name: user.name, role: user.role as 'SUPERADMIN' | 'EXECUTIVE_AUDITOR' };
     const token = await createSessionToken(sessionUser);

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-
-const SESSION_SECRET = process.env.SESSION_SECRET || 'sppg-dapur-secret-key-change-in-production-32chars';
+import { getSessionSecret } from '@/lib/session-secret';
 
 async function verifyToken(token: string): Promise<{ username: string; role: string } | null> {
   try {
@@ -11,7 +10,7 @@ async function verifyToken(token: string): Promise<{ username: string; role: str
     const sig = token.slice(dot + 1);
     const enc = new TextEncoder();
     const key = await crypto.subtle.importKey(
-      'raw', enc.encode(SESSION_SECRET),
+      'raw', enc.encode(await getSessionSecret()),
       { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
     );
     const sigBuf = await crypto.subtle.sign('HMAC', key, enc.encode(payload));

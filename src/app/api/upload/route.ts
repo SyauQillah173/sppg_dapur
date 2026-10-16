@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSuperadmin } from '@/lib/api-auth';
 import prisma from '@/lib/prisma';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { NOTA_URL_PREFIX } from '@/lib/nota-storage';
 
 const MAX_BYTES = 8 * 1024 * 1024; // 8 MB
@@ -13,6 +14,11 @@ const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/h
 export async function POST(req: NextRequest) {
   const auth = await requireSuperadmin(req);
   if ('error' in auth) return auth.error;
+
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown';
+  if (!checkRateLimit('upload:' + ip, 40, 60_000)) {
+    return NextResponse.json({ success: false, error: 'Terlalu banyak upload. Coba lagi sebentar.' }, { status: 429 });
+  }
 
   try {
     const form = await req.formData();

@@ -40,6 +40,10 @@ yarn-error.log*
 # upload nota (isi runtime, bukan artefak repo)
 /public/uploads/
 
+# kredensial lokal — jangan pernah masuk repo publik
+/KREDENSIAL-BARU.txt
+*.local.txt
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

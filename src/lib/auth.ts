@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { UserRole } from './types';
+import { getSessionSecret } from './session-secret';
 
 export interface SessionUser {
   id: string;
@@ -9,14 +10,14 @@ export interface SessionUser {
 }
 
 const SESSION_COOKIE_NAME = 'giziflow_session';
-const SESSION_SECRET = process.env.SESSION_SECRET || 'sppg-dapur-secret-key-change-in-production-32chars';
 
 // ─── HMAC helpers (Node.js crypto, available in Edge/Node runtimes) ───────────
 
 async function hmacSign(payload: string): Promise<string> {
+  const secret = await getSessionSecret();
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
-    'raw', enc.encode(SESSION_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+    'raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
   );
   const sig = await crypto.subtle.sign('HMAC', key, enc.encode(payload));
   return Buffer.from(sig).toString('base64url');

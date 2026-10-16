@@ -1,4 +1,6 @@
 import { PrismaClient, UserRole } from '@prisma/client';
+import { randomBytes } from 'crypto';
+import { hashPassword } from '../src/lib/password';
 
 const prisma = new PrismaClient();
 
@@ -24,23 +26,32 @@ async function main() {
   }
 
   // 2. Buat TEPAT 2 Akun Admin Default untuk Login
+  //    Password TIDAK ditulis di file ini: repo publik, jadi password ikut ke publik.
+  //    Isi lewat env SEED_SUPERADMIN_PASSWORD / SEED_AUDITOR_PASSWORD, atau dibuat acak.
   console.log('🔐 Menambahkan 2 Akun Admin Resmi...');
+  const superadminPassword = process.env.SEED_SUPERADMIN_PASSWORD || randomBytes(12).toString('base64url');
+  const auditorPassword = process.env.SEED_AUDITOR_PASSWORD || randomBytes(12).toString('base64url');
   await prisma.adminUser.createMany({
     data: [
       {
         username: 'superadmin',
-        password: 'admin123',
+        password: hashPassword(superadminPassword),
         name: 'Superadmin Pengelola SPPG',
         role: UserRole.SUPERADMIN,
       },
       {
         username: 'auditor',
-        password: 'auditor123',
+        password: hashPassword(auditorPassword),
         name: 'Drs. Supriyanto, Ak., CA (Admin 2 / Pemantau)',
         role: UserRole.EXECUTIVE_AUDITOR,
       },
     ],
   });
+  if (!process.env.SEED_SUPERADMIN_PASSWORD || !process.env.SEED_AUDITOR_PASSWORD) {
+    console.log('   Password acak (catat sekarang, tidak akan ditampilkan lagi):');
+    console.log('   superadmin :', superadminPassword);
+    console.log('   auditor    :', auditorPassword);
+  }
 
   // 3. Masukkan Master Satuan Ukur Standar
   console.log('⚖️ Menambahkan Master Satuan Ukur...');
