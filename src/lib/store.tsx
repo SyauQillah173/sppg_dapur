@@ -90,7 +90,8 @@ interface StoreContextType {
   recordStockMutation: (entry: Omit<StockLedgerEntry, 'id' | 'timestamp' | 'remainingStockAfter'>) => void;
   addSupplier: (sup: Omit<SupplierDirectory, 'id' | 'code' | 'totalDisbursed' | 'totalTransactions'>) => void;
   addEmployee: (emp: Omit<EmployeeDirectory, 'id' | 'employeeNumber' | 'totalRequested' | 'totalRealized' | 'pendingBalance'>) => void;
-  addBudgetAllocation: (item: Omit<BudgetAllocationItem, 'id' | 'allocatedDate'>) => void;
+  addBudgetAllocation: (item: Omit<BudgetAllocationItem, 'id' | 'allocatedDate'> & { allocatedDate?: string }) => void;
+  addBudgetAllocationsBulk: (items: Array<Omit<BudgetAllocationItem, 'id' | 'allocatedDate'> & { allocatedDate?: string }>) => void;
   deleteBudgetAllocation: (id: string) => void;
   addSppgUnit: (unit: Omit<SppgUnit, 'id' | 'totalRealized' | 'totalRemaining'>) => void;
   updateSppgUnit: (id: string, data: Partial<SppgUnit>) => void;
@@ -520,25 +521,44 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     saveState({ employees: updated });
   };
 
-  const addBudgetAllocation = (item: Omit<BudgetAllocationItem, 'id' | 'allocatedDate'>) => {
-    const id = `BUD-${Date.now().toString().slice(-4)}`;
-    const newBudget: BudgetAllocationItem = {
-      ...item,
-      id,
-      allocatedDate: new Date().toISOString(),
-    };
-    const updated = [newBudget, ...budgetAllocations];
-    setBudgetAllocations(updated);
-
-    // Update SPPG Unit activeBudget
-    const updatedUnits = sppgUnits.map((u) => {
-      if (u.id === item.sppgUnitId) {
-        const newBudgetTotal = u.activeBudget + item.amountAllocated;
-        const newRemaining = newBudgetTotal - u.totalRealized;
-        return { ...u, activeBudget: newBudgetTotal, totalRemaining: newRemaining };
+  // 'ALL' = dana gabungan semua unit → dibagi rata supaya total anggaran tidak berlipat
+  // ponytail: asumsi bagi rata; ganti ke rincian per unit kalau nanti diminta.
+  const applyBudgetToUnits = (units: SppgUnit[], sppgUnitId: string, delta: number) => {
+    const share = sppgUnitId === 'ALL' ? delta / (units.length || 1) : delta;
+    return units.map((u) => {
+      if (sppgUnitId === 'ALL' || u.id === sppgUnitId) {
+        const newBudgetTotal = Math.max(0, u.activeBudget + share);
+        return { ...u, activeBudget: newBudgetTotal, totalRemaining: newBudgetTotal - u.totalRealized };
       }
       return u;
     });
+  };
+
+  const addBudgetAllocation = (
+    item: Omit<BudgetAllocationItem, 'id' | 'allocatedDate'> & { allocatedDate?: string }
+  ) => {
+    addBudgetAllocationsBulk([item]);
+  };
+
+  /** Tambah banyak catatan sekaligus (dipakai import Excel) — satu simpan, satu sinkron. */
+  const addBudgetAllocationsBulk = (
+    items: Array<Omit<BudgetAllocationItem, 'id' | 'allocatedDate'> & { allocatedDate?: string }>
+  ) => {
+    if (items.length === 0) return;
+
+    const created: BudgetAllocationItem[] = items.map((item, i) => ({
+      ...item,
+      id: `BUD-${Date.now().toString().slice(-6)}-${i}`,
+      allocatedDate: item.allocatedDate || new Date().toISOString(),
+    }));
+
+    const updated = [...created, ...budgetAllocations];
+    setBudgetAllocations(updated);
+
+    const updatedUnits = created.reduce(
+      (units, item) => applyBudgetToUnits(units, item.sppgUnitId, item.amountAllocated),
+      sppgUnits
+    );
     setSppgUnits(updatedUnits);
 
     saveState({ budgetAllocations: updated, sppgUnits: updatedUnits });
@@ -551,14 +571,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const updated = budgetAllocations.filter((b) => b.id !== id);
     setBudgetAllocations(updated);
 
-    const updatedUnits = sppgUnits.map((u) => {
-      if (u.id === target.sppgUnitId) {
-        const newBudgetTotal = Math.max(0, u.activeBudget - target.amountAllocated);
-        const newRemaining = newBudgetTotal - u.totalRealized;
-        return { ...u, activeBudget: newBudgetTotal, totalRemaining: newRemaining };
-      }
-      return u;
-    });
+    const updatedUnits = applyBudgetToUnits(sppgUnits, target.sppgUnitId, -target.amountAllocated);
     setSppgUnits(updatedUnits);
 
     saveState({ budgetAllocations: updated, sppgUnits: updatedUnits });
@@ -654,7 +667,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   // Filtered budget allocations
   const filteredBudgetAllocations = useMemo(() => {
     if (selectedSppgUnit === 'ALL') return budgetAllocations;
-    return budgetAllocations.filter((b) => b.sppgUnitId === selectedSppgUnit);
+    // Catatan 'ALL' (dana gabungan) tetap tampil saat satu unit dipilih
+    return budgetAllocations.filter((b) => b.sppgUnitId === selectedSppgUnit || b.sppgUnitId === 'ALL');
   }, [budgetAllocations, selectedSppgUnit]);
 
   // Computed KPI Summary
@@ -734,6 +748,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         addSupplier,
         addEmployee,
         addBudgetAllocation,
+        addBudgetAllocationsBulk,
         deleteBudgetAllocation,
         addSppgUnit,
         updateSppgUnit,

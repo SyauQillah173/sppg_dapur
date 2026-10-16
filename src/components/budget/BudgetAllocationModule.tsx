@@ -1,12 +1,14 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useStore } from '@/lib/store';
 import { formatRupiah } from '@/lib/utils';
 import { exportRekap, exportRekapPDF, RekapMode, RekapJenis } from '@/lib/excel-export';
+import { parseBudgetWorkbook, downloadBudgetTemplate } from '@/lib/excel-import';
 import {
   Wallet, Plus, Building2, TrendingUp, CreditCard, DollarSign,
   AlertCircle, Trash2, FileSpreadsheet, FileText, Calendar, Filter,
+  Upload, Download, CheckCircle2,
 } from 'lucide-react';
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal';
 
@@ -18,6 +20,7 @@ export function BudgetAllocationModule() {
     selectedSppgUnit,
     isReadOnly,
     addBudgetAllocation,
+    addBudgetAllocationsBulk,
     deleteBudgetAllocation,
   } = useStore();
 
@@ -32,14 +35,50 @@ export function BudgetAllocationModule() {
 
   // ── modal state ───────────────────────────────────────────────────────────
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [sppgUnitId, setSppgUnitId] = useState(sppgUnits[0]?.id || '');
-  const [fiscalPeriod, setFiscalPeriod] = useState('Oktober 2026');
+  const [sppgUnitId, setSppgUnitId] = useState<string>(sppgUnits[0]?.id || '');
+  // Periode dana masuk: pilih tanggal, bulan, atau tahun
+  const [periodeInputMode, setPeriodeInputMode] = useState<'tanggal' | 'bulan' | 'tahun'>('bulan');
+  const [inputTanggal, setInputTanggal] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [inputBulan, setInputBulan] = useState<string>(new Date().toISOString().slice(0, 7));
+  const [inputTahun, setInputTahun] = useState<string>(String(new Date().getFullYear()));
   const [amountAllocated, setAmountAllocated] = useState('150000000');
   const [notes, setNotes] = useState('Pagu Kas Operasional Pemenuhan Gizi');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // ── import Excel ──────────────────────────────────────────────────────────
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ ok: number; errors: string[] } | null>(null);
+
+  // Periode dipilih → label fiskal + tanggal ISO untuk filter/rekap.
+  // Jam 12 siang lokal supaya tanggal tidak bergeser saat jadi string ISO (UTC).
+  const periodeInfo = useMemo(() => {
+    if (periodeInputMode === 'tanggal' && inputTanggal) {
+      const [y, m, d] = inputTanggal.split('-').map(Number);
+      const dt = new Date(y, (m || 1) - 1, d || 1, 12);
+      if (!isNaN(dt.getTime())) {
+        return {
+          allocatedDate: dt.toISOString(),
+          label: dt.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }),
+        };
+      }
+    }
+    if (periodeInputMode === 'tahun' && inputTahun) {
+      return { allocatedDate: new Date(Number(inputTahun), 0, 1, 12).toISOString(), label: `Tahun ${inputTahun}` };
+    }
+    if (inputBulan) {
+      const [y, m] = inputBulan.split('-').map(Number);
+      const dt = new Date(y, (m || 1) - 1, 1, 12);
+      return {
+        allocatedDate: dt.toISOString(),
+        label: dt.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }),
+      };
+    }
+    return { allocatedDate: new Date().toISOString(), label: '-' };
+  }, [periodeInputMode, inputTanggal, inputBulan, inputTahun]);
 
   // ── filter helpers ────────────────────────────────────────────────────────
   const matchesDateFilter = (dateStr: string) => {
@@ -65,7 +104,8 @@ export function BudgetAllocationModule() {
   // ── filtered data ─────────────────────────────────────────────────────────
   const filteredBudgets = useMemo(() => {
     return budgetAllocations.filter(b => {
-      if (localUnit !== 'ALL' && b.sppgUnitId !== localUnit) return false;
+      // Catatan 'ALL' (dana gabungan) tetap tampil saat satu unit dipilih
+      if (localUnit !== 'ALL' && b.sppgUnitId !== localUnit && b.sppgUnitId !== 'ALL') return false;
       if (hasDateFilter && !matchesDateFilter(b.allocatedDate)) return false;
       return true;
     });
@@ -73,7 +113,7 @@ export function BudgetAllocationModule() {
 
   const filteredProcurements = useMemo(() => {
     return procurements.filter(p => {
-      if (localUnit !== 'ALL' && p.sppgUnitId !== localUnit) return false;
+      if (localUnit !== 'ALL' && p.sppgUnitId !== localUnit && p.sppgUnitId !== 'ALL') return false;
       if (hasDateFilter && !matchesDateFilter(p.date)) return false;
       return true;
     });
@@ -100,36 +140,59 @@ export function BudgetAllocationModule() {
   };
 
   // ── submit ────────────────────────────────────────────────────────────────
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isReadOnly) return;
     setErrorMsg('');
     setIsSubmitting(true);
 
-    const amount = Number(amountAllocated.replace(/[^0-9]/g, ''));
+    const amount = Number(String(amountAllocated).replace(/[^0-9]/g, ''));
     if (!amount || amount <= 0) {
       setErrorMsg('Nominal harus lebih dari 0');
       setIsSubmitting(false);
       return;
     }
 
-    const targetUnit = sppgUnits.find(u => u.id === sppgUnitId);
-    const sppgUnitName = targetUnit?.name || sppgUnitId;
+    const isAllUnits = sppgUnitId === 'ALL';
+    const targetUnit = isAllUnits ? undefined : sppgUnits.find(u => u.id === sppgUnitId);
 
+    addBudgetAllocation({
+      sppgUnitId,
+      sppgUnitName: isAllUnits ? 'Semua SPPG (Gabungan 4 Unit)' : targetUnit?.name || sppgUnitId,
+      fiscalPeriod: periodeInfo.label,
+      allocatedDate: periodeInfo.allocatedDate,
+      amountAllocated: amount,
+      amountRealized: 0,
+      remainingBudget: amount,
+      notes,
+    });
+
+    setIsModalOpen(false);
+    setIsSubmitting(false);
+    setAmountAllocated('150000000');
+    setNotes('Pagu Kas Operasional Pemenuhan Gizi');
+  };
+
+  // ── import Excel ──────────────────────────────────────────────────────────
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || isReadOnly) return;
+
+    setIsImporting(true);
+    setImportResult(null);
     try {
-      await fetch('/api/budgets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sppgUnitId, fiscalPeriod, amountAllocated: amount, notes }),
-      });
-      addBudgetAllocation({ sppgUnitId, sppgUnitName, fiscalPeriod, amountAllocated: amount, amountRealized: 0, remainingBudget: amount, notes });
-      setIsModalOpen(false);
-      setAmountAllocated('150000000');
-      setNotes('Pagu Kas Operasional Pemenuhan Gizi');
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Gagal menyimpan');
+      const { rows, errors } = await parseBudgetWorkbook(file, sppgUnits);
+      if (rows.length > 0) {
+        addBudgetAllocationsBulk(
+          rows.map(r => ({ ...r, amountRealized: 0, remainingBudget: r.amountAllocated }))
+        );
+      }
+      setImportResult({ ok: rows.length, errors });
+    } catch (err) {
+      setImportResult({ ok: 0, errors: [err instanceof Error ? err.message : 'Gagal membaca file Excel.'] });
     } finally {
-      setIsSubmitting(false);
+      setIsImporting(false);
     }
   };
 
@@ -138,18 +201,12 @@ export function BudgetAllocationModule() {
     setDeleteTargetId(id);
   };
 
-  const handleConfirmDeleteBudget = async () => {
+  const handleConfirmDeleteBudget = () => {
     if (!deleteTargetId) return;
     setIsDeleting(true);
-    try {
-      await fetch(`/api/budgets/${deleteTargetId}`, { method: 'DELETE' });
-      deleteBudgetAllocation(deleteTargetId);
-    } catch {
-      // ignore
-    } finally {
-      setIsDeleting(false);
-      setDeleteTargetId(null);
-    }
+    deleteBudgetAllocation(deleteTargetId);
+    setIsDeleting(false);
+    setDeleteTargetId(null);
   };
 
   // ── render ────────────────────────────────────────────────────────────────
@@ -258,8 +315,29 @@ export function BudgetAllocationModule() {
             </select>
           </div>
 
-          {/* Export buttons */}
-          <div className="flex gap-2 ml-auto">
+          {/* Export / Import buttons */}
+          <div className="flex flex-wrap gap-2 ml-auto">
+            {!isReadOnly && (
+              <>
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleImportFile}
+                  className="hidden"
+                />
+                <button type="button" onClick={() => importInputRef.current?.click()} disabled={isImporting}
+                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-blue-300 bg-blue-50 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50 transition">
+                  <Upload className="h-3.5 w-3.5" />
+                  {isImporting ? 'Membaca...' : 'Import Excel'}
+                </button>
+                <button type="button" onClick={downloadBudgetTemplate}
+                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-slate-300 bg-white text-xs font-medium text-slate-600 hover:bg-slate-50 transition">
+                  <Download className="h-3.5 w-3.5" />
+                  Template
+                </button>
+              </>
+            )}
             <button type="button" onClick={handleExportExcel}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-emerald-300 bg-emerald-50 text-xs font-medium text-emerald-700 hover:bg-emerald-100 transition">
               <FileSpreadsheet className="h-3.5 w-3.5" />
@@ -272,6 +350,22 @@ export function BudgetAllocationModule() {
             </button>
           </div>
         </div>
+
+        {importResult && (
+          <div className={`rounded-md border p-3 text-xs space-y-1 ${importResult.ok > 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800'}`}>
+            <div className="flex items-center gap-2 font-semibold">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              <span>{importResult.ok} baris dana masuk berhasil diimpor{importResult.errors.length > 0 ? `, ${importResult.errors.length} baris dilewati` : ''}.</span>
+              <button type="button" onClick={() => setImportResult(null)} className="ml-auto text-slate-400 hover:text-slate-600">&times;</button>
+            </div>
+            {importResult.errors.length > 0 && (
+              <ul className="list-disc pl-5 space-y-0.5">
+                {importResult.errors.slice(0, 8).map((err, i) => <li key={i}>{err}</li>)}
+                {importResult.errors.length > 8 && <li>…dan {importResult.errors.length - 8} baris lain.</li>}
+              </ul>
+            )}
+          </div>
+        )}
 
         {hasDateFilter && (
           <p className="text-[11px] text-slate-400">
@@ -469,16 +563,41 @@ export function BudgetAllocationModule() {
               )}
               <div>
                 <label className="block text-xs font-medium text-slate-700 mb-1">Unit SPPG Tujuan</label>
-                <select value={sppgUnitId} onChange={e => setSppgUnitId(e.target.value as any)}
+                <select value={sppgUnitId} onChange={e => setSppgUnitId(e.target.value)}
                   className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900">
                   {sppgUnits.map(u => <option key={u.id} value={u.id}>{u.name} ({u.shortName})</option>)}
+                  <option value="ALL">Semua SPPG (Gabungan 4 Unit)</option>
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Periode Fiskal / Bulan</label>
-                <input type="text" required value={fiscalPeriod} onChange={e => setFiscalPeriod(e.target.value)}
-                  placeholder="Misal: Oktober 2026"
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900" />
+                <label className="block text-xs font-medium text-slate-700 mb-1">Periode Dana Masuk</label>
+                <div className="flex rounded-md border border-slate-200 overflow-hidden mb-2">
+                  {(['tanggal', 'bulan', 'tahun'] as const).map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setPeriodeInputMode(m)}
+                      className={`flex-1 px-3 py-1.5 text-xs font-medium transition ${periodeInputMode === m ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+                    >
+                      {m.charAt(0).toUpperCase() + m.slice(1)}
+                    </button>
+                  ))}
+                </div>
+                {periodeInputMode === 'tanggal' && (
+                  <input type="date" required value={inputTanggal} onChange={e => setInputTanggal(e.target.value)}
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900" />
+                )}
+                {periodeInputMode === 'bulan' && (
+                  <input type="month" required value={inputBulan} onChange={e => setInputBulan(e.target.value)}
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900" />
+                )}
+                {periodeInputMode === 'tahun' && (
+                  <select value={inputTahun} onChange={e => setInputTahun(e.target.value)}
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900">
+                    {[2024, 2025, 2026, 2027, 2028].map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                )}
+                <p className="text-[11px] text-slate-400 mt-1">Tersimpan sebagai periode: <strong className="text-slate-600">{periodeInfo.label}</strong></p>
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-700 mb-1">Nominal Dana Masuk (Rp)</label>
