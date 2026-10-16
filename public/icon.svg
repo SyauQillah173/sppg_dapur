@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="50%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#2563eb" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded rectangle -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+
+  <!-- Subtle inner border -->
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="none" stroke="#334155" stroke-width="4" stroke-opacity="0.4" />
+
+  <!-- Shield Shape (Financial Audit & Security) -->
+  <path d="M256 96 L384 144 V264 C384 340 328 408 256 428 C184 408 128 340 128 264 V144 Z" 
+        fill="url(#accentGrad)" fill-opacity="0.12" 
+        stroke="url(#accentGrad)" stroke-width="12" stroke-linejoin="round" />
+
+  <!-- Chef Hat / Cooking Pot / Nutrition Symbol -->
+  <g transform="translate(256, 230) scale(1.15)">
+    <!-- Plate / Base ring -->
+    <ellipse cx="0" cy="50" rx="68" ry="14" fill="none" stroke="#38bdf8" stroke-width="8" stroke-linecap="round" />
+    
+    <!-- Cloche dome -->
+    <path d="M-60 44 C-60 -10, 60 -10, 60 44 Z" fill="url(#accentGrad)" fill-opacity="0.85" />
+    <!-- Cloche knob -->
+    <circle cx="0" cy="-14" r="10" fill="#f8fafc" />
+    
+    <!-- Fresh Leaf (Nutrition / Health) -->
+    <path d="M12 -24 C30 -48, 54 -36, 48 -16 C42 4, 18 -10, 12 -24 Z" fill="url(#goldGrad)" />
+    <path d="M12 -24 Q30 -22 48 -16" fill="none" stroke="#a7f3d0" stroke-width="3" />
+  </g>
+
+  <!-- Monogram text -->
+  <text x="256" y="380" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="44" fill="#ffffff" letter-spacing="4">
+    SPPG DAPUR
+  </text>
+  <text x="256" y="412" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-weight="600" font-size="18" fill="#94a3b8" letter-spacing="2">
+    OPERASIONAL &amp; KEUANGAN
+  </text>
+</svg>

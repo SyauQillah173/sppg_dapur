@@ -112,6 +112,22 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // Log system notification for Pemantau / Auditor in real-time
+    try {
+      await prisma.systemNotification.create({
+        data: {
+          type: 'STOCK_MUTATION',
+          title: `Mutasi Bahan ${movement.type}`,
+          message: `Stok ${movement.ingredient.name} ${movement.type === 'MASUK' ? 'masuk' : 'keluar'} sebanyak ${qty} ${movement.unit} (${movement.sppgUnit.name}). Keperluan: ${movement.purpose}.`,
+          actorName: session.name || 'Superadmin Pengelola',
+          unitName: movement.sppgUnit.name,
+          referenceId: movement.id,
+        },
+      });
+    } catch (e) {
+      console.error('Failed to log stock movement notification:', e);
+    }
+
     return NextResponse.json(
       { success: true, data: movement, message: 'Mutasi stok bahan berhasil disimpan!' },
       { status: 201 }

@@ -17,8 +17,14 @@ import {
 import { exportConsolidatedSPPGSummaryToExcel } from '@/lib/excel-export';
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal';
 import { AccountSettingsModal } from './AccountSettingsModal';
+import { PwaInstallButton } from '@/components/pwa/PwaInstallButton';
+import { NotificationCenter } from '@/components/notifications/NotificationCenter';
 
-export function Header() {
+interface HeaderProps {
+  onNavigateTab?: (tab: 'dashboard' | 'budget' | 'procurement' | 'inventory' | 'cms') => void;
+}
+
+export function Header({ onNavigateTab }: HeaderProps) {
   const {
     currentUser,
     userRole,
@@ -123,6 +129,12 @@ export function Header() {
               <span>Ekspor</span>
             </button>
 
+            {/* PWA Download / Install App */}
+            <PwaInstallButton variant="header" />
+
+            {/* Realtime Live Notifications for Pemantau / Auditor */}
+            <NotificationCenter onNavigateTab={onNavigateTab} />
+
             <div className="h-5 w-px bg-slate-200 mx-1" />
 
             <span className="text-[12px] text-slate-600 hidden xl:inline">{roleName}</span>
@@ -147,20 +159,26 @@ export function Header() {
             </button>
           </div>
 
-          {/* Mobile toggle */}
-          <button
-            type="button"
-            onClick={() => setMobileOpen((v) => !v)}
-            className="md:hidden h-8 w-8 flex items-center justify-center rounded-md border border-slate-200 text-slate-600"
-            aria-label="Menu"
-          >
-            {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
-          </button>
+          {/* Mobile Right Controls: Notification & Mobile Toggle */}
+          <div className="flex md:hidden items-center gap-1.5">
+            <NotificationCenter onNavigateTab={onNavigateTab} />
+            <button
+              type="button"
+              onClick={() => setMobileOpen((v) => !v)}
+              className="h-8 w-8 flex items-center justify-center rounded-md border border-slate-200 text-slate-600"
+              aria-label="Menu"
+            >
+              {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            </button>
+          </div>
         </div>
 
-            {/* Mobile panel */}
+        {/* Mobile panel */}
         {mobileOpen && (
           <div className="md:hidden border-t border-slate-100 py-3 space-y-3">
+            {/* Mobile PWA Install */}
+            <PwaInstallButton variant="mobile" />
+
             <select
               value={selectedSppgUnit}
               onChange={(e) => { handleUnit(e); setMobileOpen(false); }}

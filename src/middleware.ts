@@ -52,7 +52,9 @@ export async function middleware(request: NextRequest) {
   if (
     pathname.startsWith('/_next') || pathname.startsWith('/static') ||
     pathname === '/favicon.ico' ||
-    /\.(png|jpg|jpeg|gif|webp|svg|ico|woff2?|ttf|otf|css|js|map)$/.test(pathname)
+    pathname === '/manifest.json' ||
+    pathname === '/sw.js' ||
+    /\.(png|jpg|jpeg|gif|webp|svg|ico|woff2?|ttf|otf|css|js|map|json|webmanifest)$/.test(pathname)
   ) return NextResponse.next();
 
   if (pathname === '/api/auth/login' || pathname === '/api/auth/logout') {

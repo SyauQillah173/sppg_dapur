@@ -114,8 +114,29 @@ export async function POST(req: NextRequest) {
       return out;
     });
 
-    const units = await prisma.sppgUnit.findMany({ select: { id: true, name: true } });
+    const units = await prisma.sppgUnit.findMany({ select: { id: true, name: true, shortName: true } });
     const unitMap = new Map(units.map((u) => [u.id, u.name]));
+
+    // Log system notification for Pemantau / Auditor in real-time
+    if (created.length > 0) {
+      try {
+        const notifData = created.map((row) => {
+          const unitLabel = row.sppgUnitId === 'ALL' ? 'Semua Unit (4 Dapur)' : (unitMap.get(row.sppgUnitId) || row.sppgUnitId);
+          return {
+            type: 'BUDGET_ADDED',
+            title: 'Kas Masuk Baru Diinput',
+            message: `Superadmin mencatat alokasi kas masuk sebesar Rp ${Number(row.amountAllocated).toLocaleString('id-ID')} untuk ${unitLabel} (${row.fiscalPeriod}).`,
+            actorName: 'Superadmin Pengelola',
+            amount: row.amountAllocated,
+            unitName: unitLabel,
+            referenceId: row.id,
+          };
+        });
+        await prisma.systemNotification.createMany({ data: notifData });
+      } catch (e) {
+        console.error('Failed to log budget notification:', e);
+      }
+    }
 
     return NextResponse.json(
       {

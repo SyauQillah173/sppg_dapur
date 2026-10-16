@@ -101,6 +101,8 @@ interface StoreContextType {
   deleteAdminUser: (id: string) => void;
   logout: () => Promise<void>;
   resetToDefault: () => void;
+  refreshFromDb: () => Promise<void>;
+  refreshMasterFromDb: () => Promise<void>;
 
   // Computed
   kpiSummary: KPISummary;
@@ -703,6 +705,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         deleteAdminUser,
         logout,
         resetToDefault,
+        refreshFromDb,
+        refreshMasterFromDb,
         kpiSummary,
         filteredProcurements,
         filteredIngredients,

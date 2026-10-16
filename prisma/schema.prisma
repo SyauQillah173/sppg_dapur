@@ -249,3 +249,19 @@ model StockMovement {
 
   @@map("stock_movements")
 }
+
+model SystemNotification {
+  id          String   @id @default(cuid())
+  type        String   // BUDGET_ADDED, PROCUREMENT_ADDED, STOCK_MUTATION
+  title       String
+  message     String
+  actorName   String   @default("Superadmin")
+  amount      Decimal? @db.Decimal(15, 2)
+  unitName    String?
+  referenceId String?
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("system_notifications")
+}

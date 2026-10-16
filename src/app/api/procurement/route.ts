@@ -118,6 +118,24 @@ export async function POST(req: NextRequest) {
       supMap: sup ? new Map([[created.supplierId, { name: sup.name, address: sup.address }]]) : undefined,
     };
 
+    // Log system notification for Pemantau / Auditor in real-time
+    try {
+      const unitLabel = created.sppgUnitId === 'ALL' ? 'Semua Unit (4 Dapur)' : (unit?.name || created.sppgUnitId);
+      await prisma.systemNotification.create({
+        data: {
+          type: 'PROCUREMENT_ADDED',
+          title: 'Pembelanjaan Baru Perlu Audit',
+          message: `Superadmin mencatat nota fisik ${created.receiptNumber} sebesar Rp ${Number(created.actualReceiptTotal).toLocaleString('id-ID')} (${unitLabel}). Menunggu verifikasi auditor.`,
+          actorName: 'Superadmin Pengelola',
+          amount: created.actualReceiptTotal,
+          unitName: unitLabel,
+          referenceId: created.id,
+        },
+      });
+    } catch (e) {
+      console.error('Failed to log procurement notification:', e);
+    }
+
     return NextResponse.json(
       { success: true, data: orderToApp(created, created.items, lookups), message: 'Data belanja tersimpan.' },
       { status: 201 }
