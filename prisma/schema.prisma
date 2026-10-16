@@ -75,6 +75,8 @@ model Employee {
 
   sppgUnit          SppgUnit           @relation(fields: [sppgUnitId], references: [id])
 
+  // Anti duplikat: satu nama karyawan hanya boleh sekali per unit SPPG
+  @@unique([name, sppgUnitId])
   @@map("employees")
 }
 
@@ -93,6 +95,8 @@ model Supplier {
   activeStatus      Boolean            @default(true)
   createdAt         DateTime           @default(now())
 
+  // Anti duplikat: satu nama CV / supplier hanya boleh sekali
+  @@unique([name])
   @@map("suppliers")
 }
 
@@ -136,6 +140,8 @@ model Ingredient {
   procurementItems  ProcurementItem[]
   stockMovements    StockMovement[]
 
+  // Anti duplikat: satu nama bahan hanya boleh sekali
+  @@unique([name])
   @@map("ingredients")
 }
 

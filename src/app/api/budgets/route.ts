@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const rows: any[] = Array.isArray(body?.items) ? body.items : [body];
+    const skipped: string[] = [];
 
     if (rows.length === 0) {
       return NextResponse.json({ success: false, error: 'Tidak ada data yang dikirim.' }, { status: 400 });
@@ -62,15 +63,39 @@ export async function POST(req: NextRequest) {
       const out = [];
       for (const r of rows) {
         const amount = Number(r.amountAllocated);
+        const allocatedDate = r.allocatedDate ? new Date(r.allocatedDate) : new Date();
+        const fiscalPeriod = String(r.fiscalPeriod || '-').trim() || '-';
+
+        // Anti duplikat: baris dengan unit + periode + nominal + tanggal sama dilewati,
+        // supaya import Excel yang sama dua kali tidak menggandakan catatan.
+        const dayStart = new Date(allocatedDate);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(dayStart);
+        dayEnd.setHours(23, 59, 59, 999);
+
+        const duplicate = await tx.budgetAllocation.findFirst({
+          where: {
+            sppgUnitId: r.sppgUnitId,
+            fiscalPeriod,
+            amountAllocated: amount,
+            allocatedDate: { gte: dayStart, lte: dayEnd },
+          },
+          select: { id: true },
+        });
+        if (duplicate) {
+          skipped.push(`${r.sppgUnitId} ${fiscalPeriod} Rp ${amount.toLocaleString('id-ID')} — sudah ada, dilewati`);
+          continue;
+        }
+
         const row = await tx.budgetAllocation.create({
           data: {
             ...(r.id ? { id: r.id } : {}),
             sppgUnitId: r.sppgUnitId,
-            fiscalPeriod: String(r.fiscalPeriod || '-').trim() || '-',
+            fiscalPeriod,
             amountAllocated: amount,
             amountRealized: Number(r.amountRealized) || 0,
             remainingBudget: r.remainingBudget !== undefined ? Number(r.remainingBudget) : amount,
-            allocatedDate: r.allocatedDate ? new Date(r.allocatedDate) : new Date(),
+            allocatedDate,
             notes: r.notes || null,
           },
         });
@@ -84,7 +109,11 @@ export async function POST(req: NextRequest) {
       {
         success: true,
         data: created.map(budgetToApp),
-        message: created.length === 1 ? 'Dana masuk tersimpan.' : `${created.length} baris dana masuk tersimpan.`,
+        skipped,
+        message:
+          created.length === 1
+            ? 'Dana masuk tersimpan.'
+            : `${created.length} baris dana masuk tersimpan${skipped.length ? `, ${skipped.length} duplikat dilewati` : ''}.`,
       },
       { status: 201 }
     );

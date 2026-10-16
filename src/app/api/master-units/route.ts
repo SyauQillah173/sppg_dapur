@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { normalizeName } from '@/lib/master-helpers';
 import { requireAuth, requireSuperadmin, parseSessionToken } from '@/lib/api-auth';
 
 export async function GET() {
@@ -28,15 +29,25 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { symbol, name, type } = body;
 
-    if (!symbol || !name) {
+    const cleanSymbol = normalizeName(symbol);
+    const cleanName = normalizeName(name);
+    if (!cleanSymbol || !cleanName) {
       return NextResponse.json({ success: false, error: 'Simbol dan Nama Satuan wajib diisi!' }, { status: 400 });
+    }
+
+    // Anti duplikat: simbol satuan yang sudah ada dikembalikan apa adanya.
+    const existing = await prisma.masterUnit.findFirst({
+      where: { symbol: { equals: cleanSymbol, mode: 'insensitive' } },
+    });
+    if (existing) {
+      return NextResponse.json({ success: true, data: existing, duplicate: true, message: 'Satuan sudah ada.' });
     }
 
     const newUnit = await prisma.masterUnit.create({
       data: {
-        symbol: symbol.trim(),
-        name: name.trim(),
-        type: type || 'BERAT',
+        symbol: cleanSymbol,
+        name: cleanName,
+        type: normalizeName(type) || 'BERAT',
       },
     });
 

@@ -30,7 +30,7 @@ import {
   INITIAL_ADMIN_USERS,
 } from './initial-data';
 import { rescueLocalOnly } from './state-merge';
-import { toSppgUnit, toSupplier, toBudget, SEMUA_SPPG_NAME } from './db-map';
+import { toSppgUnit, toSupplier, toEmployee, toIngredient, toCategory, toMasterUnit, toStockLedger, toBudget, SEMUA_SPPG_NAME } from './db-map';
 
 interface ModalState {
   type:
@@ -82,22 +82,22 @@ interface StoreContextType {
   addProcurement: (proc: Omit<ProcurementTransaction, 'id' | 'createdAt'>) => Promise<{ ok: boolean; error?: string }>;
   deleteProcurement: (id: string) => Promise<{ ok: boolean; error?: string }>;
   updateAuditStatus: (id: string, status: AuditStatus, auditorNotes: string, auditorName: string) => Promise<{ ok: boolean; error?: string }>;
-  addIngredient: (ing: Omit<MasterIngredient, 'id' | 'code' | 'updatedAt'>) => void;
-  updateIngredient: (id: string, ing: Partial<MasterIngredient>) => void;
-  deleteIngredient: (id: string) => void;
-  addCategory: (cat: Omit<IngredientCategory, 'id'>) => void;
-  deleteCategory: (id: string) => void;
-  addUnit: (unit: Omit<MasterUnit, 'id'>) => void;
-  deleteUnit: (id: string) => void;
-  recordStockMutation: (entry: Omit<StockLedgerEntry, 'id' | 'timestamp' | 'remainingStockAfter'>) => void;
-  addSupplier: (sup: Omit<SupplierDirectory, 'id' | 'code' | 'totalDisbursed' | 'totalTransactions'>) => void;
-  addEmployee: (emp: Omit<EmployeeDirectory, 'id' | 'employeeNumber' | 'totalRequested' | 'totalRealized' | 'pendingBalance'>) => void;
+  addIngredient: (ing: Omit<MasterIngredient, 'id' | 'code' | 'updatedAt'>) => Promise<{ ok: boolean; error?: string }>;
+  updateIngredient: (id: string, ing: Partial<MasterIngredient>) => Promise<{ ok: boolean; error?: string }>;
+  deleteIngredient: (id: string) => Promise<{ ok: boolean; error?: string }>;
+  addCategory: (cat: Omit<IngredientCategory, 'id'>) => Promise<{ ok: boolean; error?: string }>;
+  deleteCategory: (id: string) => Promise<{ ok: boolean; error?: string }>;
+  addUnit: (unit: Omit<MasterUnit, 'id'>) => Promise<{ ok: boolean; error?: string }>;
+  deleteUnit: (id: string) => Promise<{ ok: boolean; error?: string }>;
+  recordStockMutation: (entry: Omit<StockLedgerEntry, 'id' | 'timestamp' | 'remainingStockAfter'>) => Promise<{ ok: boolean; error?: string }>;
+  addSupplier: (sup: Omit<SupplierDirectory, 'id' | 'code' | 'totalDisbursed' | 'totalTransactions'>) => Promise<{ ok: boolean; error?: string }>;
+  addEmployee: (emp: Omit<EmployeeDirectory, 'id' | 'employeeNumber' | 'totalRequested' | 'totalRealized' | 'pendingBalance'>) => Promise<{ ok: boolean; error?: string }>;
   addBudgetAllocation: (item: Omit<BudgetAllocationItem, 'id' | 'allocatedDate'> & { allocatedDate?: string }) => Promise<{ ok: boolean; error?: string }>;
   addBudgetAllocationsBulk: (items: Array<Omit<BudgetAllocationItem, 'id' | 'allocatedDate'> & { allocatedDate?: string }>) => Promise<{ ok: boolean; error?: string }>;
   deleteBudgetAllocation: (id: string) => Promise<{ ok: boolean; error?: string }>;
-  addSppgUnit: (unit: Omit<SppgUnit, 'id' | 'totalRealized' | 'totalRemaining'>) => void;
-  updateSppgUnit: (id: string, data: Partial<SppgUnit>) => void;
-  deleteSppgUnit: (id: string) => void;
+  addSppgUnit: (unit: Omit<SppgUnit, 'id' | 'totalRealized' | 'totalRemaining'>) => Promise<{ ok: boolean; error?: string }>;
+  updateSppgUnit: (id: string, data: Partial<SppgUnit>) => Promise<{ ok: boolean; error?: string }>;
+  deleteSppgUnit: (id: string) => Promise<{ ok: boolean; error?: string }>;
   addAdminUser: (user: Omit<AdminUserItem, 'id' | 'createdAt'> & { id?: string }) => void;
   deleteAdminUser: (id: string) => void;
   logout: () => Promise<void>;
@@ -252,6 +252,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
       // Data transaksi (belanja, dana masuk) + total unit/supplier dibaca dari tabelnya
       await refreshFromDb();
+      // Master data (bahan, supplier, karyawan, satuan, kategori, mutasi) juga dari tabelnya
+      await refreshMasterFromDb();
 
       if (fromServer) {
         applyState({ ...fromServer, ...rescued });
@@ -407,131 +409,154 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return result;
   };
 
-  const addIngredient = (ing: Omit<MasterIngredient, 'id' | 'code' | 'updatedAt'>) => {
-    const id = `ING-${Date.now().toString().slice(-4)}`;
-    const code = `ING-${ing.category.substring(0, 3).toUpperCase()}-${(ingredients.length + 1).toString().padStart(3, '0')}`;
-    const newIng: MasterIngredient = {
-      ...ing,
-      id,
-      code,
-      updatedAt: new Date().toISOString(),
-    };
-    const updated = [newIng, ...ingredients];
-    setIngredients(updated);
-    saveState({ ingredients: updated });
-  };
-
-  const updateIngredient = (id: string, ingData: Partial<MasterIngredient>) => {
-    const updated = ingredients.map((item) => (item.id === id ? { ...item, ...ingData, updatedAt: new Date().toISOString() } : item));
-    setIngredients(updated);
-    saveState({ ingredients: updated });
-  };
-
-  const deleteIngredient = (id: string) => {
-    const updated = ingredients.filter((item) => item.id !== id);
-    setIngredients(updated);
-    saveState({ ingredients: updated });
-  };
-
-  const addCategory = (cat: Omit<IngredientCategory, 'id'>) => {
-    const id = `CAT-${(categories.length + 1).toString().padStart(2, '0')}`;
-    const updated = [...categories, { ...cat, id }];
-    setCategories(updated);
-    saveState({ categories: updated });
-  };
-
-  const deleteCategory = (id: string) => {
-    const updated = categories.filter((c) => c.id !== id);
-    setCategories(updated);
-    saveState({ categories: updated });
-  };
-
-  const addUnit = (unit: Omit<MasterUnit, 'id'>) => {
-    const id = `UNIT-${unit.symbol.toUpperCase()}`;
-    const updated = [...units, { ...unit, id }];
-    setUnits(updated);
-    saveState({ units: updated });
-  };
-
-  const deleteUnit = (id: string) => {
-    const updated = units.filter((u) => u.id !== id);
-    setUnits(updated);
-    saveState({ units: updated });
-  };
-
-  const recordStockMutation = (entry: Omit<StockLedgerEntry, 'id' | 'timestamp' | 'remainingStockAfter'>) => {
-    const targetIngredient = ingredients.find((i) => i.id === entry.ingredientId);
-    if (!targetIngredient) return;
-
-    let newStock = targetIngredient.currentStock;
-    const currentUnitStock = targetIngredient.sppgDistribution[entry.sppgUnitId] || 0;
-    let newUnitStock = currentUnitStock;
-
-    if (entry.type === 'MASUK') {
-      newStock += entry.quantity;
-      newUnitStock += entry.quantity;
-    } else {
-      newStock = Math.max(0, newStock - entry.quantity);
-      newUnitStock = Math.max(0, newUnitStock - entry.quantity);
+  // ── Master data: semua tulis/baca lewat tabelnya sendiri di database ──────
+  const failNotify = (result: { ok: boolean; error?: string }) => {
+    if (!result.ok && typeof window !== 'undefined') {
+      window.alert(result.error || 'Gagal menyimpan ke database.');
     }
+    return result;
+  };
 
-    const updatedIngredients = ingredients.map((i) => {
-      if (i.id === entry.ingredientId) {
-        return {
-          ...i,
-          currentStock: newStock,
-          sppgDistribution: {
-            ...i.sppgDistribution,
-            [entry.sppgUnitId]: newUnitStock,
-          },
-          updatedAt: new Date().toISOString(),
-        };
-      }
-      return i;
+  const refreshMasterFromDb = async () => {
+    try {
+      const [sup, emp, ing, cat, unit, stock] = await Promise.all([
+        fetch('/api/suppliers', { cache: 'no-store' }),
+        fetch('/api/employees', { cache: 'no-store' }),
+        fetch('/api/ingredients', { cache: 'no-store' }),
+        fetch('/api/categories', { cache: 'no-store' }),
+        fetch('/api/master-units', { cache: 'no-store' }),
+        fetch('/api/stock-movements', { cache: 'no-store' }),
+      ]);
+      const [sJ, eJ, iJ, cJ, uJ, kJ] = await Promise.all([
+        sup.json(), emp.json(), ing.json(), cat.json(), unit.json(), stock.json(),
+      ]);
+      if (sJ?.success) setSuppliers(sJ.data.map(toSupplier));
+      if (eJ?.success) setEmployees(eJ.data.map(toEmployee));
+      if (iJ?.success) setIngredients(iJ.data.map(toIngredient));
+      if (cJ?.success) setCategories(cJ.data.map(toCategory));
+      if (uJ?.success) setUnits(uJ.data.map(toMasterUnit));
+      if (kJ?.success) setStockLedgers(kJ.data.map(toStockLedger));
+    } catch {
+      // offline — pakai data yang sudah tampil
+    }
+  };
+
+  const addIngredient = async (ing: Omit<MasterIngredient, 'id' | 'code' | 'updatedAt'>) => {
+    const category = categories.find((c) => c.name === ing.category) || categories.find((c) => c.id === ing.categoryId);
+    const result = await postJson('/api/ingredients', {
+      name: ing.name,
+      categoryId: category?.id,
+      defaultUnit: ing.defaultUnit,
+      currentStock: ing.currentStock,
+      minStockAlert: ing.minStockAlert,
+      lastPurchasePrice: ing.lastPurchasePrice,
+      sppgDistribution: ing.sppgDistribution,
     });
-    setIngredients(updatedIngredients);
-
-    const newLedger: StockLedgerEntry = {
-      ...entry,
-      id: `LED-${Date.now().toString().slice(-4)}`,
-      timestamp: new Date().toISOString(),
-      remainingStockAfter: newStock,
-    };
-    const updatedLedgers = [newLedger, ...stockLedgers];
-    setStockLedgers(updatedLedgers);
-
-    saveState({ ingredients: updatedIngredients, stockLedgers: updatedLedgers });
+    if (result.ok) await refreshMasterFromDb();
+    return failNotify(result);
   };
 
-  const addSupplier = (sup: Omit<SupplierDirectory, 'id' | 'code' | 'totalDisbursed' | 'totalTransactions'>) => {
-    const id = `SUP-${(suppliers.length + 1).toString().padStart(2, '0')}`;
-    const code = `CV-${sup.name.slice(0, 3).toUpperCase()}-${id}`;
-    const newSup: SupplierDirectory = {
-      ...sup,
-      id,
-      code,
-      totalDisbursed: 0,
-      totalTransactions: 0,
-    };
-    const updated = [...suppliers, newSup];
-    setSuppliers(updated);
-    saveState({ suppliers: updated });
+  const updateIngredient = async (id: string, ingData: Partial<MasterIngredient>) => {
+    const category = ingData.category
+      ? categories.find((c) => c.name === ingData.category)
+      : undefined;
+    const result = await postJson(
+      `/api/ingredients/${id}`,
+      {
+        ...(ingData.name !== undefined ? { name: ingData.name } : {}),
+        ...(category ? { categoryId: category.id } : {}),
+        ...(ingData.defaultUnit !== undefined ? { defaultUnit: ingData.defaultUnit } : {}),
+        ...(ingData.currentStock !== undefined ? { currentStock: ingData.currentStock } : {}),
+        ...(ingData.minStockAlert !== undefined ? { minStockAlert: ingData.minStockAlert } : {}),
+        ...(ingData.lastPurchasePrice !== undefined ? { lastPurchasePrice: ingData.lastPurchasePrice } : {}),
+        ...(ingData.sppgDistribution !== undefined ? { sppgDistribution: ingData.sppgDistribution } : {}),
+      },
+      'PUT'
+    );
+    if (result.ok) await refreshMasterFromDb();
+    return failNotify(result);
   };
 
-  const addEmployee = (emp: Omit<EmployeeDirectory, 'id' | 'employeeNumber' | 'totalRequested' | 'totalRealized' | 'pendingBalance'>) => {
-    const id = `EMP-${Date.now().toString().slice(-4)}`;
-    const employeeNumber = `EMP-${emp.sppgUnitId.replace('SPPG-', '')}-${(employees.length + 1).toString().padStart(2, '0')}`;
-    const newEmp: EmployeeDirectory = {
-      ...emp,
-      id,
-      employeeNumber,
-      totalRequested: 0,
-      totalRealized: 0,
-      pendingBalance: 0,
-    };
-    const updated = [...employees, newEmp];
-    setEmployees(updated);
-    saveState({ employees: updated });
+  const deleteIngredient = async (id: string) => {
+    const result = await postJson(`/api/ingredients/${id}`, null, 'DELETE');
+    if (result.ok) await refreshMasterFromDb();
+    return failNotify(result);
+  };
+
+  const addCategory = async (cat: Omit<IngredientCategory, 'id'>) => {
+    const result = await postJson('/api/categories', {
+      name: cat.name,
+      code: cat.code,
+      color: cat.color,
+      description: cat.description,
+    });
+    if (result.ok) await refreshMasterFromDb();
+    return failNotify(result);
+  };
+
+  const deleteCategory = async (id: string) => {
+    const result = await postJson(`/api/categories?id=${encodeURIComponent(id)}`, null, 'DELETE');
+    if (result.ok) await refreshMasterFromDb();
+    return failNotify(result);
+  };
+
+  const addUnit = async (unit: Omit<MasterUnit, 'id'>) => {
+    const result = await postJson('/api/master-units', {
+      symbol: unit.symbol,
+      name: unit.name,
+      type: unit.type,
+    });
+    if (result.ok) await refreshMasterFromDb();
+    return failNotify(result);
+  };
+
+  const deleteUnit = async (id: string) => {
+    const result = await postJson(`/api/master-units?id=${encodeURIComponent(id)}`, null, 'DELETE');
+    if (result.ok) await refreshMasterFromDb();
+    return failNotify(result);
+  };
+
+  const recordStockMutation = async (entry: Omit<StockLedgerEntry, 'id' | 'timestamp' | 'remainingStockAfter'>) => {
+    const result = await postJson('/api/stock-movements', {
+      sppgUnitId: entry.sppgUnitId,
+      ingredientId: entry.ingredientId,
+      type: entry.type,
+      quantity: entry.quantity,
+      unit: entry.unit,
+      referenceNumber: entry.referenceNumber,
+      purpose: entry.purpose,
+      recordedBy: entry.recordedBy,
+    });
+    if (result.ok) await refreshMasterFromDb();
+    return failNotify(result);
+  };
+
+  const addSupplier = async (sup: Omit<SupplierDirectory, 'id' | 'code' | 'totalDisbursed' | 'totalTransactions'>) => {
+    const result = await postJson('/api/suppliers', {
+      name: sup.name,
+      picName: sup.picName,
+      phone: sup.phone,
+      address: sup.address,
+      bankAccount: sup.bankAccount,
+      suppliedCategory: sup.suppliedCategory,
+      rating: sup.rating,
+      activeStatus: sup.activeStatus,
+    });
+    if (result.ok) await refreshMasterFromDb();
+    return failNotify(result);
+  };
+
+  const addEmployee = async (emp: Omit<EmployeeDirectory, 'id' | 'employeeNumber' | 'totalRequested' | 'totalRealized' | 'pendingBalance'>) => {
+    const result = await postJson('/api/employees', {
+      name: emp.name,
+      roleTitle: emp.roleTitle,
+      sppgUnitId: emp.sppgUnitId,
+      phone: emp.phone,
+      complianceScore: emp.complianceScore,
+      status: emp.status,
+    });
+    if (result.ok) await refreshMasterFromDb();
+    return failNotify(result);
   };
 
   // Dana masuk: server yang menyesuaikan pagu kas tiap unit (tabel budget_allocations).
@@ -568,29 +593,30 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return result;
   };
 
-  const addSppgUnit = (unit: Omit<SppgUnit, 'id' | 'totalRealized' | 'totalRemaining'>) => {
-    const id = `SPPG-${unit.code.replace('SPPG-', '')}` as SppgUnitId;
-    const newUnit: SppgUnit = {
-      ...unit,
-      id,
-      totalRealized: 0,
-      totalRemaining: unit.activeBudget,
-    };
-    const updated = [...sppgUnits, newUnit];
-    setSppgUnits(updated);
-    saveState({ sppgUnits: updated });
+  const addSppgUnit = async (unit: Omit<SppgUnit, 'id' | 'totalRealized' | 'totalRemaining'>) => {
+    const result = await postJson('/api/sppg-units', {
+      code: unit.code,
+      name: unit.name,
+      shortName: unit.shortName,
+      location: unit.location,
+      picName: unit.picName,
+      phone: unit.phone,
+      activeBudget: unit.activeBudget,
+    });
+    if (result.ok) await refreshFromDb();
+    return failNotify(result);
   };
 
-  const updateSppgUnit = (id: string, data: Partial<SppgUnit>) => {
-    const updated = sppgUnits.map((u) => (u.id === id ? { ...u, ...data } : u));
-    setSppgUnits(updated);
-    saveState({ sppgUnits: updated });
+  const updateSppgUnit = async (id: string, data: Partial<SppgUnit>) => {
+    const result = await postJson(`/api/sppg-units/${id}`, data, 'PATCH');
+    if (result.ok) await refreshFromDb();
+    return failNotify(result);
   };
 
-  const deleteSppgUnit = (id: string) => {
-    const updated = sppgUnits.filter((u) => u.id !== id);
-    setSppgUnits(updated);
-    saveState({ sppgUnits: updated });
+  const deleteSppgUnit = async (id: string) => {
+    const result = await postJson(`/api/sppg-units/${id}`, null, 'DELETE');
+    if (result.ok) await refreshFromDb();
+    return failNotify(result);
   };
 
   const addAdminUser = (user: Omit<AdminUserItem, 'id' | 'createdAt'> & { id?: string }) => {
@@ -623,10 +649,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setEmployees(INITIAL_EMPLOYEES);
     setStockLedgers(INITIAL_STOCK_LEDGERS);
     setAdminUsers(INITIAL_ADMIN_USERS);
+    // Hanya cache lokal yang dikosongkan; data asli ada di tabel database.
     saveState({
-      sppgUnits: INITIAL_SPPG_UNITS,
-      budgetAllocations: INITIAL_BUDGET_ALLOCATIONS,
-      procurements: INITIAL_PROCUREMENTS,
       ingredients: INITIAL_INGREDIENTS,
       categories: INITIAL_CATEGORIES,
       units: INITIAL_UNITS,

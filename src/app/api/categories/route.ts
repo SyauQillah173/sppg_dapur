@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { createWithCode, normalizeName } from '@/lib/master-helpers';
 import { requireAuth, requireSuperadmin, parseSessionToken } from '@/lib/api-auth';
 
 export async function GET() {
@@ -33,21 +34,34 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { name, code, color, description } = body;
 
-    if (!name) {
-      return NextResponse.json({ success: false, error: 'Nama Kategori wajib diisi!' }, { status: 400 });
+    const cleanName = normalizeName(name);
+    if (cleanName.length < 3) {
+      return NextResponse.json({ success: false, error: 'Nama Kategori minimal 3 karakter.' }, { status: 400 });
     }
 
-    const count = await prisma.ingredientCategory.count();
-    const catCode = code?.trim() || `CAT-${(count + 1).toString().padStart(2, '0')}`;
-
-    const newCategory = await prisma.ingredientCategory.create({
-      data: {
-        code: catCode,
-        name: name.trim(),
-        color: color || '#0284c7',
-        description: description?.trim() || 'Kategori nutrisi bahan dapur SPPG',
-      },
+    // Anti duplikat: nama kategori yang sudah ada dikembalikan apa adanya.
+    const existing = await prisma.ingredientCategory.findFirst({
+      where: { name: { equals: cleanName, mode: 'insensitive' } },
     });
+    if (existing) {
+      return NextResponse.json({ success: true, data: existing, duplicate: true, message: 'Kategori sudah ada.' });
+    }
+
+    const codes = (await prisma.ingredientCategory.findMany({ select: { code: true } })).map((c) => c.code);
+    const newCategory = await createWithCode(
+      (generated) =>
+        prisma.ingredientCategory.create({
+          data: {
+            code: normalizeName(code) || generated,
+            name: cleanName,
+            color: color || '#0284c7',
+            description: normalizeName(description) || 'Kategori nutrisi bahan dapur SPPG',
+          },
+        }),
+      'CAT-',
+      codes,
+      2
+    );
 
     return NextResponse.json({ success: true, data: newCategory, message: 'Kategori berhasil ditambahkan!' }, { status: 201 });
   } catch (error: any) {

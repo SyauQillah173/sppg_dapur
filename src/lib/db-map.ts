@@ -2,7 +2,7 @@
  * Pemetaan baris tabel → bentuk yang dipakai aplikasi.
  * Angka Decimal dari Prisma datang sebagai string di JSON, jadi selalu di-Number().
  */
-import { SppgUnit, SupplierDirectory, EmployeeDirectory, MasterIngredient, IngredientCategory, MasterUnit, BudgetAllocationItem } from './types';
+import { SppgUnit, SupplierDirectory, EmployeeDirectory, MasterIngredient, IngredientCategory, MasterUnit, BudgetAllocationItem, StockLedgerEntry } from './types';
 
 const num = (v: unknown) => Number(v) || 0;
 export const SEMUA_SPPG_NAME = 'Semua SPPG (Gabungan 4 Unit)';
@@ -84,6 +84,25 @@ export function toCategory(row: any): IngredientCategory {
 
 export function toMasterUnit(row: any): MasterUnit {
   return { id: row.id, symbol: row.symbol, name: row.name, type: row.type || 'BERAT' };
+}
+
+export function toStockLedger(row: any): StockLedgerEntry {
+  return {
+    id: row.id,
+    timestamp: new Date(row.timestamp).toISOString(),
+    sppgUnitId: row.sppgUnitId,
+    sppgUnitName: row.sppgUnit?.name || row.sppgUnitId,
+    ingredientId: row.ingredientId,
+    ingredientName: row.ingredient?.name || row.ingredientId,
+    category: row.ingredient?.category?.name || '',
+    type: row.type,
+    quantity: num(row.quantity),
+    unit: row.unit || 'Kg',
+    referenceNumber: row.referenceNumber || '-',
+    purpose: row.purpose || '-',
+    recordedBy: row.recordedBy || '-',
+    remainingStockAfter: num(row.remainingStockAfter),
+  };
 }
 
 /** Nama unit ditampilkan di UI; baris 'ALL' tidak punya baris di tabel sppg_units. */
