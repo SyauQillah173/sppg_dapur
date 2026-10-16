@@ -19,15 +19,26 @@ export async function GET(req: NextRequest) {
       where.OR = [{ sppgUnitId }, { sppgUnitId: 'ALL' }];
     }
 
-    const orders = await prisma.procurementOrder.findMany({
-      where,
-      include: { items: true },
-      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
-    });
+    const [orders, units, emps, sups] = await Promise.all([
+      prisma.procurementOrder.findMany({
+        where,
+        include: { items: true },
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+      }),
+      prisma.sppgUnit.findMany({ select: { id: true, name: true } }),
+      prisma.employee.findMany({ select: { id: true, name: true, roleTitle: true } }),
+      prisma.supplier.findMany({ select: { id: true, name: true, address: true } }),
+    ]);
+
+    const lookups = {
+      unitMap: new Map(units.map((u) => [u.id, u.name])),
+      empMap: new Map(emps.map((e) => [e.id, { name: e.name, roleTitle: e.roleTitle }])),
+      supMap: new Map(sups.map((s) => [s.id, { name: s.name, address: s.address }])),
+    };
 
     return NextResponse.json({
       success: true,
-      data: orders.map((o) => orderToApp(o, o.items)),
+      data: orders.map((o) => orderToApp(o, o.items, lookups)),
     });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
@@ -91,8 +102,20 @@ export async function POST(req: NextRequest) {
       return order;
     });
 
+    const [unit, emp, sup] = await Promise.all([
+      created.sppgUnitId === 'ALL' ? null : prisma.sppgUnit.findUnique({ where: { id: created.sppgUnitId }, select: { name: true } }),
+      prisma.employee.findUnique({ where: { id: created.requesterId }, select: { name: true, roleTitle: true } }),
+      prisma.supplier.findUnique({ where: { id: created.supplierId }, select: { name: true, address: true } }),
+    ]);
+
+    const lookups = {
+      unitMap: unit ? new Map([[created.sppgUnitId, unit.name]]) : undefined,
+      empMap: emp ? new Map([[created.requesterId, { name: emp.name, roleTitle: emp.roleTitle }]]) : undefined,
+      supMap: sup ? new Map([[created.supplierId, { name: sup.name, address: sup.address }]]) : undefined,
+    };
+
     return NextResponse.json(
-      { success: true, data: orderToApp(created, created.items), message: 'Data belanja tersimpan.' },
+      { success: true, data: orderToApp(created, created.items, lookups), message: 'Data belanja tersimpan.' },
       { status: 201 }
     );
   } catch (error: any) {

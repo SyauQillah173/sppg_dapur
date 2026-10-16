@@ -59,7 +59,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       return order;
     });
 
-    return NextResponse.json({ success: true, data: orderToApp(updated, updated.items), message: 'Nota belanja diperbarui.' });
+    const [unit, emp, sup] = await Promise.all([
+      updated.sppgUnitId === 'ALL' ? null : prisma.sppgUnit.findUnique({ where: { id: updated.sppgUnitId }, select: { name: true } }),
+      prisma.employee.findUnique({ where: { id: updated.requesterId }, select: { name: true, roleTitle: true } }),
+      prisma.supplier.findUnique({ where: { id: updated.supplierId }, select: { name: true, address: true } }),
+    ]);
+
+    const lookups = {
+      unitMap: unit ? new Map([[updated.sppgUnitId, unit.name]]) : undefined,
+      empMap: emp ? new Map([[updated.requesterId, { name: emp.name, roleTitle: emp.roleTitle }]]) : undefined,
+      supMap: sup ? new Map([[updated.supplierId, { name: sup.name, address: sup.address }]]) : undefined,
+    };
+
+    return NextResponse.json({ success: true, data: orderToApp(updated, updated.items, lookups), message: 'Nota belanja diperbarui.' });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
   }
@@ -93,7 +105,19 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     });
 
     const items = await prisma.procurementItem.findMany({ where: { procurementOrderId: id } });
-    return NextResponse.json({ success: true, data: orderToApp(updated, items) });
+    const [unit, emp, sup] = await Promise.all([
+      updated.sppgUnitId === 'ALL' ? null : prisma.sppgUnit.findUnique({ where: { id: updated.sppgUnitId }, select: { name: true } }),
+      prisma.employee.findUnique({ where: { id: updated.requesterId }, select: { name: true, roleTitle: true } }),
+      prisma.supplier.findUnique({ where: { id: updated.supplierId }, select: { name: true, address: true } }),
+    ]);
+
+    const lookups = {
+      unitMap: unit ? new Map([[updated.sppgUnitId, unit.name]]) : undefined,
+      empMap: emp ? new Map([[updated.requesterId, { name: emp.name, roleTitle: emp.roleTitle }]]) : undefined,
+      supMap: sup ? new Map([[updated.supplierId, { name: sup.name, address: sup.address }]]) : undefined,
+    };
+
+    return NextResponse.json({ success: true, data: orderToApp(updated, items, lookups) });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
   }

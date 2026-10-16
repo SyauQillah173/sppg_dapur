@@ -29,7 +29,6 @@ import {
   INITIAL_BUDGET_ALLOCATIONS,
   INITIAL_ADMIN_USERS,
 } from './initial-data';
-import { rescueLocalOnly } from './state-merge';
 import { toSppgUnit, toSupplier, toEmployee, toIngredient, toCategory, toMasterUnit, toStockLedger, toBudget, SEMUA_SPPG_NAME } from './db-map';
 
 interface ModalState {
@@ -113,8 +112,6 @@ interface StoreContextType {
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY = 'sppg_private_portal_v1_clean';
-
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>({
     id: 'admin-super-01',
@@ -174,176 +171,48 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Terapkan snapshot dari server/localStorage ke state
-  const applyState = (parsed: any) => {
-    if (!parsed) return;
-    if (parsed.procurements) setProcurements(parsed.procurements);
-    if (parsed.ingredients) setIngredients(parsed.ingredients);
-    if (parsed.categories) setCategories(parsed.categories);
-    if (parsed.units) setUnits(parsed.units);
-    if (parsed.suppliers) setSuppliers(parsed.suppliers);
-    if (parsed.employees) setEmployees(parsed.employees);
-    if (parsed.stockLedgers) setStockLedgers(parsed.stockLedgers);
-    if (parsed.sppgUnits) setSppgUnits(parsed.sppgUnits);
-    if (parsed.budgetAllocations) setBudgetAllocations(parsed.budgetAllocations);
-    if (parsed.adminUsers) setAdminUsers(parsed.adminUsers);
-  };
-
-  // Ambil snapshot terbaru dari server (dipakai semua perangkat); null = tidak ada/gagal
-  const syncFromServer = async (): Promise<any | null> => {
-    try {
-      const res = await fetch('/api/state', { cache: 'no-store' });
-      if (!res.ok) return null;
-      const json = await res.json();
-      if (json?.success && json.state) {
-        applyState(json.state);
-        return json.state;
-      }
-    } catch {
-      // offline / server mati
-    }
-    return null;
-  };
-
-  // Load awal: server dulu, fallback cache lokal
-  useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      const fromServer = await syncFromServer();
-      if (cancelled) return;
-
-      let localRaw: any = null;
-      try {
-        const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-        if (saved) localRaw = JSON.parse(saved);
-      } catch {
-        // ignore
-      }
-
-      // Penyelamat data: server masih kosong untuk jenis data ini, tapi perangkat ini
-      // punya isinya (mis. input lama sebelum sinkron server aktif) → pakai milik lokal.
-      const rescued = fromServer ? rescueLocalOnly(fromServer, localRaw) : {};
-
-      hydratedRef.current = true;
-
-      // Daftar akun admin diambil dari DB (bukan snapshot) supaya id-nya cocok
-      // saat hapus/ubah dan akun baru langsung muncul.
-      try {
-        const res = await fetch('/api/admin-users', { cache: 'no-store' });
-        if (res.ok) {
-          const json = await res.json();
-          if (json?.success && Array.isArray(json.data)) {
-            setAdminUsers(
-              json.data.map((u: any) => ({
-                id: u.id,
-                username: u.username,
-                name: u.name,
-                role: u.role,
-                createdAt: u.createdAt ?? new Date().toISOString(),
-                updatedAt: u.updatedAt ?? undefined,
-              }))
-            );
-          }
-        }
-      } catch {
-        // offline — pakai daftar dari snapshot
-      }
-
-      // Data transaksi (belanja, dana masuk) + total unit/supplier dibaca dari tabelnya
-      await refreshFromDb();
-      // Master data (bahan, supplier, karyawan, satuan, kategori, mutasi) juga dari tabelnya
-      await refreshMasterFromDb();
-
-      if (fromServer) {
-        applyState({ ...fromServer, ...rescued });
-        // Kirim seluruh snapshot gabungan (bukan sebagian) supaya data server lain tidak tertimpa seed.
-        if (Object.keys(rescued).length > 0) saveState({ ...fromServer, ...rescued });
-      } else if (localRaw) {
-        applyState(localRaw);
-      }
-
-      // Server belum punya snapshot → kirim seed awal supaya perangkat lain ikut.
-      if (!fromServer) saveState({});
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Segarkan saat tab kembali aktif — supaya input dari perangkat lain langsung muncul
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === 'visible' && hydratedRef.current) syncFromServer();
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('focus', onVisible);
-    return () => {
-      document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('focus', onVisible);
-    };
-  }, []);
-
-  // Save changes to localStorage
-  const saveState = (newState: {
-    procurements?: ProcurementTransaction[];
-    ingredients?: MasterIngredient[];
-    categories?: IngredientCategory[];
-    units?: MasterUnit[];
-    suppliers?: SupplierDirectory[];
-    employees?: EmployeeDirectory[];
-    stockLedgers?: StockLedgerEntry[];
-    sppgUnits?: SppgUnit[];
-    budgetAllocations?: BudgetAllocationItem[];
-    adminUsers?: AdminUserItem[];
-  }) => {
-    const current = {
-      // procurements & budgetAllocations tidak lagi di snapshot: keduanya sudah
-      // punya tabel sendiri dan dibaca langsung dari API-nya.
-      ingredients: newState.ingredients || ingredients,
-      categories: newState.categories || categories,
-      units: newState.units || units,
-      suppliers: newState.suppliers || suppliers,
-      employees: newState.employees || employees,
-      stockLedgers: newState.stockLedgers || stockLedgers,
-      sppgUnits: newState.sppgUnits || sppgUnits,
-      adminUsers: newState.adminUsers || adminUsers,
-    };
-
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(current));
-    } catch {
-      // ignore
-    }
-
-    // Simpan ke server supaya PC dan HP lihat data yang sama.
-    // ponytail: whole-document last-write-wins; pecah ke endpoint per-entitas kalau nanti perlu edit bersamaan.
-    if (!hydratedRef.current) return;
-    fetch('/api/state', {
-      method: 'POST',
+  // ── Helper API ────────────────────────────────────────────────────────────
+  const postJson = async (url: string, body: unknown, method: 'POST' | 'PATCH' | 'PUT' | 'DELETE' = 'POST') => {
+    const res = await fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ state: current }),
-    }).catch(() => {
-      // offline — data tetap aman di cache lokal
+      body: method === 'DELETE' ? undefined : JSON.stringify(body),
     });
-  };
-
-  const openModal = (type: ModalState['type'], data?: any) => {
-    setModal({ type, data });
-  };
-
-  const closeModal = () => {
-    setModal({ type: null });
-  };
-
-  const logout = async () => {
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-    } catch {
-      // ignore
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json?.success === false) {
+      return { ok: false, error: json?.error || `Gagal menyimpan (HTTP ${res.status}).` };
     }
-    window.location.href = '/login';
+    return { ok: true };
+  };
+
+  const failNotify = (result: { ok: boolean; error?: string }) => {
+    if (!result.ok && typeof window !== 'undefined') {
+      window.alert(result.error || 'Gagal menyimpan ke database.');
+    }
+    return result;
+  };
+
+  const refreshAdminUsers = async () => {
+    try {
+      const res = await fetch('/api/admin-users', { cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.success && Array.isArray(json.data)) {
+          setAdminUsers(
+            json.data.map((u: any) => ({
+              id: u.id,
+              username: u.username,
+              name: u.name,
+              role: u.role,
+              createdAt: u.createdAt ?? new Date().toISOString(),
+              updatedAt: u.updatedAt ?? undefined,
+            }))
+          );
+        }
+      }
+    } catch {
+      // offline
+    }
   };
 
   /**
@@ -362,7 +231,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         pRes.json(), bRes.json(), uRes.json(), sRes.json(),
       ]);
 
-      const units = uJson?.success && Array.isArray(uJson.data) ? uJson.data.map(toSppgUnit) : null;
+      const units = uJson?.success && Array.isArray(uJson.data) ? uJson.data.map(toSppgUnit) : sppgUnits;
       if (units) setSppgUnits(units);
       if (pJson?.success && Array.isArray(pJson.data)) setProcurements(pJson.data);
       if (bJson?.success && Array.isArray(bJson.data)) {
@@ -374,17 +243,83 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const postJson = async (url: string, body: unknown, method: 'POST' | 'PATCH' | 'PUT' | 'DELETE' = 'POST') => {
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: method === 'DELETE' ? undefined : JSON.stringify(body),
-    });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok || json?.success === false) {
-      return { ok: false, error: json?.error || `Gagal menyimpan (HTTP ${res.status}).` };
+  const refreshMasterFromDb = async () => {
+    try {
+      const [sup, emp, ing, cat, unit, stock] = await Promise.all([
+        fetch('/api/suppliers', { cache: 'no-store' }),
+        fetch('/api/employees', { cache: 'no-store' }),
+        fetch('/api/ingredients', { cache: 'no-store' }),
+        fetch('/api/categories', { cache: 'no-store' }),
+        fetch('/api/master-units', { cache: 'no-store' }),
+        fetch('/api/stock-movements', { cache: 'no-store' }),
+      ]);
+      const [sJ, eJ, iJ, cJ, uJ, kJ] = await Promise.all([
+        sup.json(), emp.json(), ing.json(), cat.json(), unit.json(), stock.json(),
+      ]);
+      if (sJ?.success && Array.isArray(sJ.data)) setSuppliers(sJ.data.map(toSupplier));
+      if (eJ?.success && Array.isArray(eJ.data)) setEmployees(eJ.data.map(toEmployee));
+      if (iJ?.success && Array.isArray(iJ.data)) setIngredients(iJ.data.map(toIngredient));
+      if (cJ?.success && Array.isArray(cJ.data)) setCategories(cJ.data.map(toCategory));
+      if (uJ?.success && Array.isArray(uJ.data)) setUnits(uJ.data.map(toMasterUnit));
+      if (kJ?.success && Array.isArray(kJ.data)) setStockLedgers(kJ.data.map(toStockLedger));
+    } catch {
+      // offline — pakai data yang sudah tampil
     }
-    return { ok: true };
+  };
+
+  const refreshAllFromDb = async () => {
+    await Promise.all([
+      refreshFromDb(),
+      refreshMasterFromDb(),
+      refreshAdminUsers(),
+    ]);
+  };
+
+  // Muat data awal langsung dari tabel database
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      await refreshAllFromDb();
+      if (cancelled) return;
+      hydratedRef.current = true;
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Segarkan saat tab kembali aktif — selalu baca dari database, anti-hilang
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && hydratedRef.current) {
+        refreshAllFromDb();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, []);
+
+  const openModal = (type: ModalState['type'], data?: any) => {
+    setModal({ type, data });
+  };
+
+  const closeModal = () => {
+    setModal({ type: null });
+  };
+
+  const logout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // ignore
+    }
+    window.location.href = '/login';
   };
 
   const addProcurement = async (proc: Omit<ProcurementTransaction, 'id' | 'createdAt'>) => {
@@ -407,38 +342,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     );
     if (result.ok) await refreshFromDb();
     return result;
-  };
-
-  // ── Master data: semua tulis/baca lewat tabelnya sendiri di database ──────
-  const failNotify = (result: { ok: boolean; error?: string }) => {
-    if (!result.ok && typeof window !== 'undefined') {
-      window.alert(result.error || 'Gagal menyimpan ke database.');
-    }
-    return result;
-  };
-
-  const refreshMasterFromDb = async () => {
-    try {
-      const [sup, emp, ing, cat, unit, stock] = await Promise.all([
-        fetch('/api/suppliers', { cache: 'no-store' }),
-        fetch('/api/employees', { cache: 'no-store' }),
-        fetch('/api/ingredients', { cache: 'no-store' }),
-        fetch('/api/categories', { cache: 'no-store' }),
-        fetch('/api/master-units', { cache: 'no-store' }),
-        fetch('/api/stock-movements', { cache: 'no-store' }),
-      ]);
-      const [sJ, eJ, iJ, cJ, uJ, kJ] = await Promise.all([
-        sup.json(), emp.json(), ing.json(), cat.json(), unit.json(), stock.json(),
-      ]);
-      if (sJ?.success) setSuppliers(sJ.data.map(toSupplier));
-      if (eJ?.success) setEmployees(eJ.data.map(toEmployee));
-      if (iJ?.success) setIngredients(iJ.data.map(toIngredient));
-      if (cJ?.success) setCategories(cJ.data.map(toCategory));
-      if (uJ?.success) setUnits(uJ.data.map(toMasterUnit));
-      if (kJ?.success) setStockLedgers(kJ.data.map(toStockLedger));
-    } catch {
-      // offline — pakai data yang sudah tampil
-    }
   };
 
   const addIngredient = async (ing: Omit<MasterIngredient, 'id' | 'code' | 'updatedAt'>) => {
@@ -626,39 +529,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       id,
       createdAt: new Date().toISOString(),
     };
-    const updated = [...adminUsers, newAdmin];
-    setAdminUsers(updated);
-    saveState({ adminUsers: updated });
+    setAdminUsers((prev) => [...prev, newAdmin]);
   };
 
   const deleteAdminUser = (id: string) => {
-    const updated = adminUsers.filter((u) => u.id !== id);
-    setAdminUsers(updated);
-    saveState({ adminUsers: updated });
+    setAdminUsers((prev) => prev.filter((u) => u.id !== id));
   };
 
   const resetToDefault = () => {
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
-    setSppgUnits(INITIAL_SPPG_UNITS);
-    setBudgetAllocations(INITIAL_BUDGET_ALLOCATIONS);
-    setProcurements(INITIAL_PROCUREMENTS);
-    setIngredients(INITIAL_INGREDIENTS);
-    setCategories(INITIAL_CATEGORIES);
-    setUnits(INITIAL_UNITS);
-    setSuppliers(INITIAL_SUPPLIERS);
-    setEmployees(INITIAL_EMPLOYEES);
-    setStockLedgers(INITIAL_STOCK_LEDGERS);
-    setAdminUsers(INITIAL_ADMIN_USERS);
-    // Hanya cache lokal yang dikosongkan; data asli ada di tabel database.
-    saveState({
-      ingredients: INITIAL_INGREDIENTS,
-      categories: INITIAL_CATEGORIES,
-      units: INITIAL_UNITS,
-      suppliers: INITIAL_SUPPLIERS,
-      employees: INITIAL_EMPLOYEES,
-      stockLedgers: INITIAL_STOCK_LEDGERS,
-      adminUsers: INITIAL_ADMIN_USERS,
-    });
+    refreshAllFromDb();
   };
 
   // Filtered procurements based on selected SPPG Unit

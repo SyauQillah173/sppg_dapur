@@ -18,12 +18,17 @@ export async function GET(req: NextRequest) {
       where.OR = [{ sppgUnitId }, { sppgUnitId: 'ALL' }];
     }
 
-    const rows = await prisma.budgetAllocation.findMany({
-      where,
-      orderBy: { allocatedDate: 'desc' },
-    });
+    const [rows, units] = await Promise.all([
+      prisma.budgetAllocation.findMany({
+        where,
+        orderBy: { allocatedDate: 'desc' },
+      }),
+      prisma.sppgUnit.findMany({ select: { id: true, name: true } }),
+    ]);
 
-    return NextResponse.json({ success: true, data: rows.map(budgetToApp) });
+    const unitMap = new Map(units.map((u) => [u.id, u.name]));
+
+    return NextResponse.json({ success: true, data: rows.map((r) => budgetToApp(r, unitMap)) });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
   }
@@ -105,10 +110,13 @@ export async function POST(req: NextRequest) {
       return out;
     });
 
+    const units = await prisma.sppgUnit.findMany({ select: { id: true, name: true } });
+    const unitMap = new Map(units.map((u) => [u.id, u.name]));
+
     return NextResponse.json(
       {
         success: true,
-        data: created.map(budgetToApp),
+        data: created.map((r) => budgetToApp(r, unitMap)),
         skipped,
         message:
           created.length === 1

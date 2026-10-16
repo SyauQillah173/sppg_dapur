@@ -39,7 +39,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       return row;
     });
 
-    return NextResponse.json({ success: true, data: budgetToApp(updated), message: 'Catatan dana masuk diperbarui.' });
+    const units = await prisma.sppgUnit.findMany({ select: { id: true, name: true } });
+    const unitMap = new Map(units.map((u) => [u.id, u.name]));
+    return NextResponse.json({ success: true, data: budgetToApp(updated, unitMap), message: 'Catatan dana masuk diperbarui.' });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error?.message }, { status: 400 });
   }

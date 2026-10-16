@@ -3,10 +3,15 @@ import { Prisma, PrismaClient } from '@prisma/client';
 type Tx = Prisma.TransactionClient | PrismaClient;
 
 /** Baris budget_allocations → bentuk aplikasi. */
-export function budgetToApp(row: any) {
+export function budgetToApp(row: any, unitMap?: Map<string, string>) {
+  const sppgUnitName =
+    row.sppgUnitId === 'ALL'
+      ? 'Semua SPPG (Gabungan 4 Unit)'
+      : unitMap?.get(row.sppgUnitId) || row.sppgUnitId;
   return {
     id: row.id,
     sppgUnitId: row.sppgUnitId,
+    sppgUnitName,
     fiscalPeriod: row.fiscalPeriod,
     amountAllocated: Number(row.amountAllocated),
     amountRealized: Number(row.amountRealized),

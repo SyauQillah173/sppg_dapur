@@ -3,14 +3,34 @@ import { Prisma, PrismaClient } from '@prisma/client';
 type Tx = Prisma.TransactionClient | PrismaClient;
 
 /** Baris DB → bentuk yang dipakai aplikasi (tanpa relasi include, id = id aplikasi). */
-export function orderToApp(order: any, items: any[]) {
+export function orderToApp(
+  order: any,
+  items: any[],
+  lookups?: {
+    unitMap?: Map<string, string>;
+    empMap?: Map<string, { name: string; roleTitle: string }>;
+    supMap?: Map<string, { name: string; address: string }>;
+  }
+) {
+  const sppgUnitName =
+    order.sppgUnitId === 'ALL'
+      ? 'Semua SPPG (Gabungan 4 Unit)'
+      : lookups?.unitMap?.get(order.sppgUnitId) || order.sppgUnitId;
+  const emp = lookups?.empMap?.get(order.requesterId);
+  const sup = lookups?.supMap?.get(order.supplierId);
+
   return {
     id: order.id,
     receiptNumber: order.receiptNumber || '-',
     date: new Date(order.date).toISOString().slice(0, 10),
     sppgUnitId: order.sppgUnitId,
+    sppgUnitName,
     requesterId: order.requesterId,
+    requesterName: emp?.name || 'Petugas Pengadaan',
+    requesterRole: emp?.roleTitle || 'Staf Belanja',
     supplierId: order.supplierId,
+    supplierName: sup?.name || 'CV Rekanan Dapur',
+    supplierAddress: sup?.address || 'Gresik, Jawa Timur',
     amountRequested: Number(order.amountRequested),
     actualReceiptTotal: Number(order.actualReceiptTotal),
     changeReturned: Number(order.changeReturned),
