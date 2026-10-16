@@ -1,49 +1,68 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { requireAuth, requireSuperadmin, parseSessionToken } from '@/lib/api-auth';
+import { requireSuperadmin } from '@/lib/api-auth';
+import { applyBudgetToUnits, budgetToApp } from '@/lib/budget-db';
 
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+/** Edit catatan dana masuk. */
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireSuperadmin(req);
+  if ('error' in auth) return auth.error;
+
   try {
     const { id } = await params;
-    const token = req.cookies.get('giziflow_session')?.value;
-    const session = token ? await parseSessionToken(token) : null;
+    const body = await req.json();
 
-    if (!session || session.role !== 'SUPERADMIN') {
-      return NextResponse.json(
-        { success: false, error: 'Hanya Superadmin yang berhak menghapus alokasi anggaran!' },
-        { status: 403 }
-      );
+    const existing = await prisma.budgetAllocation.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ success: false, error: 'Catatan dana masuk tidak ditemukan.' }, { status: 404 });
     }
 
-    const allocation = await prisma.budgetAllocation.findUnique({
-      where: { id },
+    const updated = await prisma.$transaction(async (tx) => {
+      // Kembalikan dulu pengaruh catatan lama ke pagu kas unit
+      await applyBudgetToUnits(tx, existing.sppgUnitId, -Number(existing.amountAllocated));
+
+      const data: any = {};
+      if (body.sppgUnitId) data.sppgUnitId = body.sppgUnitId;
+      if (body.fiscalPeriod !== undefined) data.fiscalPeriod = String(body.fiscalPeriod).trim() || '-';
+      if (body.amountAllocated !== undefined) {
+        const amount = Number(body.amountAllocated);
+        if (!isFinite(amount) || amount <= 0) throw new Error('Nominal dana masuk harus lebih dari 0.');
+        data.amountAllocated = amount;
+      }
+      if (body.amountRealized !== undefined) data.amountRealized = Number(body.amountRealized) || 0;
+      if (body.remainingBudget !== undefined) data.remainingBudget = Number(body.remainingBudget) || 0;
+      if (body.allocatedDate) data.allocatedDate = new Date(body.allocatedDate);
+      if (body.notes !== undefined) data.notes = body.notes || null;
+
+      const row = await tx.budgetAllocation.update({ where: { id }, data });
+      await applyBudgetToUnits(tx, row.sppgUnitId, Number(row.amountAllocated));
+      return row;
     });
 
-    if (!allocation) {
-      return NextResponse.json({ success: false, error: 'Data anggaran tidak ditemukan!' }, { status: 404 });
+    return NextResponse.json({ success: true, data: budgetToApp(updated), message: 'Catatan dana masuk diperbarui.' });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error?.message }, { status: 400 });
+  }
+}
+
+/** Hapus catatan dana masuk dan kembalikan pagu kas unit. */
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireSuperadmin(req);
+  if ('error' in auth) return auth.error;
+
+  try {
+    const { id } = await params;
+    const existing = await prisma.budgetAllocation.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ success: false, error: 'Catatan dana masuk tidak ditemukan.' }, { status: 404 });
     }
 
-    // Decrement from SPPG Unit activeBudget
-    await prisma.sppgUnit.update({
-      where: { id: allocation.sppgUnitId },
-      data: {
-        activeBudget: {
-          decrement: allocation.amountAllocated,
-        },
-        totalRemaining: {
-          decrement: allocation.remainingBudget,
-        },
-      },
+    await prisma.$transaction(async (tx) => {
+      await applyBudgetToUnits(tx, existing.sppgUnitId, -Number(existing.amountAllocated));
+      await tx.budgetAllocation.delete({ where: { id } });
     });
 
-    await prisma.budgetAllocation.delete({
-      where: { id },
-    });
-
-    return NextResponse.json({ success: true, message: 'Alokasi anggaran berhasil dihapus!' });
+    return NextResponse.json({ success: true, message: 'Catatan dana masuk dihapus.' });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
   }

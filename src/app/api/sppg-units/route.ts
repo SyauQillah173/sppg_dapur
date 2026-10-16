@@ -2,14 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, requireSuperadmin, parseSessionToken } from '@/lib/api-auth';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if ('error' in auth) return auth.error;
+
   try {
     const units = await prisma.sppgUnit.findMany({
       orderBy: { code: 'asc' },
       include: {
         _count: {
           select: {
-            procurementOrders: true,
             employees: true,
           },
         },

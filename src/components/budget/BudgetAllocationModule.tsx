@@ -140,7 +140,7 @@ export function BudgetAllocationModule() {
   };
 
   // ── submit ────────────────────────────────────────────────────────────────
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isReadOnly) return;
     setErrorMsg('');
@@ -156,7 +156,7 @@ export function BudgetAllocationModule() {
     const isAllUnits = sppgUnitId === 'ALL';
     const targetUnit = isAllUnits ? undefined : sppgUnits.find(u => u.id === sppgUnitId);
 
-    addBudgetAllocation({
+    const result = await addBudgetAllocation({
       sppgUnitId,
       sppgUnitName: isAllUnits ? 'Semua SPPG (Gabungan 4 Unit)' : targetUnit?.name || sppgUnitId,
       fiscalPeriod: periodeInfo.label,
@@ -167,8 +167,13 @@ export function BudgetAllocationModule() {
       notes,
     });
 
-    setIsModalOpen(false);
     setIsSubmitting(false);
+    if (!result.ok) {
+      setErrorMsg(result.error || 'Gagal menyimpan dana masuk.');
+      return;
+    }
+
+    setIsModalOpen(false);
     setAmountAllocated('150000000');
     setNotes('Pagu Kas Operasional Pemenuhan Gizi');
   };
@@ -184,9 +189,13 @@ export function BudgetAllocationModule() {
     try {
       const { rows, errors } = await parseBudgetWorkbook(file, sppgUnits);
       if (rows.length > 0) {
-        addBudgetAllocationsBulk(
+        const result = await addBudgetAllocationsBulk(
           rows.map(r => ({ ...r, amountRealized: 0, remainingBudget: r.amountAllocated }))
         );
+        if (!result.ok) {
+          setImportResult({ ok: 0, errors: [result.error || 'Gagal menyimpan hasil import.'] });
+          return;
+        }
       }
       setImportResult({ ok: rows.length, errors });
     } catch (err) {
@@ -201,12 +210,13 @@ export function BudgetAllocationModule() {
     setDeleteTargetId(id);
   };
 
-  const handleConfirmDeleteBudget = () => {
+  const handleConfirmDeleteBudget = async () => {
     if (!deleteTargetId) return;
     setIsDeleting(true);
-    deleteBudgetAllocation(deleteTargetId);
+    const result = await deleteBudgetAllocation(deleteTargetId);
     setIsDeleting(false);
     setDeleteTargetId(null);
+    if (!result.ok) setErrorMsg(result.error || 'Gagal menghapus catatan dana masuk.');
   };
 
   // ── render ────────────────────────────────────────────────────────────────

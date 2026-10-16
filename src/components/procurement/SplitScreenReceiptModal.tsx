@@ -65,8 +65,8 @@ export function SplitScreenReceiptModal({ transaction, onClose }: SplitScreenRec
 
   const hasAnyAnomaly = transaction.items.some((it) => getItemAnomaly(it).isAnomaly);
 
-  const handleApprove = () => {
-    updateAuditStatus(transaction.id, 'VERIFIED', auditNotes, auditorName);
+  const handleApprove = async () => {
+    await updateAuditStatus(transaction.id, 'VERIFIED', auditNotes, auditorName);
     setIsSuccessNotification(true);
     setTimeout(() => {
       setIsSuccessNotification(false);
@@ -74,8 +74,8 @@ export function SplitScreenReceiptModal({ transaction, onClose }: SplitScreenRec
     }, 1200);
   };
 
-  const handleFlagConfirm = (reason: string) => {
-    updateAuditStatus(
+  const handleFlagConfirm = async (reason: string) => {
+    await updateAuditStatus(
       transaction.id,
       'FLAGGED_DISCREPANCY',
       `[SELISIH DITEMUKAN] ${reason}. Catatan: ${auditNotes}`,

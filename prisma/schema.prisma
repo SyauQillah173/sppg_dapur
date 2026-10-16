@@ -53,8 +53,6 @@ model SppgUnit {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  budgetAllocations BudgetAllocation[]
-  procurementOrders ProcurementOrder[]
   stockMovements    StockMovement[]
   employees         Employee[]
 
@@ -76,7 +74,6 @@ model Employee {
   createdAt       DateTime           @default(now())
 
   sppgUnit          SppgUnit           @relation(fields: [sppgUnitId], references: [id])
-  procurementOrders ProcurementOrder[]
 
   @@map("employees")
 }
@@ -95,8 +92,6 @@ model Supplier {
   rating            Decimal            @default(5.0) @db.Decimal(3, 1)
   activeStatus      Boolean            @default(true)
   createdAt         DateTime           @default(now())
-
-  procurementOrders ProcurementOrder[]
 
   @@map("suppliers")
 }
@@ -146,6 +141,7 @@ model Ingredient {
 
 model BudgetAllocation {
   id              String      @id @default(cuid())
+  // Tanpa relasi FK: unit boleh 'ALL' (dana gabungan semua SPPG). Validasi di API.
   sppgUnitId      String
   fiscalPeriod    String      // e.g. "Oktober 2026", "Q4-2026"
   amountAllocated Decimal     @db.Decimal(15, 2)
@@ -154,15 +150,18 @@ model BudgetAllocation {
   allocatedDate   DateTime    @default(now())
   notes           String?
 
-  sppgUnit        SppgUnit    @relation(fields: [sppgUnitId], references: [id], onDelete: Cascade)
-
+  @@index([sppgUnitId])
+  @@index([allocatedDate])
   @@map("budget_allocations")
 }
 
 model ProcurementOrder {
   id                   String            @id @default(cuid())
-  receiptNumber        String            @unique // e.g. "NOTA-AA02-20261014-089"
+  // Nomor nota opsional, jadi tidak unik. Pencarian pakai index.
+  receiptNumber        String
   date                 DateTime
+  // Tanpa FK: unit boleh 'ALL', dan peminta/supplier bisa dibuat cepat dari form
+  // (id sementara). Validasi di API.
   sppgUnitId           String
   requesterId          String
   supplierId           String
@@ -180,11 +179,11 @@ model ProcurementOrder {
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
 
-  sppgUnit             SppgUnit          @relation(fields: [sppgUnitId], references: [id])
-  requester            Employee          @relation(fields: [requesterId], references: [id])
-  supplier             Supplier          @relation(fields: [supplierId], references: [id])
   items                ProcurementItem[]
 
+  @@index([date])
+  @@index([sppgUnitId])
+  @@index([receiptNumber])
   @@map("procurement_orders")
 }
 

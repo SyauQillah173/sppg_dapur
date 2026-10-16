@@ -62,6 +62,8 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
   // AI OCR state
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [aiSuccessMessage, setAiSuccessMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [submitError, setSubmitError] = useState<string>('');
 
   // Line items
   const [items, setItems] = useState<ProcurementItem[]>([
@@ -222,8 +224,10 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError('');
+    setIsSaving(true);
 
     const selectedUnitObj = isAllUnits ? undefined : sppgUnits.find((u) => u.id === sppgUnitId);
     const targetUnitName = isAllUnits ? 'Semua SPPG (Gabungan 4 Unit)' : selectedUnitObj?.name || sppgUnitId;
@@ -278,7 +282,7 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
       finalRequesterRole = selectedEmpObj?.roleTitle || 'Staf Belanja';
     }
 
-    addProcurement({
+    const result = await addProcurement({
       receiptNumber: receiptNumber.trim() || '-',
       date,
       sppgUnitId,
@@ -298,6 +302,12 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
       notes,
       items,
     });
+
+    if (!result.ok) {
+      setSubmitError(result.error || 'Gagal menyimpan data belanja.');
+      setIsSaving(false);
+      return;
+    }
 
     onClose();
   };
@@ -867,6 +877,12 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
           </div>
 
           <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-3 border-t border-slate-200">
+            {submitError && (
+              <div className="sm:mr-auto flex items-center gap-2 rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-xs text-rose-700">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                <span>{submitError}</span>
+              </div>
+            )}
             <button
               type="button"
               onClick={onClose}
@@ -877,10 +893,11 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
             <button
               type="submit"
               id="btn-simpan-belanja-modal"
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-5 py-2 text-xs font-semibold text-white shadow hover:bg-slate-800 transition active:scale-98"
+              disabled={isSaving}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-5 py-2 text-xs font-semibold text-white shadow hover:bg-slate-800 transition active:scale-98 disabled:opacity-60"
             >
               <CheckCircle2 className="h-4 w-4" />
-              <span>Simpan Data Belanja &amp; Ajukan Audit</span>
+              <span>{isSaving ? 'Menyimpan ke database...' : 'Simpan Data Belanja & Ajukan Audit'}</span>
             </button>
           </div>
         </form>

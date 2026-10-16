@@ -105,8 +105,8 @@ export function AIScannerModal({ onClose }: AIScannerModalProps) {
  }
  }, [scanStep]);
 
- const handleImportToProcurement = () => {
- addProcurement({
+ const handleImportToProcurement = async () => {
+ const result = await addProcurement({
  receiptNumber: currentResult.receiptNumber,
  date: new Date().toISOString().slice(0, 10),
  sppgUnitId: currentResult.sppgUnitId,
@@ -126,6 +126,10 @@ export function AIScannerModal({ onClose }: AIScannerModalProps) {
  notes: `Di-import otomatis via AI Smart Nota Scanner (Akurasi ${currentResult.confidence}%). Memerlukan verifikasi fisik akhir oleh Auditor.`,
  items: currentResult.items,
  });
+ if (!result.ok) {
+ window.alert(result.error || 'Gagal menyimpan hasil scan ke database.');
+ return;
+ }
  onClose();
  };
 

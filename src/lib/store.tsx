@@ -30,6 +30,7 @@ import {
   INITIAL_ADMIN_USERS,
 } from './initial-data';
 import { rescueLocalOnly } from './state-merge';
+import { toSppgUnit, toSupplier, toBudget, SEMUA_SPPG_NAME } from './db-map';
 
 interface ModalState {
   type:
@@ -78,9 +79,9 @@ interface StoreContextType {
   closeModal: () => void;
 
   // Actions
-  addProcurement: (proc: Omit<ProcurementTransaction, 'id' | 'createdAt'>) => void;
-  deleteProcurement: (id: string) => void;
-  updateAuditStatus: (id: string, status: AuditStatus, auditorNotes: string, auditorName: string) => void;
+  addProcurement: (proc: Omit<ProcurementTransaction, 'id' | 'createdAt'>) => Promise<{ ok: boolean; error?: string }>;
+  deleteProcurement: (id: string) => Promise<{ ok: boolean; error?: string }>;
+  updateAuditStatus: (id: string, status: AuditStatus, auditorNotes: string, auditorName: string) => Promise<{ ok: boolean; error?: string }>;
   addIngredient: (ing: Omit<MasterIngredient, 'id' | 'code' | 'updatedAt'>) => void;
   updateIngredient: (id: string, ing: Partial<MasterIngredient>) => void;
   deleteIngredient: (id: string) => void;
@@ -91,9 +92,9 @@ interface StoreContextType {
   recordStockMutation: (entry: Omit<StockLedgerEntry, 'id' | 'timestamp' | 'remainingStockAfter'>) => void;
   addSupplier: (sup: Omit<SupplierDirectory, 'id' | 'code' | 'totalDisbursed' | 'totalTransactions'>) => void;
   addEmployee: (emp: Omit<EmployeeDirectory, 'id' | 'employeeNumber' | 'totalRequested' | 'totalRealized' | 'pendingBalance'>) => void;
-  addBudgetAllocation: (item: Omit<BudgetAllocationItem, 'id' | 'allocatedDate'> & { allocatedDate?: string }) => void;
-  addBudgetAllocationsBulk: (items: Array<Omit<BudgetAllocationItem, 'id' | 'allocatedDate'> & { allocatedDate?: string }>) => void;
-  deleteBudgetAllocation: (id: string) => void;
+  addBudgetAllocation: (item: Omit<BudgetAllocationItem, 'id' | 'allocatedDate'> & { allocatedDate?: string }) => Promise<{ ok: boolean; error?: string }>;
+  addBudgetAllocationsBulk: (items: Array<Omit<BudgetAllocationItem, 'id' | 'allocatedDate'> & { allocatedDate?: string }>) => Promise<{ ok: boolean; error?: string }>;
+  deleteBudgetAllocation: (id: string) => Promise<{ ok: boolean; error?: string }>;
   addSppgUnit: (unit: Omit<SppgUnit, 'id' | 'totalRealized' | 'totalRemaining'>) => void;
   updateSppgUnit: (id: string, data: Partial<SppgUnit>) => void;
   deleteSppgUnit: (id: string) => void;
@@ -249,6 +250,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         // offline — pakai daftar dari snapshot
       }
 
+      // Data transaksi (belanja, dana masuk) + total unit/supplier dibaca dari tabelnya
+      await refreshFromDb();
+
       if (fromServer) {
         applyState({ ...fromServer, ...rescued });
         // Kirim seluruh snapshot gabungan (bukan sebagian) supaya data server lain tidak tertimpa seed.
@@ -293,7 +297,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     adminUsers?: AdminUserItem[];
   }) => {
     const current = {
-      procurements: newState.procurements || procurements,
+      // procurements & budgetAllocations tidak lagi di snapshot: keduanya sudah
+      // punya tabel sendiri dan dibaca langsung dari API-nya.
       ingredients: newState.ingredients || ingredients,
       categories: newState.categories || categories,
       units: newState.units || units,
@@ -301,7 +306,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       employees: newState.employees || employees,
       stockLedgers: newState.stockLedgers || stockLedgers,
       sppgUnits: newState.sppgUnits || sppgUnits,
-      budgetAllocations: newState.budgetAllocations || budgetAllocations,
       adminUsers: newState.adminUsers || adminUsers,
     };
 
@@ -340,94 +344,67 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     window.location.href = '/login';
   };
 
-  const addProcurement = (proc: Omit<ProcurementTransaction, 'id' | 'createdAt'>) => {
-    const id = `TRX-2026-${Date.now().toString().slice(-4)}`;
-    const newProc: ProcurementTransaction = {
-      ...proc,
-      id,
-      createdAt: new Date().toISOString(),
-    };
-    const updated = [newProc, ...procurements];
-    setProcurements(updated);
+  /**
+   * Semua transaksi & total dihitung server dari tabelnya, jadi setelah setiap
+   * perubahan cukup ambil ulang — tidak ada perhitungan ganda di sisi klien.
+   */
+  const refreshFromDb = async () => {
+    try {
+      const [pRes, bRes, uRes, sRes] = await Promise.all([
+        fetch('/api/procurement', { cache: 'no-store' }),
+        fetch('/api/budgets', { cache: 'no-store' }),
+        fetch('/api/sppg-units', { cache: 'no-store' }),
+        fetch('/api/suppliers', { cache: 'no-store' }),
+      ]);
+      const [pJson, bJson, uJson, sJson] = await Promise.all([
+        pRes.json(), bRes.json(), uRes.json(), sRes.json(),
+      ]);
 
-    // Also update SPPG unit realized spending
-    // Nota 'ALL' dibagi rata ke tiap unit supaya total KPI tidak berlipat.
-    // ponytail: asumsi bagi rata; ganti ke rincian per unit kalau nanti diminta.
-    const share = proc.sppgUnitId === 'ALL' ? proc.actualReceiptTotal / (sppgUnits.length || 1) : proc.actualReceiptTotal;
-    const updatedUnits = sppgUnits.map((u) => {
-      if (proc.sppgUnitId === 'ALL' || u.id === proc.sppgUnitId) {
-        const totalRealized = u.totalRealized + share;
-        const totalRemaining = u.activeBudget - totalRealized;
-        return { ...u, totalRealized, totalRemaining };
+      const units = uJson?.success && Array.isArray(uJson.data) ? uJson.data.map(toSppgUnit) : null;
+      if (units) setSppgUnits(units);
+      if (pJson?.success && Array.isArray(pJson.data)) setProcurements(pJson.data);
+      if (bJson?.success && Array.isArray(bJson.data)) {
+        setBudgetAllocations(bJson.data.map((row: any) => toBudget(row, units || [])));
       }
-      return u;
-    });
-    setSppgUnits(updatedUnits);
-
-    // Also update Supplier spent total
-    const updatedSuppliers = suppliers.map((s) => {
-      if (s.id === proc.supplierId) {
-        return {
-          ...s,
-          totalDisbursed: s.totalDisbursed + proc.actualReceiptTotal,
-          totalTransactions: s.totalTransactions + 1,
-        };
-      }
-      return s;
-    });
-    setSuppliers(updatedSuppliers);
-
-    saveState({ procurements: updated, sppgUnits: updatedUnits, suppliers: updatedSuppliers });
+      if (sJson?.success && Array.isArray(sJson.data)) setSuppliers(sJson.data.map(toSupplier));
+    } catch {
+      // offline — biarkan data yang sudah tampil
+    }
   };
 
-  const deleteProcurement = (id: string) => {
-    const target = procurements.find((p) => p.id === id);
-    if (!target) return;
-
-    const updated = procurements.filter((p) => p.id !== id);
-    const share = target.sppgUnitId === 'ALL' ? target.actualReceiptTotal / (sppgUnits.length || 1) : target.actualReceiptTotal;
-    const updatedUnits = sppgUnits.map((u) => {
-      if (target.sppgUnitId === 'ALL' || u.id === target.sppgUnitId) {
-        const totalRealized = Math.max(0, u.totalRealized - share);
-        return { ...u, totalRealized, totalRemaining: u.activeBudget - totalRealized };
-      }
-      return u;
+  const postJson = async (url: string, body: unknown, method: 'POST' | 'PATCH' | 'PUT' | 'DELETE' = 'POST') => {
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: method === 'DELETE' ? undefined : JSON.stringify(body),
     });
-    const updatedSuppliers = suppliers.map((s) =>
-      s.id === target.supplierId
-        ? {
-            ...s,
-            totalDisbursed: Math.max(0, s.totalDisbursed - target.actualReceiptTotal),
-            totalTransactions: Math.max(0, s.totalTransactions - 1),
-          }
-        : s
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json?.success === false) {
+      return { ok: false, error: json?.error || `Gagal menyimpan (HTTP ${res.status}).` };
+    }
+    return { ok: true };
+  };
+
+  const addProcurement = async (proc: Omit<ProcurementTransaction, 'id' | 'createdAt'>) => {
+    const result = await postJson('/api/procurement', proc);
+    if (result.ok) await refreshFromDb();
+    return result;
+  };
+
+  const deleteProcurement = async (id: string) => {
+    const result = await postJson(`/api/procurement/${id}`, null, 'DELETE');
+    if (result.ok) await refreshFromDb();
+    return result;
+  };
+
+  const updateAuditStatus = async (id: string, status: AuditStatus, auditNotes: string, auditorName: string) => {
+    const result = await postJson(
+      `/api/procurement/${id}`,
+      { status, auditNotes, auditedBy: auditorName },
+      'PUT'
     );
-
-    setProcurements(updated);
-    setSppgUnits(updatedUnits);
-    setSuppliers(updatedSuppliers);
-    saveState({ procurements: updated, sppgUnits: updatedUnits, suppliers: updatedSuppliers });
-  };
-
-  const updateAuditStatus = (id: string, status: AuditStatus, auditNotes: string, auditorName: string) => {
-    const updated = procurements.map((p) => {
-      if (p.id === id) {
-        return {
-          ...p,
-          status,
-          auditNotes,
-          auditedBy: auditorName,
-          auditedAt: new Date().toISOString(),
-          items: p.items.map((it) => ({
-            ...it,
-            isItemVerified: status === 'VERIFIED',
-          })),
-        };
-      }
-      return p;
-    });
-    setProcurements(updated);
-    saveState({ procurements: updated });
+    if (result.ok) await refreshFromDb();
+    return result;
   };
 
   const addIngredient = (ing: Omit<MasterIngredient, 'id' | 'code' | 'updatedAt'>) => {
@@ -557,60 +534,38 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     saveState({ employees: updated });
   };
 
-  // 'ALL' = dana gabungan semua unit → dibagi rata supaya total anggaran tidak berlipat
-  // ponytail: asumsi bagi rata; ganti ke rincian per unit kalau nanti diminta.
-  const applyBudgetToUnits = (units: SppgUnit[], sppgUnitId: string, delta: number) => {
-    const share = sppgUnitId === 'ALL' ? delta / (units.length || 1) : delta;
-    return units.map((u) => {
-      if (sppgUnitId === 'ALL' || u.id === sppgUnitId) {
-        const newBudgetTotal = Math.max(0, u.activeBudget + share);
-        return { ...u, activeBudget: newBudgetTotal, totalRemaining: newBudgetTotal - u.totalRealized };
-      }
-      return u;
-    });
-  };
-
-  const addBudgetAllocation = (
+  // Dana masuk: server yang menyesuaikan pagu kas tiap unit (tabel budget_allocations).
+  const addBudgetAllocation = async (
     item: Omit<BudgetAllocationItem, 'id' | 'allocatedDate'> & { allocatedDate?: string }
   ) => {
-    addBudgetAllocationsBulk([item]);
+    return addBudgetAllocationsBulk([item]);
   };
 
-  /** Tambah banyak catatan sekaligus (dipakai import Excel) — satu simpan, satu sinkron. */
-  const addBudgetAllocationsBulk = (
+  /** Tambah banyak catatan sekaligus (dipakai import Excel) dalam satu request. */
+  const addBudgetAllocationsBulk = async (
     items: Array<Omit<BudgetAllocationItem, 'id' | 'allocatedDate'> & { allocatedDate?: string }>
   ) => {
-    if (items.length === 0) return;
+    if (items.length === 0) return { ok: true };
 
-    const created: BudgetAllocationItem[] = items.map((item, i) => ({
-      ...item,
-      id: `BUD-${Date.now().toString().slice(-6)}-${i}`,
-      allocatedDate: item.allocatedDate || new Date().toISOString(),
-    }));
-
-    const updated = [...created, ...budgetAllocations];
-    setBudgetAllocations(updated);
-
-    const updatedUnits = created.reduce(
-      (units, item) => applyBudgetToUnits(units, item.sppgUnitId, item.amountAllocated),
-      sppgUnits
-    );
-    setSppgUnits(updatedUnits);
-
-    saveState({ budgetAllocations: updated, sppgUnits: updatedUnits });
+    const result = await postJson('/api/budgets', {
+      items: items.map((item) => ({
+        sppgUnitId: item.sppgUnitId,
+        fiscalPeriod: item.fiscalPeriod,
+        amountAllocated: item.amountAllocated,
+        amountRealized: item.amountRealized,
+        remainingBudget: item.remainingBudget,
+        allocatedDate: item.allocatedDate,
+        notes: item.notes,
+      })),
+    });
+    if (result.ok) await refreshFromDb();
+    return result;
   };
 
-  const deleteBudgetAllocation = (id: string) => {
-    const target = budgetAllocations.find((b) => b.id === id);
-    if (!target) return;
-
-    const updated = budgetAllocations.filter((b) => b.id !== id);
-    setBudgetAllocations(updated);
-
-    const updatedUnits = applyBudgetToUnits(sppgUnits, target.sppgUnitId, -target.amountAllocated);
-    setSppgUnits(updatedUnits);
-
-    saveState({ budgetAllocations: updated, sppgUnits: updatedUnits });
+  const deleteBudgetAllocation = async (id: string) => {
+    const result = await postJson(`/api/budgets/${id}`, null, 'DELETE');
+    if (result.ok) await refreshFromDb();
+    return result;
   };
 
   const addSppgUnit = (unit: Omit<SppgUnit, 'id' | 'totalRealized' | 'totalRemaining'>) => {
