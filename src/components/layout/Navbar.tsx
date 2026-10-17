@@ -32,7 +32,7 @@ export function Navbar({ activeTab, setActiveTab }: NavbarProps) {
   return (
     <div className="border-b border-slate-200 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <nav className="flex gap-0.5 overflow-x-auto py-1.5 scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0" aria-label="Menu Utama">
+        <nav className="flex items-center gap-1 overflow-x-auto py-1.5 scrollbar-none justify-between sm:justify-start" aria-label="Menu Utama">
           {tabs.map(({ id, icon: Icon, label, short }) => {
             const active = activeTab === id;
             const hasBadge = id === 'procurement' && pendingCount > 0;
@@ -41,13 +41,13 @@ export function Navbar({ activeTab, setActiveTab }: NavbarProps) {
                 key={id}
                 type="button"
                 onClick={() => setActiveTab(id)}
-                className={`relative flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-2 text-[13px] font-medium transition shrink-0 ${
+                className={`relative flex items-center justify-center gap-1 sm:gap-1.5 whitespace-nowrap rounded-lg px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-[13px] font-medium transition flex-1 sm:flex-initial shrink-0 ${
                   active
-                    ? 'bg-slate-900 text-white'
+                    ? 'bg-slate-900 text-white shadow-xs'
                     : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
-                <Icon className="h-4 w-4" />
+                <Icon className="h-4 w-4 shrink-0" />
                 <span className="hidden sm:inline">{label}</span>
                 <span className="sm:hidden">{short}</span>
                 {hasBadge && (

@@ -829,38 +829,42 @@ export function BudgetAllocationModule() {
           </span>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-              <span>Total Seluruh Pemasukan</span>
-              <Wallet className="h-4 w-4 text-blue-500" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+          <div className="rounded-lg border border-slate-200 bg-white p-3 sm:p-4 min-w-0 shadow-2xs">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-2 truncate">
+              <span className="truncate">Total Seluruh Pemasukan</span>
+              <Wallet className="h-4 w-4 text-blue-500 shrink-0" />
             </div>
-            <div className="text-lg font-bold text-slate-900 font-mono tabular-nums">{formatRupiah(totalPemasukan)}</div>
-            <p className="text-[10px] text-slate-400 mt-1">{filteredBudgets.length} alokasi kas tercatat</p>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-              <span>Total Seluruh Pengeluaran</span>
-              <CreditCard className="h-4 w-4 text-emerald-500" />
+            <div className="text-sm sm:text-base lg:text-lg font-bold text-slate-900 font-mono tabular-nums tracking-tight whitespace-nowrap overflow-hidden text-ellipsis" title={formatRupiah(totalPemasukan)}>
+              {formatRupiah(totalPemasukan)}
             </div>
-            <div className="text-lg font-bold text-slate-900 font-mono tabular-nums">{formatRupiah(totalPengeluaran)}</div>
-            <p className="text-[10px] text-slate-400 mt-1">{filteredProcurements.length} transaksi belanja</p>
+            <p className="text-[10px] text-slate-400 mt-1 truncate">{filteredBudgets.length} alokasi kas tercatat</p>
           </div>
-          <div className={`rounded-lg border p-4 ${saldo < 0 ? 'border-rose-300 bg-rose-50/40' : 'border-slate-200 bg-white'}`}>
-            <div className="flex items-center justify-between text-xs mb-2">
-              <span className={saldo < 0 ? 'text-rose-800 font-semibold' : 'text-slate-500'}>
+          <div className="rounded-lg border border-slate-200 bg-white p-3 sm:p-4 min-w-0 shadow-2xs">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-2 truncate">
+              <span className="truncate">Total Seluruh Pengeluaran</span>
+              <CreditCard className="h-4 w-4 text-emerald-500 shrink-0" />
+            </div>
+            <div className="text-sm sm:text-base lg:text-lg font-bold text-slate-900 font-mono tabular-nums tracking-tight whitespace-nowrap overflow-hidden text-ellipsis" title={formatRupiah(totalPengeluaran)}>
+              {formatRupiah(totalPengeluaran)}
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1 truncate">{filteredProcurements.length} transaksi belanja</p>
+          </div>
+          <div className={`rounded-lg border p-3 sm:p-4 min-w-0 shadow-2xs ${saldo < 0 ? 'border-rose-300 bg-rose-50/40' : 'border-slate-200 bg-white'}`}>
+            <div className="flex items-center justify-between text-xs mb-2 truncate">
+              <span className={`truncate ${saldo < 0 ? 'text-rose-800 font-semibold' : 'text-slate-500'}`}>
                 {saldo < 0 ? 'Defisit Saldo Kas Bersih' : 'Total Saldo Kas Bersih'}
               </span>
               {saldo < 0 ? (
-                <AlertOctagon className="h-4 w-4 text-rose-600" />
+                <AlertOctagon className="h-4 w-4 text-rose-600 shrink-0" />
               ) : (
-                <DollarSign className="h-4 w-4 text-indigo-500" />
+                <DollarSign className="h-4 w-4 text-indigo-500 shrink-0" />
               )}
             </div>
-            <div className={`text-lg font-bold font-mono tabular-nums ${saldo < 0 ? 'text-rose-600' : 'text-indigo-700'}`}>
+            <div className={`text-sm sm:text-base lg:text-lg font-bold font-mono tabular-nums tracking-tight whitespace-nowrap overflow-hidden text-ellipsis ${saldo < 0 ? 'text-rose-600' : 'text-indigo-700'}`} title={formatRupiah(saldo)}>
               {saldo < 0 ? `-${formatRupiah(Math.abs(saldo))}` : formatRupiah(saldo)}
             </div>
-            <p className="text-[10px] text-slate-400 mt-1">
+            <p className="text-[10px] text-slate-400 mt-1 truncate">
               {saldo < 0
                 ? '⚠️ Defisit kas: belanja melebihi total seluruh dana masuk'
                 : totalDitarikGlobal > 0
@@ -868,17 +872,17 @@ export function BudgetAllocationModule() {
                 : 'Sisa kas aktif operasional'}
             </p>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-              <span>Penyerapan Dana</span>
-              <TrendingUp className={`h-4 w-4 ${absorptionRate > 100 ? 'text-rose-500' : 'text-amber-500'}`} />
+          <div className="rounded-lg border border-slate-200 bg-white p-3 sm:p-4 min-w-0 shadow-2xs">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-2 truncate">
+              <span className="truncate">Penyerapan Dana</span>
+              <TrendingUp className={`h-4 w-4 shrink-0 ${absorptionRate > 100 ? 'text-rose-500' : 'text-amber-500'}`} />
             </div>
             <div className="flex items-center gap-2">
-              <div className={`text-lg font-bold font-mono tabular-nums ${absorptionRate > 100 ? 'text-rose-600' : 'text-slate-900'}`}>
+              <div className={`text-sm sm:text-base lg:text-lg font-bold font-mono tabular-nums tracking-tight ${absorptionRate > 100 ? 'text-rose-600' : 'text-slate-900'}`}>
                 {absorptionRate.toFixed(1)}%
               </div>
               {absorptionRate > 100 && (
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 shrink-0">
                   Over-Budget
                 </span>
               )}
@@ -895,27 +899,27 @@ export function BudgetAllocationModule() {
 
       {/* Table: Riwayat Pemasukan Dana dengan Kolom Transparansi & Bukti TF */}
       <div className="rounded-lg border border-slate-200 bg-white overflow-hidden shadow-xs">
-        <div className="border-b border-slate-200 px-4 py-3 flex items-center justify-between bg-slate-50/50">
+        <div className="border-b border-slate-200 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 bg-slate-50/50">
           <div>
             <h2 className="text-sm font-semibold text-slate-800">Riwayat Pemasukan Dana & Bukti Transfer</h2>
             <p className="text-[11px] text-slate-500">Transparansi pihak pengaju, pemegang uang kas, dan bukti transaksi bank.</p>
           </div>
-          <span className="text-xs text-slate-500 font-mono">{filteredBudgets.length} Data &bull; {localUnitName}</span>
+          <span className="text-xs text-slate-500 font-mono shrink-0">{filteredBudgets.length} Data &bull; {localUnitName}</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse min-w-[980px]">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px] uppercase">
+          <table className="w-full text-left text-xs border-collapse min-w-[1100px]">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-[11px] uppercase tracking-wider">
               <tr>
-                <th className="py-3 px-4">Tanggal</th>
-                <th className="py-3 px-4">Unit SPPG</th>
-                <th className="py-3 px-4">Yang Mengajukan & PIC Kas</th>
-                <th className="py-3 px-4 text-center">Bukti Transfer (TF)</th>
-                <th className="py-3 px-4 text-right">Dana Masuk</th>
-                <th className="py-3 px-4 text-right">Realisasi</th>
-                <th className="py-3 px-4 text-right">Sisa Kas</th>
-                <th className="py-3 px-4">Penyerapan</th>
-                <th className="py-3 px-4">Keterangan</th>
-                {!isReadOnly && <th className="py-3 px-4 text-center">Aksi</th>}
+                <th className="py-3 px-4 min-w-[100px]">Tanggal</th>
+                <th className="py-3 px-4 min-w-[160px]">Unit SPPG</th>
+                <th className="py-3 px-4 min-w-[210px]">Yang Mengajukan & PIC Kas</th>
+                <th className="py-3 px-4 text-center min-w-[130px]">Bukti Transfer (TF)</th>
+                <th className="py-3 px-4 text-right min-w-[120px]">Dana Masuk</th>
+                <th className="py-3 px-4 text-right min-w-[110px]">Realisasi</th>
+                <th className="py-3 px-4 text-right min-w-[130px]">Sisa Kas</th>
+                <th className="py-3 px-4 min-w-[120px]">Penyerapan</th>
+                <th className="py-3 px-4 min-w-[160px]">Keterangan</th>
+                {!isReadOnly && <th className="py-3 px-4 text-center min-w-[110px]">Aksi</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -930,19 +934,19 @@ export function BudgetAllocationModule() {
                   const usedPct = item.amountAllocated > 0 ? (item.amountRealized / item.amountAllocated) * 100 : 0;
                   return (
                     <tr key={item.id} className="hover:bg-slate-50/60 transition">
-                      <td className="py-3 px-4 font-mono text-slate-600 whitespace-nowrap">
+                      <td className="py-3 px-4 font-mono text-slate-600 whitespace-nowrap min-w-[100px]">
                         {new Date(item.allocatedDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
                       </td>
-                      <td className="py-3 px-4 font-semibold text-slate-800">{item.sppgUnitName}</td>
-                      <td className="py-3 px-4">
-                        <div className="space-y-0.5">
-                          <div className="font-semibold text-slate-800 flex items-center gap-1">
-                            <span className="text-[10px] text-blue-600 font-normal">Pengaju:</span>
-                            <span>{item.requestedBy || '-'}</span>
+                      <td className="py-3 px-4 font-semibold text-slate-800 min-w-[160px]">{item.sppgUnitName}</td>
+                      <td className="py-3 px-4 min-w-[210px]">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5 flex-nowrap">
+                            <span className="text-[10px] text-blue-700 bg-blue-50 border border-blue-200/60 font-semibold px-1.5 py-0.5 rounded shrink-0">Pengaju</span>
+                            <span className="font-semibold text-slate-800 text-xs truncate max-w-[150px]" title={item.requestedBy || '-'}>{item.requestedBy || '-'}</span>
                           </div>
-                          <div className="text-[11px] text-slate-500 flex items-center gap-1">
-                            <span className="text-[10px] text-amber-600 font-normal">PIC Kas:</span>
-                            <span>{item.cashHolder || '-'}</span>
+                          <div className="flex items-center gap-1.5 flex-nowrap">
+                            <span className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200/60 font-semibold px-1.5 py-0.5 rounded shrink-0">PIC Kas</span>
+                            <span className="text-slate-600 text-xs truncate max-w-[150px]" title={item.cashHolder || '-'}>{item.cashHolder || '-'}</span>
                           </div>
                         </div>
                       </td>
