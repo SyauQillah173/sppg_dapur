@@ -16,6 +16,7 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react';
+import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal';
 
 export interface SystemNotificationItem {
   id: string;
@@ -40,6 +41,14 @@ export function NotificationCenter({ onNavigateTab }: NotificationCenterProps) {
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [isOpen, setIsOpen] = useState(false);
   const [toastQueue, setToastQueue] = useState<SystemNotificationItem[]>([]);
+  const [deleteModalState, setDeleteModalState] = useState<{
+    isOpen: boolean;
+    mode: 'ALL' | 'READ' | 'SINGLE';
+    targetItem?: SystemNotificationItem;
+  }>({
+    isOpen: false,
+    mode: 'ALL',
+  });
   const lastKnownIdRef = useRef<string | null>(null);
   const isFirstLoadRef = useRef(true);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -149,56 +158,78 @@ export function NotificationCenter({ onNavigateTab }: NotificationCenterProps) {
     } catch {}
   };
 
-  // Delete single notification
-  const handleDeleteNotification = async (id: string, e?: React.MouseEvent) => {
+  // Open modern modal for single notification delete
+  const openSingleDeleteConfirm = (item: SystemNotificationItem, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    const target = notifications.find((n) => n.id === id);
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-    if (target && !target.isRead) {
-      setUnreadCount((prev) => Math.max(0, prev - 1));
-    }
-    dismissToast(id);
-
-    try {
-      await fetch(`/api/notifications?id=${id}`, {
-        method: 'DELETE',
-      });
-    } catch (err) {
-      console.error('Failed to delete notification:', err);
-    }
+    setDeleteModalState({
+      isOpen: true,
+      mode: 'SINGLE',
+      targetItem: item,
+    });
   };
 
-  // Clear all notifications
-  const handleClearAll = async (e?: React.MouseEvent) => {
+  // Open modern modal for clear all notifications (Anti window.confirm bawaan!)
+  const openClearAllConfirm = (e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (notifications.length === 0) return;
-    if (typeof window !== 'undefined' && !window.confirm('Bersihkan seluruh riwayat notifikasi?')) {
-      return;
-    }
-    setNotifications([]);
-    setUnreadCount(0);
-    setToastQueue([]);
-
-    try {
-      await fetch('/api/notifications?action=all', {
-        method: 'DELETE',
-      });
-    } catch (err) {
-      console.error('Failed to clear notifications:', err);
-    }
+    setDeleteModalState({
+      isOpen: true,
+      mode: 'ALL',
+    });
   };
 
-  // Clear read notifications
-  const handleClearRead = async (e?: React.MouseEvent) => {
+  // Open modern modal for clear read notifications
+  const openClearReadConfirm = (e?: React.MouseEvent) => {
     e?.stopPropagation();
-    setNotifications((prev) => prev.filter((n) => !n.isRead));
+    setDeleteModalState({
+      isOpen: true,
+      mode: 'READ',
+    });
+  };
 
-    try {
-      await fetch('/api/notifications?action=read', {
-        method: 'DELETE',
-      });
-    } catch (err) {
-      console.error('Failed to clear read notifications:', err);
+  // Execute deletion based on mode
+  const handleExecuteDelete = async () => {
+    if (deleteModalState.mode === 'ALL') {
+      setNotifications([]);
+      setUnreadCount(0);
+      setToastQueue([]);
+      setDeleteModalState({ isOpen: false, mode: 'ALL' });
+
+      try {
+        await fetch('/api/notifications?action=all', {
+          method: 'DELETE',
+        });
+      } catch (err) {
+        console.error('Failed to clear notifications:', err);
+      }
+    } else if (deleteModalState.mode === 'READ') {
+      setNotifications((prev) => prev.filter((n) => !n.isRead));
+      setDeleteModalState({ isOpen: false, mode: 'READ' });
+
+      try {
+        await fetch('/api/notifications?action=read', {
+          method: 'DELETE',
+        });
+      } catch (err) {
+        console.error('Failed to clear read notifications:', err);
+      }
+    } else if (deleteModalState.mode === 'SINGLE' && deleteModalState.targetItem) {
+      const targetId = deleteModalState.targetItem.id;
+      const target = notifications.find((n) => n.id === targetId);
+      setNotifications((prev) => prev.filter((n) => n.id !== targetId));
+      if (target && !target.isRead) {
+        setUnreadCount((prev) => Math.max(0, prev - 1));
+      }
+      dismissToast(targetId);
+      setDeleteModalState({ isOpen: false, mode: 'SINGLE' });
+
+      try {
+        await fetch(`/api/notifications?id=${targetId}`, {
+          method: 'DELETE',
+        });
+      } catch (err) {
+        console.error('Failed to delete notification:', err);
+      }
     }
   };
 
@@ -294,11 +325,11 @@ export function NotificationCenter({ onNavigateTab }: NotificationCenterProps) {
                 {notifications.length > 0 && (
                   <button
                     type="button"
-                    onClick={handleClearAll}
+                    onClick={openClearAllConfirm}
                     title="Hapus semua riwayat notifikasi"
                     className="inline-flex items-center gap-1 text-[11px] text-rose-300 hover:text-rose-100 transition cursor-pointer"
                   >
-                    <Trash2 className="h-3 w-3" />
+                    <Trash2 className="h-3.5 w-3.5" />
                     <span>Hapus Semua</span>
                   </button>
                 )}
@@ -335,7 +366,7 @@ export function NotificationCenter({ onNavigateTab }: NotificationCenterProps) {
                           </span>
                           <button
                             type="button"
-                            onClick={(e) => handleDeleteNotification(item.id, e)}
+                            onClick={(e) => openSingleDeleteConfirm(item, e)}
                             title="Hapus notifikasi ini"
                             className="opacity-70 sm:opacity-0 group-hover:opacity-100 transition flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
                           >
@@ -368,7 +399,7 @@ export function NotificationCenter({ onNavigateTab }: NotificationCenterProps) {
               {notifications.some((n) => n.isRead) && (
                 <button
                   type="button"
-                  onClick={handleClearRead}
+                  onClick={openClearReadConfirm}
                   className="inline-flex items-center gap-1 text-[10px] text-slate-600 hover:text-rose-600 font-medium transition cursor-pointer"
                 >
                   <Trash2 className="h-3 w-3" />
@@ -428,6 +459,47 @@ export function NotificationCenter({ onNavigateTab }: NotificationCenterProps) {
           </div>
         ))}
       </div>
+
+      {/* Modern Confirm Modal for Notification Deletion & Clearing (Anti window.confirm Bawaan Browser!) */}
+      <ConfirmDeleteModal
+        isOpen={deleteModalState.isOpen}
+        title={
+          deleteModalState.mode === 'ALL'
+            ? 'Bersihkan Seluruh Riwayat Notifikasi?'
+            : deleteModalState.mode === 'READ'
+            ? 'Bersihkan Notifikasi yang Sudah Dibaca?'
+            : 'Hapus Notifikasi Ini?'
+        }
+        description={
+          deleteModalState.mode === 'ALL'
+            ? `Apakah Anda yakin ingin menghapus semua ${notifications.length} riwayat aktivitas notifikasi dari sistem?`
+            : deleteModalState.mode === 'READ'
+            ? 'Notifikasi lama yang telah Anda lihat akan dibersihkan dari daftar.'
+            : 'Apakah Anda yakin ingin menghapus pesan notifikasi terpilih ini?'
+        }
+        itemName={
+          deleteModalState.mode === 'SINGLE' && deleteModalState.targetItem
+            ? `[${deleteModalState.targetItem.title}] ${deleteModalState.targetItem.message}`
+            : undefined
+        }
+        warningNote={
+          deleteModalState.mode === 'ALL'
+            ? 'Seluruh tumpukan riwayat notifikasi akan dihapus permanen dari database.'
+            : deleteModalState.mode === 'READ'
+            ? 'Notifikasi baru/penting yang belum dibaca akan tetap tersimpan aman.'
+            : 'Notifikasi ini akan dihapus permanen dari riwayat sistem.'
+        }
+        confirmText={
+          deleteModalState.mode === 'ALL'
+            ? 'Ya, Bersihkan Semua'
+            : deleteModalState.mode === 'READ'
+            ? 'Ya, Bersihkan'
+            : 'Ya, Hapus Notifikasi'
+        }
+        cancelText="Batal"
+        onConfirm={handleExecuteDelete}
+        onClose={() => setDeleteModalState({ isOpen: false, mode: 'ALL' })}
+      />
     </>
   );
 }
