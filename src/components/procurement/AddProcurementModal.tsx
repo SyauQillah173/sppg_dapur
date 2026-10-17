@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useStore } from '@/lib/store';
 import { SppgUnitId, ProcurementItem } from '@/lib/types';
 import { formatIDR, formatRupiah, hitungSelisih } from '@/lib/utils';
+import { compressImageHD } from '@/lib/image-compress';
 import {
   X,
   Plus,
@@ -19,6 +20,7 @@ import {
   Store,
   Wallet,
   Camera,
+  Coins,
 } from 'lucide-react';
 
 interface AddProcurementModalProps {
@@ -34,6 +36,8 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
     categories,
     units,
     ingredients,
+    budgetAllocations,
+    procurements,
     addSupplier,
     addEmployee,
   } = useStore();
@@ -52,17 +56,51 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
   const [isCustomRequester, setIsCustomRequester] = useState<boolean>(false);
   const [customRequesterName, setCustomRequesterName] = useState<string>('');
 
+  // Sumber Dana Belanja
+  const [fundingSource, setFundingSource] = useState<'DANA_HARI_INI' | 'SISA_SEBELUMNYA' | 'KAS_GABUNGAN'>('DANA_HARI_INI');
+
   // Cash / Kasbon Requested
   const [amountRequested, setAmountRequested] = useState<number>(150000000);
   const [notes, setNotes] = useState<string>('Pengadaan bahan dapur operasional gizi harian.');
 
   // Receipt photos — empty by default, only filled after real upload
   const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
+  const [compressionInfo, setCompressionInfo] = useState<string | null>(null);
 
   // AI OCR state
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [aiSuccessMessage, setAiSuccessMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  // Hitung sumber dana tersedia:
+  // 1. Dana Ajuan Hari Ini (sesuai tanggal belanja yang dipilih)
+  const todayBudgets = budgetAllocations.filter(
+    (b) => (sppgUnitId === 'ALL' || b.sppgUnitId === sppgUnitId || b.sppgUnitId === 'ALL') && b.allocatedDate.startsWith(date)
+  );
+  const danaHariIni = todayBudgets.reduce((s, b) => s + b.amountAllocated - (b.withdrawnAmount || 0), 0);
+  const belanjaHariIni = procurements
+    .filter((p) => (sppgUnitId === 'ALL' || p.sppgUnitId === sppgUnitId || p.sppgUnitId === 'ALL') && p.date.startsWith(date))
+    .reduce((s, p) => s + p.actualReceiptTotal, 0);
+  const sisaTersediaHariIni = Math.max(0, danaHariIni - belanjaHariIni);
+
+  // 2. Sisa Kas Sebelumnya (Rollover dari hari-hari sebelum tanggal belanja)
+  const pastBudgets = budgetAllocations.filter(
+    (b) => (sppgUnitId === 'ALL' || b.sppgUnitId === sppgUnitId || b.sppgUnitId === 'ALL') && b.allocatedDate.slice(0, 10) < date
+  );
+  const pastAllocated = pastBudgets.reduce((s, b) => s + b.amountAllocated - (b.withdrawnAmount || 0), 0);
+  const pastSpend = procurements
+    .filter((p) => (sppgUnitId === 'ALL' || p.sppgUnitId === sppgUnitId || p.sppgUnitId === 'ALL') && p.date.slice(0, 10) < date)
+    .reduce((s, p) => s + p.actualReceiptTotal, 0);
+  const sisaSebelumnya = Math.max(0, pastAllocated - pastSpend);
+
+  // 3. Total Kas Operasional
+  const totalAllPemasukan = budgetAllocations
+    .filter((b) => sppgUnitId === 'ALL' || b.sppgUnitId === sppgUnitId || b.sppgUnitId === 'ALL')
+    .reduce((s, b) => s + b.amountAllocated - (b.withdrawnAmount || 0), 0);
+  const totalAllPengeluaran = procurements
+    .filter((p) => sppgUnitId === 'ALL' || p.sppgUnitId === sppgUnitId || p.sppgUnitId === 'ALL')
+    .reduce((s, p) => s + p.actualReceiptTotal, 0);
+  const totalKasUtama = Math.max(0, totalAllPemasukan - totalAllPengeluaran);
   const [submitError, setSubmitError] = useState<string>('');
 
   // Line items
@@ -149,22 +187,35 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const file = files[0];
+    const rawFile = files[0];
     setIsScanning(true);
     setAiSuccessMessage(null);
+    setCompressionInfo('Mengompres foto ke format HD WebP...');
 
     try {
+      // 1. Kompresi gambar client-side HD WebP (mengurangi 95%+ kapasitas tanpa mengurangi ketajaman teks/angka)
+      let uploadFile: File = rawFile;
+      let localUrl = URL.createObjectURL(rawFile);
+      try {
+        const comp = await compressImageHD(rawFile, 1280, 1280, 0.78);
+        uploadFile = comp.file;
+        localUrl = comp.dataUrl;
+        setCompressionInfo(`HD WebP: ${comp.formattedCompressed} (Hemat ${comp.reductionPercentage}% dari ${comp.formattedOriginal})`);
+      } catch (cErr) {
+        console.warn('Kompresi WebP fallback ke file asli:', cErr);
+        setCompressionInfo(null);
+      }
+
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', uploadFile);
 
       // Create preview URL
-      const localUrl = URL.createObjectURL(file);
       setUploadedPhotos((prev) => [localUrl, ...prev]);
 
-      // Upload ke server: URL blob: hanya hidup di perangkat ini, jadi tidak ikut tersinkron.
+      // Upload ke server Postgres Neon dalam bentuk WebP ultra-hemat
       try {
         const uploadData = new FormData();
-        uploadData.append('file', file);
+        uploadData.append('file', uploadFile);
         const uploadRes = await fetch('/api/upload', { method: 'POST', body: uploadData });
         const uploadJson = await uploadRes.json();
         if (uploadJson?.success && uploadJson.url) {
@@ -282,6 +333,13 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
       finalRequesterRole = selectedEmpObj?.roleTitle || 'Staf Belanja';
     }
 
+    const sourceLabel = fundingSource === 'DANA_HARI_INI'
+      ? 'Dana Ajuan Hari Ini'
+      : fundingSource === 'SISA_SEBELUMNYA'
+      ? 'Sisa Kas Sebelumnya (Rollover)'
+      : 'Pagu Kas Operasional Gabungan';
+    const finalNotes = notes ? `[Sumber Dana: ${sourceLabel}] ${notes}` : `[Sumber Dana: ${sourceLabel}]`;
+
     const result = await addProcurement({
       receiptNumber: receiptNumber.trim() || '-',
       date,
@@ -299,7 +357,8 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
       status: 'PENDING_AUDIT',
       receiptPhotoUrl: uploadedPhotos[0] || '',
       physicalReceiptImage: uploadedPhotos[0] ? 'PHYSICAL_RECEIPT_NEW' : '',
-      notes,
+      fundingSource,
+      notes: finalNotes,
       items,
     });
 
@@ -385,7 +444,7 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
 
             {/* Photos Preview Thumbnails */}
             {uploadedPhotos.length > 0 && (
-              <div className="mt-3 flex items-center gap-2 overflow-x-auto pt-2 border-t border-blue-200/60">
+              <div className="mt-3 flex flex-wrap items-center gap-2 pt-2 border-t border-blue-200/60">
                 <span className="text-[11px] font-medium text-blue-900 whitespace-nowrap">
                   Foto Terlampir ({uploadedPhotos.length}):
                 </span>
@@ -397,6 +456,12 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
                     <img src={photo} alt={`Nota ${i + 1}`} className="w-full h-full object-cover" />
                   </div>
                 ))}
+                {compressionInfo && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                    <Sparkles className="h-3 w-3 text-emerald-600" />
+                    {compressionInfo}
+                  </span>
+                )}
               </div>
             )}
 
@@ -452,6 +517,115 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
                 placeholder="Boleh dikosongkan"
                 className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-2 font-mono text-xs text-slate-800 focus:border-slate-800 focus:outline-none"
               />
+            </div>
+          </div>
+
+          {/* Card Pemilihan Sumber Dana Belanja (Pagu Hari Ini vs Sisa Sebelumnya vs Kas Utama) */}
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3.5 space-y-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+              <div className="flex items-center gap-2">
+                <Coins className="h-4 w-4 text-indigo-600 shrink-0" />
+                <span className="text-xs font-bold text-indigo-950 uppercase tracking-wide">
+                  Pilih Sumber Dana Belanja
+                </span>
+              </div>
+              <span className="text-[11px] text-indigo-700">
+                Pilih sumber dana pemotongan kas untuk belanja ini
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+              {/* Opsi 1: Dana Ajuan Hari Ini */}
+              <button
+                type="button"
+                onClick={() => {
+                  setFundingSource('DANA_HARI_INI');
+                  if (sisaTersediaHariIni > 0) setAmountRequested(sisaTersediaHariIni);
+                }}
+                className={`p-3 rounded-lg border text-left transition flex flex-col justify-between ${
+                  fundingSource === 'DANA_HARI_INI'
+                    ? 'border-indigo-600 bg-white ring-2 ring-indigo-500/20 shadow-xs'
+                    : 'border-indigo-200/80 bg-white/70 hover:bg-white text-slate-700'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-900">Dana Ajuan Hari Ini</span>
+                    {fundingSource === 'DANA_HARI_INI' && (
+                      <span className="text-[10px] font-bold bg-indigo-600 text-white px-1.5 py-0.5 rounded">Aktif</span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    Alokasi tgl {new Date(date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}
+                  </p>
+                </div>
+                <div className="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between font-mono">
+                  <span className="text-[10px] text-slate-400">Sisa Tersedia:</span>
+                  <span className={`font-bold text-xs ${sisaTersediaHariIni > 0 ? 'text-emerald-700' : 'text-slate-400'}`}>
+                    {formatRupiah(sisaTersediaHariIni)}
+                  </span>
+                </div>
+              </button>
+
+              {/* Opsi 2: Sisa Kas Sebelumnya (Rollover) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setFundingSource('SISA_SEBELUMNYA');
+                  if (sisaSebelumnya > 0) setAmountRequested(sisaSebelumnya);
+                }}
+                className={`p-3 rounded-lg border text-left transition flex flex-col justify-between ${
+                  fundingSource === 'SISA_SEBELUMNYA'
+                    ? 'border-indigo-600 bg-white ring-2 ring-indigo-500/20 shadow-xs'
+                    : 'border-indigo-200/80 bg-white/70 hover:bg-white text-slate-700'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-900">Sisa Kas Sebelumnya</span>
+                    {fundingSource === 'SISA_SEBELUMNYA' && (
+                      <span className="text-[10px] font-bold bg-indigo-600 text-white px-1.5 py-0.5 rounded">Aktif</span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Sisa kas belum ditarik dari hari lalu</p>
+                </div>
+                <div className="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between font-mono">
+                  <span className="text-[10px] text-slate-400">Sisa Rollover:</span>
+                  <span className={`font-bold text-xs ${sisaSebelumnya > 0 ? 'text-indigo-700' : 'text-slate-400'}`}>
+                    {formatRupiah(sisaSebelumnya)}
+                  </span>
+                </div>
+              </button>
+
+              {/* Opsi 3: Pagu Kas Utama Gabungan */}
+              <button
+                type="button"
+                onClick={() => {
+                  setFundingSource('KAS_GABUNGAN');
+                  if (totalKasUtama > 0) setAmountRequested(totalKasUtama);
+                }}
+                className={`p-3 rounded-lg border text-left transition flex flex-col justify-between ${
+                  fundingSource === 'KAS_GABUNGAN'
+                    ? 'border-indigo-600 bg-white ring-2 ring-indigo-500/20 shadow-xs'
+                    : 'border-indigo-200/80 bg-white/70 hover:bg-white text-slate-700'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-900">Pagu Kas Utama</span>
+                    {fundingSource === 'KAS_GABUNGAN' && (
+                      <span className="text-[10px] font-bold bg-indigo-600 text-white px-1.5 py-0.5 rounded">Aktif</span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Saldo kas operasional total</p>
+                </div>
+                <div className="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between font-mono">
+                  <span className="text-[10px] text-slate-400">Total Saldo:</span>
+                  <span className={`font-bold text-xs ${totalKasUtama > 0 ? 'text-slate-900' : 'text-slate-400'}`}>
+                    {formatRupiah(totalKasUtama)}
+                  </span>
+                </div>
+              </button>
             </div>
           </div>
 

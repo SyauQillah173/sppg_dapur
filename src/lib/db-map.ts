@@ -112,6 +112,17 @@ export function budgetUnitName(sppgUnitId: string, units: SppgUnit[]): string {
 }
 
 export function toBudget(row: any, units: SppgUnit[]): BudgetAllocationItem {
+  let meta: any = {};
+  let noteText = row.notes || '';
+  if (row.notes && typeof row.notes === 'string' && (row.notes.startsWith('{') || row.notes.startsWith('['))) {
+    try {
+      meta = JSON.parse(row.notes);
+      noteText = meta.note || '';
+    } catch {
+      // not JSON, keep as is
+    }
+  }
+
   return {
     id: row.id,
     sppgUnitId: row.sppgUnitId,
@@ -121,6 +132,15 @@ export function toBudget(row: any, units: SppgUnit[]): BudgetAllocationItem {
     amountRealized: num(row.amountRealized),
     remainingBudget: num(row.remainingBudget),
     allocatedDate: new Date(row.allocatedDate).toISOString(),
-    notes: row.notes || '',
+    notes: noteText,
+    rawNotes: row.notes || '',
+    requestedBy: row.requestedBy || meta.requestedBy || '',
+    requesterFor: row.requesterFor || meta.requesterFor || '',
+    cashHolder: row.cashHolder || meta.cashHolder || '',
+    transferProofUrl: row.transferProofUrl || meta.transferProofUrl || '',
+    withdrawnAmount: num(row.withdrawnAmount ?? meta.withdrawnAmount),
+    withdrawnAt: row.withdrawnAt || meta.withdrawnAt || undefined,
+    withdrawnBy: row.withdrawnBy || meta.withdrawnBy || '',
+    withdrawnNote: row.withdrawnNote || meta.withdrawnNote || '',
   };
 }

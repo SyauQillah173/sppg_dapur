@@ -8,6 +8,18 @@ export function budgetToApp(row: any, unitMap?: Map<string, string>) {
     row.sppgUnitId === 'ALL'
       ? 'Semua SPPG (Gabungan 4 Unit)'
       : unitMap?.get(row.sppgUnitId) || row.sppgUnitId;
+
+  let meta: any = {};
+  let noteText = row.notes || '';
+  if (row.notes && typeof row.notes === 'string' && (row.notes.startsWith('{') || row.notes.startsWith('['))) {
+    try {
+      meta = JSON.parse(row.notes);
+      noteText = meta.note || '';
+    } catch {
+      // not JSON, keep as is
+    }
+  }
+
   return {
     id: row.id,
     sppgUnitId: row.sppgUnitId,
@@ -17,7 +29,16 @@ export function budgetToApp(row: any, unitMap?: Map<string, string>) {
     amountRealized: Number(row.amountRealized),
     remainingBudget: Number(row.remainingBudget),
     allocatedDate: new Date(row.allocatedDate).toISOString(),
-    notes: row.notes || '',
+    notes: noteText,
+    rawNotes: row.notes || '',
+    requestedBy: row.requestedBy || meta.requestedBy || '',
+    requesterFor: row.requesterFor || meta.requesterFor || '',
+    cashHolder: row.cashHolder || meta.cashHolder || '',
+    transferProofUrl: row.transferProofUrl || meta.transferProofUrl || '',
+    withdrawnAmount: Number(row.withdrawnAmount ?? meta.withdrawnAmount) || 0,
+    withdrawnAt: row.withdrawnAt || meta.withdrawnAt || undefined,
+    withdrawnBy: row.withdrawnBy || meta.withdrawnBy || '',
+    withdrawnNote: row.withdrawnNote || meta.withdrawnNote || '',
   };
 }
 

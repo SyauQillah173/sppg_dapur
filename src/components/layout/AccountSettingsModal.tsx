@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useStore } from '@/lib/store';
-import { KeyRound, X, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { KeyRound, X, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 
 interface AccountSettingsModalProps {
   onClose: () => void;
@@ -18,6 +18,8 @@ export function AccountSettingsModal({ onClose }: AccountSettingsModalProps) {
   const [username, setUsername] = useState(currentUser?.username || '');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [doneMsg, setDoneMsg] = useState('');
@@ -121,27 +123,51 @@ export function AccountSettingsModal({ onClose }: AccountSettingsModalProps) {
             <label className="block text-xs font-medium text-slate-700 mb-1">
               Password Baru <span className="text-slate-400 font-normal">(kosongkan kalau tidak diganti)</span>
             </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={isSaving || !!doneMsg}
-              autoComplete="new-password"
-              placeholder="Minimal 8 karakter"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={isSaving || !!doneMsg}
+                autoComplete="new-password"
+                placeholder="Minimal 8 karakter"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 pr-10 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                tabIndex={-1}
+                title={showPassword ? 'Sembunyikan password' : 'Lihat password'}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1 rounded transition"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
 
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1">Ulangi Password Baru</label>
-            <input
-              type="password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              disabled={isSaving || !password || !!doneMsg}
-              autoComplete="new-password"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900 disabled:bg-slate-50"
-            />
+            <div className="relative">
+              <input
+                type={showConfirm ? 'text' : 'password'}
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                disabled={isSaving || !password || !!doneMsg}
+                autoComplete="new-password"
+                placeholder="Ulangi password di atas..."
+                className="w-full rounded-md border border-slate-300 px-3 py-2 pr-10 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900 disabled:bg-slate-50"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirm((v) => !v)}
+                disabled={!password || isSaving || !!doneMsg}
+                tabIndex={-1}
+                title={showConfirm ? 'Sembunyikan password' : 'Lihat password'}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1 rounded transition disabled:opacity-40"
+              >
+                {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
 
           <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">

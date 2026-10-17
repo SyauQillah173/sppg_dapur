@@ -96,6 +96,21 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
+        const hasMeta = r.requestedBy || r.requesterFor || r.cashHolder || r.transferProofUrl || r.withdrawnAmount;
+        const serializedNotes = hasMeta
+          ? JSON.stringify({
+              note: r.notes || '',
+              requestedBy: r.requestedBy || '',
+              requesterFor: r.requesterFor || '',
+              cashHolder: r.cashHolder || '',
+              transferProofUrl: r.transferProofUrl || '',
+              withdrawnAmount: Number(r.withdrawnAmount) || 0,
+              withdrawnAt: r.withdrawnAt || undefined,
+              withdrawnBy: r.withdrawnBy || '',
+              withdrawnNote: r.withdrawnNote || '',
+            })
+          : (r.notes || null);
+
         const row = await tx.budgetAllocation.create({
           data: {
             ...(r.id ? { id: r.id } : {}),
@@ -105,7 +120,7 @@ export async function POST(req: NextRequest) {
             amountRealized: Number(r.amountRealized) || 0,
             remainingBudget: r.remainingBudget !== undefined ? Number(r.remainingBudget) : amount,
             allocatedDate,
-            notes: r.notes || null,
+            notes: serializedNotes,
           },
         });
         await applyBudgetToUnits(tx, r.sppgUnitId, amount);
@@ -122,11 +137,14 @@ export async function POST(req: NextRequest) {
       try {
         const notifData = created.map((row) => {
           const unitLabel = row.sppgUnitId === 'ALL' ? 'Semua Unit (4 Dapur)' : (unitMap.get(row.sppgUnitId) || row.sppgUnitId);
+          const appBudget = budgetToApp(row, unitMap);
+          const pengajuText = appBudget.requestedBy ? ` oleh ${appBudget.requestedBy}` : '';
+          const picText = appBudget.cashHolder ? ` (Pemegang Kas: ${appBudget.cashHolder})` : '';
           return {
             type: 'BUDGET_ADDED',
             title: 'Kas Masuk Baru Diinput',
-            message: `Superadmin mencatat alokasi kas masuk sebesar Rp ${Number(row.amountAllocated).toLocaleString('id-ID')} untuk ${unitLabel} (${row.fiscalPeriod}).`,
-            actorName: 'Superadmin Pengelola',
+            message: `Kas masuk diajukan${pengajuText} sebesar Rp ${Number(row.amountAllocated).toLocaleString('id-ID')} untuk ${unitLabel} (${row.fiscalPeriod})${picText}.`,
+            actorName: appBudget.requestedBy || 'Superadmin Pengelola',
             amount: row.amountAllocated,
             unitName: unitLabel,
             referenceId: row.id,

@@ -100,6 +100,7 @@ interface StoreContextType {
   deleteEmployee: (id: string) => Promise<{ ok: boolean; error?: string }>;
   addBudgetAllocation: (item: Omit<BudgetAllocationItem, 'id' | 'allocatedDate'> & { allocatedDate?: string }) => Promise<{ ok: boolean; error?: string }>;
   addBudgetAllocationsBulk: (items: Array<Omit<BudgetAllocationItem, 'id' | 'allocatedDate'> & { allocatedDate?: string }>) => Promise<{ ok: boolean; error?: string }>;
+  updateBudgetAllocation: (id: string, updates: Partial<BudgetAllocationItem>) => Promise<{ ok: boolean; error?: string }>;
   deleteBudgetAllocation: (id: string) => Promise<{ ok: boolean; error?: string }>;
   addSppgUnit: (unit: Omit<SppgUnit, 'id' | 'totalRealized' | 'totalRemaining'>) => Promise<{ ok: boolean; error?: string }>;
   updateSppgUnit: (id: string, data: Partial<SppgUnit>) => Promise<{ ok: boolean; error?: string }>;
@@ -572,8 +573,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         remainingBudget: item.remainingBudget,
         allocatedDate: item.allocatedDate,
         notes: item.notes,
+        requestedBy: item.requestedBy,
+        requesterFor: item.requesterFor,
+        cashHolder: item.cashHolder,
+        transferProofUrl: item.transferProofUrl,
+        withdrawnAmount: item.withdrawnAmount,
+        withdrawnAt: item.withdrawnAt,
+        withdrawnBy: item.withdrawnBy,
+        withdrawnNote: item.withdrawnNote,
       })),
     });
+    if (result.ok) await refreshFromDb();
+    return result;
+  };
+
+  const updateBudgetAllocation = async (id: string, updates: Partial<BudgetAllocationItem>) => {
+    const result = await postJson(`/api/budgets/${id}`, updates, 'PATCH');
     if (result.ok) await refreshFromDb();
     return result;
   };
@@ -773,6 +788,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         deleteEmployee,
         addBudgetAllocation,
         addBudgetAllocationsBulk,
+        updateBudgetAllocation,
         deleteBudgetAllocation,
         addSppgUnit,
         updateSppgUnit,

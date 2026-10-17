@@ -18,8 +18,34 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     const updated = await prisma.$transaction(async (tx) => {
-      // Kembalikan dulu pengaruh catatan lama ke pagu kas unit
-      await applyBudgetToUnits(tx, existing.sppgUnitId, -Number(existing.amountAllocated));
+      // Baca metadata lama jika ada
+      let oldMeta: any = {};
+      if (existing.notes && typeof existing.notes === 'string' && (existing.notes.startsWith('{') || existing.notes.startsWith('['))) {
+        try {
+          oldMeta = JSON.parse(existing.notes);
+        } catch {
+          // ignore
+        }
+      }
+
+      const mergedMeta = {
+        note: body.notes !== undefined ? body.notes : (oldMeta.note || existing.notes || ''),
+        requestedBy: body.requestedBy !== undefined ? body.requestedBy : (oldMeta.requestedBy || ''),
+        requesterFor: body.requesterFor !== undefined ? body.requesterFor : (oldMeta.requesterFor || ''),
+        cashHolder: body.cashHolder !== undefined ? body.cashHolder : (oldMeta.cashHolder || ''),
+        transferProofUrl: body.transferProofUrl !== undefined ? body.transferProofUrl : (oldMeta.transferProofUrl || ''),
+        withdrawnAmount: body.withdrawnAmount !== undefined ? Number(body.withdrawnAmount) : (oldMeta.withdrawnAmount || 0),
+        withdrawnAt: body.withdrawnAt !== undefined ? body.withdrawnAt : oldMeta.withdrawnAt,
+        withdrawnBy: body.withdrawnBy !== undefined ? body.withdrawnBy : (oldMeta.withdrawnBy || ''),
+        withdrawnNote: body.withdrawnNote !== undefined ? body.withdrawnNote : (oldMeta.withdrawnNote || ''),
+      };
+
+      const hasMeta = mergedMeta.requestedBy || mergedMeta.requesterFor || mergedMeta.cashHolder || mergedMeta.transferProofUrl || mergedMeta.withdrawnAmount > 0;
+      const serializedNotes = hasMeta ? JSON.stringify(mergedMeta) : (body.notes !== undefined ? body.notes : existing.notes);
+
+      // Kembalikan dulu pengaruh catatan lama ke pagu kas unit (dikurangi sisa yang sudah ditarik sebelumnya jika ada)
+      const oldNetAllocated = Number(existing.amountAllocated) - (Number(oldMeta.withdrawnAmount) || 0);
+      await applyBudgetToUnits(tx, existing.sppgUnitId, -oldNetAllocated);
 
       const data: any = {};
       if (body.sppgUnitId) data.sppgUnitId = body.sppgUnitId;
@@ -30,12 +56,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         data.amountAllocated = amount;
       }
       if (body.amountRealized !== undefined) data.amountRealized = Number(body.amountRealized) || 0;
-      if (body.remainingBudget !== undefined) data.remainingBudget = Number(body.remainingBudget) || 0;
+      
+      const newAmountAllocated = data.amountAllocated ?? Number(existing.amountAllocated);
+      const newAmountRealized = data.amountRealized ?? Number(existing.amountRealized);
+      
+      if (body.remainingBudget !== undefined) {
+        data.remainingBudget = Number(body.remainingBudget) || 0;
+      } else if (body.withdrawnAmount !== undefined) {
+        data.remainingBudget = Math.max(0, newAmountAllocated - newAmountRealized - mergedMeta.withdrawnAmount);
+      }
+
       if (body.allocatedDate) data.allocatedDate = new Date(body.allocatedDate);
-      if (body.notes !== undefined) data.notes = body.notes || null;
+      data.notes = serializedNotes;
 
       const row = await tx.budgetAllocation.update({ where: { id }, data });
-      await applyBudgetToUnits(tx, row.sppgUnitId, Number(row.amountAllocated));
+      const newNetAllocated = Number(row.amountAllocated) - (Number(mergedMeta.withdrawnAmount) || 0);
+      await applyBudgetToUnits(tx, row.sppgUnitId, newNetAllocated);
       return row;
     });
 

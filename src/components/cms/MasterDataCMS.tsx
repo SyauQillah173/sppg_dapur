@@ -23,6 +23,8 @@ import {
   Sparkles,
   Calculator,
   Share2,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal';
 
@@ -67,6 +69,7 @@ export function MasterDataCMS() {
 
   // 1. Modals state
   const [modalType, setModalType] = useState<string | null>(null);
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
 
   // Form states for SPPG
   const [sppgForm, setSppgForm] = useState({
@@ -1787,18 +1790,33 @@ export function MasterDataCMS() {
                         ? 'Password Baru (Kosongkan jika tidak diganti)'
                         : 'Password Login'}
                     </label>
-                    <input
-                      type="password"
-                      required={!adminForm.id}
-                      value={adminForm.password}
-                      onChange={(e) => setAdminForm({ ...adminForm, password: e.target.value })}
-                      placeholder={
-                        adminForm.id
-                          ? 'Kosongkan jika password lama tetap dipakai...'
-                          : 'Masukkan password aman...'
-                      }
-                      className="w-full rounded border border-slate-300 p-2 text-sm text-slate-800"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showAdminPassword ? 'text' : 'password'}
+                        required={!adminForm.id}
+                        value={adminForm.password}
+                        onChange={(e) => setAdminForm({ ...adminForm, password: e.target.value })}
+                        placeholder={
+                          adminForm.id
+                            ? 'Kosongkan jika password lama tetap dipakai...'
+                            : 'Masukkan password aman...'
+                        }
+                        className="w-full rounded border border-slate-300 p-2 pr-10 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowAdminPassword((prev) => !prev)}
+                        tabIndex={-1}
+                        title={showAdminPassword ? 'Sembunyikan password' : 'Lihat password'}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1 rounded transition"
+                      >
+                        {showAdminPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <label className="block font-semibold text-slate-700 uppercase mb-1">

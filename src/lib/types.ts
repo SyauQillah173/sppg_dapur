@@ -55,6 +55,7 @@ export interface ProcurementTransaction {
   auditNotes?: string;
   discrepancyReason?: string;
   notes?: string;
+  fundingSource?: 'DANA_HARI_INI' | 'SISA_SEBELUMNYA' | 'KAS_GABUNGAN';
   createdAt: string;
 }
 
@@ -162,6 +163,15 @@ export interface BudgetAllocationItem {
   remainingBudget: number;
   allocatedDate: string;
   notes?: string;
+  rawNotes?: string;
+  requestedBy?: string;
+  requesterFor?: string;
+  cashHolder?: string;
+  transferProofUrl?: string;
+  withdrawnAmount?: number;
+  withdrawnAt?: string;
+  withdrawnBy?: string;
+  withdrawnNote?: string;
 }
 
 export interface AdminUserItem {
