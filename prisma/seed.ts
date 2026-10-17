@@ -216,7 +216,7 @@ async function main() {
         defaultUnit: ing.defaultUnit,
         currentStock: 0, // Stok awal bersih 0
         minStockAlert: 5,
-        lastPurchasePrice: ing.price,
+        lastPurchasePrice: 0, // Harga estimasi stok awal bersih 0 (akan diisi manual)
         sppgDistribution: {
           'SPPG-AA02': 0,
           'SPPG-BS02': 0,

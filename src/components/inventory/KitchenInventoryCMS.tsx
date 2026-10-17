@@ -190,9 +190,9 @@ export function KitchenInventoryCMS() {
  setIngName('');
  setIngCategory(categories[0]?.name || 'Sayuran');
  setIngUnit('Kg');
- setIngStock(10);
+ setIngStock(0);
  setIngMinAlert(5);
- setIngPrice(25000);
+ setIngPrice(0);
  const initialDist: Record<string, number> = {};
  sppgUnits.forEach((u) => {
    initialDist[u.id] = 0;
