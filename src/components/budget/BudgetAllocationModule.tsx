@@ -15,6 +15,7 @@ import {
   Coins, Clock, Receipt, Check, ArrowRight,
 } from 'lucide-react';
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal';
+import { AlertModal, AlertModalType } from '@/components/ui/AlertModal';
 
 export function BudgetAllocationModule() {
   const {
@@ -80,6 +81,15 @@ export function BudgetAllocationModule() {
   const [withdrawNote, setWithdrawNote] = useState<string>('');
   const [isWithdrawing, setIsWithdrawing] = useState<boolean>(false);
   const [withdrawError, setWithdrawError] = useState<string>('');
+  const [alertInfo, setAlertInfo] = useState<{
+    isOpen: boolean;
+    type?: AlertModalType;
+    title: string;
+    message: string;
+    highlightNote?: string;
+    actionText?: string;
+    onAction?: () => void;
+  } | null>(null);
 
   // ── Lightbox Bukti TF Modal ───────────────────────────────────────────────
   const [activeProofModal, setActiveProofModal] = useState<{
@@ -316,13 +326,37 @@ export function BudgetAllocationModule() {
     const target =
       budget ||
       todayBudgets.find(b => b.remainingBudget > 0) ||
-      candidates[0] ||
-      todayBudgets[0] ||
-      filteredBudgets[0] ||
-      budgetAllocations[0];
+      candidates[0];
 
     if (!target) {
-      alert('Belum ada catatan alokasi dana kas operasional. Silakan catat dana masuk baru terlebih dahulu.');
+      if (budgetAllocations.length === 0) {
+        setAlertInfo({
+          isOpen: true,
+          type: 'warning',
+          title: 'Belum Ada Alokasi Kas Operasional',
+          message: 'Saat ini belum terdapat catatan alokasi dana kas operasional di sistem. Silakan catat dana masuk operasional baru terlebih dahulu.',
+          highlightNote: 'Setelah dana kas masuk dicatat dan dibelanjakan, sisa uang kas akan otomatis terhitung secara live dan dapat ditarik secara transparan.',
+          actionText: 'Catat Kas Masuk Sekarang',
+          onAction: () => {
+            setRequestedBy(defaultPengaju);
+            setIsModalOpen(true);
+          },
+        });
+      } else {
+        // Semua alokasi sudah terserap / ditarik hingga Rp 0
+        setAlertInfo({
+          isOpen: true,
+          type: 'info',
+          title: 'Semua Sisa Kas Sudah Bersih (Rp 0)',
+          message: 'Seluruh alokasi kas operasional yang tercatat saat ini sudah bersisa Rp 0 (sudah habis dibelanjakan atau seluruh sisa dana telah ditarik/disetor kembali ke kas utama).',
+          highlightNote: 'Anda dapat meninjau rincian pengembalian sebelumnya pada tabel "Riwayat Penarikan Sisa Kas & Berita Acara Pengembalian" di bawah.',
+          actionText: 'Catat Kas Masuk Baru',
+          onAction: () => {
+            setRequestedBy(defaultPengaju);
+            setIsModalOpen(true);
+          },
+        });
+      }
       return;
     }
     selectWithdrawTarget(target);
@@ -1832,6 +1866,20 @@ export function BudgetAllocationModule() {
         onConfirm={handleConfirmDeleteBudget}
         onClose={() => setDeleteTargetId(null)}
       />
+
+      {/* Modern Custom Guidance / Alert Modal */}
+      {alertInfo && (
+        <AlertModal
+          isOpen={alertInfo.isOpen}
+          type={alertInfo.type || 'info'}
+          title={alertInfo.title}
+          message={alertInfo.message}
+          highlightNote={alertInfo.highlightNote}
+          actionText={alertInfo.actionText}
+          onAction={alertInfo.onAction}
+          onClose={() => setAlertInfo(null)}
+        />
+      )}
     </div>
   );
 }

@@ -125,11 +125,19 @@ export function AIScannerModal({ onClose }: AIScannerModalProps) {
  physicalReceiptImage: '',
  notes: `Di-import otomatis via AI Smart Nota Scanner (Akurasi ${currentResult.confidence}%). Memerlukan verifikasi fisik akhir oleh Auditor.`,
  items: currentResult.items,
- });
- if (!result.ok) {
- window.alert(result.error || 'Gagal menyimpan hasil scan ke database.');
- return;
- }
+    });
+    if (!result.ok) {
+      window.dispatchEvent(
+        new CustomEvent('app:alert', {
+          detail: {
+            type: 'error',
+            title: 'Gagal Menyimpan Hasil Scan',
+            message: result.error || 'Gagal menyimpan hasil scan ke database.',
+          },
+        })
+      );
+      return;
+    }
  onClose();
  };
 

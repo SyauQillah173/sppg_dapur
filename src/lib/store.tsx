@@ -198,7 +198,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const failNotify = (result: { ok: boolean; error?: string }) => {
     if (!result.ok && typeof window !== 'undefined') {
-      window.alert(result.error || 'Gagal menyimpan ke database.');
+      window.dispatchEvent(
+        new CustomEvent('app:alert', {
+          detail: {
+            type: 'error',
+            title: 'Gagal Menyimpan Data',
+            message: result.error || 'Gagal menyimpan perubahan ke database.',
+          },
+        })
+      );
     }
     return result;
   };

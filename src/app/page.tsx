@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StoreProvider, useStore } from '@/lib/store';
 import { Header } from '@/components/layout/Header';
 import { Navbar, ActiveTab } from '@/components/layout/Navbar';
@@ -13,11 +13,38 @@ import { MasterDataCMS } from '@/components/cms/MasterDataCMS';
 import { SplitScreenReceiptModal } from '@/components/procurement/SplitScreenReceiptModal';
 import { AIScannerModal } from '@/components/procurement/AIScannerModal';
 import { AddProcurementModal } from '@/components/procurement/AddProcurementModal';
+import { AlertModal, AlertModalType } from '@/components/ui/AlertModal';
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const { modal, closeModal, userRole } = useStore();
   const isAuditor = userRole === 'EXECUTIVE_AUDITOR';
+
+  // Global listener untuk menggantikan semua alert bawaan browser
+  const [globalAlert, setGlobalAlert] = useState<{
+    isOpen: boolean;
+    type?: AlertModalType;
+    title: string;
+    message: string;
+    highlightNote?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail) {
+        setGlobalAlert({
+          isOpen: true,
+          type: customEvent.detail.type || 'error',
+          title: customEvent.detail.title || 'Pemberitahuan Sistem',
+          message: customEvent.detail.message || '',
+          highlightNote: customEvent.detail.highlightNote,
+        });
+      }
+    };
+    window.addEventListener('app:alert', handler);
+    return () => window.removeEventListener('app:alert', handler);
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 antialiased font-sans flex flex-col selection:bg-slate-900 selection:text-white">
@@ -65,6 +92,18 @@ function AppContent() {
 
       {modal.type === 'ADD_PROCUREMENT' && (
         <AddProcurementModal onClose={closeModal} />
+      )}
+
+      {/* Global Alert / Notification Modal */}
+      {globalAlert && (
+        <AlertModal
+          isOpen={globalAlert.isOpen}
+          type={globalAlert.type || 'error'}
+          title={globalAlert.title}
+          message={globalAlert.message}
+          highlightNote={globalAlert.highlightNote}
+          onClose={() => setGlobalAlert(null)}
+        />
       )}
 
       {/* Footer */}

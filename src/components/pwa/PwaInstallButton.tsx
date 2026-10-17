@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { DownloadCloud, CheckCircle2, Smartphone, X } from 'lucide-react';
+import { AlertModal } from '@/components/ui/AlertModal';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -18,6 +19,7 @@ export function PwaInstallButton({ className = '', variant = 'header' }: PwaInst
   const [isInstalled, setIsInstalled] = useState(false);
   const [isIos, setIsIos] = useState(false);
   const [showIosModal, setShowIosModal] = useState(false);
+  const [showChromeModal, setShowChromeModal] = useState(false);
 
   useEffect(() => {
     // Check if already in standalone mode
@@ -67,10 +69,7 @@ export function PwaInstallButton({ className = '', variant = 'header' }: PwaInst
       }
       setDeferredPrompt(null);
     } else {
-      // Chrome desktop fallback: guide user or alert
-      alert(
-        'Untuk menginstal di Chrome: Klik ikon titik tiga (⋮) di pojok kanan atas browser, lalu pilih "Simpan dan Bagikan" -> "Install SPPG Dapur", atau klik ikon Komputer/Download di bilah alamat URL.'
-      );
+      setShowChromeModal(true);
     }
   };
 
@@ -140,6 +139,17 @@ export function PwaInstallButton({ className = '', variant = 'header' }: PwaInst
           </div>
         </div>
       )}
+
+      {/* Modern Chrome Modal Guide */}
+      <AlertModal
+        isOpen={showChromeModal}
+        type="info"
+        title="Pasang Aplikasi di Google Chrome"
+        message="Anda dapat mengunduh dan memasang SPPG Dapur langsung ke perangkat komputer/laptop tanpa perlu membuka tab browser lagi."
+        highlightNote='Langkah Cepat: Klik ikon titik tiga (⋮) di pojok kanan atas browser Chrome Anda -> pilih menu "Simpan dan Bagikan" -> lalu klik "Install SPPG Dapur", atau klik ikon Komputer/Download di sebelah kanan bilah URL.'
+        closeText="Saya Mengerti"
+        onClose={() => setShowChromeModal(false)}
+      />
     </>
   );
 }
