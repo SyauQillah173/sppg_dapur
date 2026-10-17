@@ -73,7 +73,7 @@ export async function setSessionCookie(res: { cookies: { set: Function } }, user
   res.cookies.set(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax',
     path: '/',
     maxAge: 60 * 60 * 24 * 30, // 30 hari
   });

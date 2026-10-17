@@ -1,7 +1,6 @@
 // Service Worker for SPPG Dapur PWA
-const CACHE_NAME = 'sppg-dapur-v2';
+const CACHE_NAME = 'sppg-dapur-v3';
 const PRECACHE_ASSETS = [
-  '/',
   '/manifest.json',
   '/badan-gizi.png',
   '/icon-192.png',
@@ -10,7 +9,7 @@ const PRECACHE_ASSETS = [
   '/apple-touch-icon.png',
 ];
 
-// Install: precache essential shell assets
+// Install: precache static shell assets only (never precache dynamic / root)
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
@@ -20,7 +19,7 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activate: clean up outdated caches
+// Activate: clean up outdated caches immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
@@ -32,12 +31,22 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch: network-first strategy for dynamic data, cache fallback for assets
+// Fetch: network-first strategy, bypass cache for all navigation and API requests
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
   // Skip API calls from cache — all API requests must always be live
   if (url.pathname.startsWith('/api/') || event.request.method !== 'GET') {
+    return;
+  }
+
+  // Navigation requests (HTML pages) must always fetch live network to respect auth cookies
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(() => {
+        return caches.match(event.request);
+      })
+    );
     return;
   }
 
@@ -53,12 +62,7 @@ self.addEventListener('fetch', (event) => {
         return networkResponse;
       })
       .catch(() => {
-        return caches.match(event.request).then((cachedResponse) => {
-          if (cachedResponse) return cachedResponse;
-          if (event.request.headers.get('accept')?.includes('text/html')) {
-            return caches.match('/');
-          }
-        });
+        return caches.match(event.request);
       })
   );
 });

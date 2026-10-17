@@ -374,6 +374,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // ignore
     }
+    try {
+      localStorage.removeItem('giziflow_session_token');
+      localStorage.removeItem('giziflow_session_user');
+    } catch {
+      // ignore
+    }
     window.location.href = '/login';
   };
 

@@ -56,8 +56,19 @@ export async function POST(req: NextRequest) {
     }
     const sessionUser = { id: user.id, username: user.username, name: user.name, role: user.role as 'SUPERADMIN' | 'EXECUTIVE_AUDITOR' };
     const token = await createSessionToken(sessionUser);
-    const response = NextResponse.json({ success: true, user: { id: user.id, username: user.username, name: user.name, role: user.role }, message: 'Login berhasil.' });
-    response.cookies.set('giziflow_session', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/', maxAge: 60 * 60 * 24 * 30 });
+    const response = NextResponse.json({
+      success: true,
+      token,
+      user: { id: user.id, username: user.username, name: user.name, role: user.role },
+      message: 'Login berhasil.',
+    });
+    response.cookies.set('giziflow_session', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 30, // 30 hari
+    });
     return response;
   } catch (error: unknown) {
     console.error('Login error:', error);

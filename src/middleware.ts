@@ -58,7 +58,7 @@ export async function middleware(request: NextRequest) {
     /\.(png|jpg|jpeg|gif|webp|svg|ico|woff2?|ttf|otf|css|js|map|json|webmanifest)$/.test(pathname)
   ) return NextResponse.next();
 
-  if (pathname === '/api/auth/login' || pathname === '/api/auth/logout') {
+  if (pathname === '/api/auth/login' || pathname === '/api/auth/logout' || pathname === '/api/auth/restore') {
     const res = NextResponse.next();
     Object.entries(SEC).forEach(([k, v]) => res.headers.set(k, v));
     return res;
@@ -79,7 +79,17 @@ export async function middleware(request: NextRequest) {
   }
 
   if (isAuthenticated && isLoginPage) {
-    return NextResponse.redirect(new URL('/', request.url));
+    const redirectRes = NextResponse.redirect(new URL('/', request.url));
+    if (token) {
+      redirectRes.cookies.set('giziflow_session', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 60 * 60 * 24 * 30, // 30 hari
+      });
+    }
+    return redirectRes;
   }
 
   const res = NextResponse.next();
@@ -90,7 +100,7 @@ export async function middleware(request: NextRequest) {
     res.cookies.set('giziflow_session', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax',
       path: '/',
       maxAge: 60 * 60 * 24 * 30, // 30 hari
     });
