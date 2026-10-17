@@ -358,12 +358,34 @@ export function ProcurementModule() {
                         {formatIDR(trx.actualReceiptTotal)}
                       </td>
                       <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                        <div className="font-mono tabular-nums font-medium text-emerald-600">
-                          {formatIDR(trx.changeReturned)}
-                        </div>
-                        <div className={`text-[10px] font-mono tabular-nums ${sel.over ? 'text-rose-600 font-bold' : 'text-slate-400'}`}>
-                          {sel.persenText} selisih
-                        </div>
+                        {sel.over ? (
+                          <>
+                            <div className="font-mono tabular-nums font-bold text-rose-600">
+                              -{formatIDR(sel.nominal)}
+                            </div>
+                            <div className="text-[10px] font-mono tabular-nums font-bold text-rose-600">
+                              {sel.persenText} Nombok / Kurang
+                            </div>
+                          </>
+                        ) : sel.nominal < 0 ? (
+                          <>
+                            <div className="font-mono tabular-nums font-bold text-emerald-600">
+                              +{formatIDR(Math.abs(sel.nominal))}
+                            </div>
+                            <div className="text-[10px] font-mono tabular-nums text-emerald-700 font-medium">
+                              {sel.persenText} Uang Kembali
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="font-mono tabular-nums font-medium text-slate-600">
+                              Rp 0
+                            </div>
+                            <div className="text-[10px] font-mono tabular-nums text-slate-400">
+                              Pas / Sesuai
+                            </div>
+                          </>
+                        )}
                       </td>
                       <td className="py-2.5 px-3 text-center whitespace-nowrap">
                         {trx.status === 'VERIFIED' && (

@@ -213,34 +213,76 @@ export function ExecutiveDashboard({ onNavigateToProcurement, onNavigateToInvent
  {formatNumber(kpiSummary.budgetUsedPercentage, 1)}%
  </span>
  <span>dari total pagu anggaran</span>
+ {kpiSummary.budgetUsedPercentage > 100 && (
+   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">
+     Over-Budget
+   </span>
+ )}
  </div>
  </div>
  </div>
 
  {/* Card 3: Sisa Uang Belanja / Kas Aktif */}
- <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+ <div className={`rounded-lg border p-4 shadow-sm ${
+   kpiSummary.activeRemainingCash < 0
+     ? 'border-rose-200 bg-rose-50/20'
+     : 'border-slate-200 bg-white'
+ }`}>
  <div className="flex items-center justify-between">
- <span className="text-xs font-medium uppercase tracking-wider text-slate-500">
- Sisa Kas / Dana Aktif
+ <span className={`text-xs font-medium uppercase tracking-wider ${
+   kpiSummary.activeRemainingCash < 0 ? 'text-rose-700 font-bold' : 'text-slate-500'
+ }`}>
+ {kpiSummary.activeRemainingCash < 0 ? 'Defisit Kas Operasional' : 'Sisa Kas / Dana Aktif'}
  </span>
- <div className="flex h-7 w-7 items-center justify-center rounded bg-emerald-50 text-emerald-600">
- <PiggyBank className="h-4 w-4" />
+ <div className={`flex h-7 w-7 items-center justify-center rounded ${
+   kpiSummary.activeRemainingCash < 0
+     ? 'bg-rose-100 text-rose-600'
+     : 'bg-emerald-50 text-emerald-600'
+ }`}>
+ {kpiSummary.activeRemainingCash < 0 ? (
+   <AlertTriangle className="h-4 w-4" />
+ ) : (
+   <PiggyBank className="h-4 w-4" />
+ )}
  </div>
  </div>
  <div className="mt-2">
- <div className="text-2xl font-bold tracking-tight font-mono tabular-nums text-emerald-600">
- {formatIDR(kpiSummary.activeRemainingCash)}
+ <div className={`text-2xl font-bold tracking-tight font-mono tabular-nums ${
+   kpiSummary.activeRemainingCash < 0 ? 'text-rose-600' : 'text-emerald-600'
+ }`}>
+ {kpiSummary.activeRemainingCash < 0
+   ? `-${formatIDR(Math.abs(kpiSummary.activeRemainingCash))}`
+   : formatIDR(kpiSummary.activeRemainingCash)}
  </div>
  {/* Progress bar */}
  <div className="mt-2 h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
  <div
- className="h-full bg-emerald-500 rounded-full transition-all duration-500"
- style={{ width: `${Math.min(100, Math.max(0, 100 - kpiSummary.budgetUsedPercentage))}%` }}
+ className={`h-full rounded-full transition-all duration-500 ${
+   kpiSummary.activeRemainingCash < 0 ? 'bg-rose-500 w-full' : 'bg-emerald-500'
+ }`}
+ style={
+   kpiSummary.activeRemainingCash >= 0
+     ? { width: `${Math.min(100, Math.max(0, 100 - kpiSummary.budgetUsedPercentage))}%` }
+     : undefined
+ }
  />
  </div>
- <div className="mt-1 text-[11px] text-slate-500 flex justify-between font-mono">
- <span>Sisa: {formatNumber(100 - kpiSummary.budgetUsedPercentage, 1)}%</span>
- <span>Likuid & Siap Belanja</span>
+ <div className="mt-1 text-[11px] flex justify-between font-mono">
+ {kpiSummary.activeRemainingCash < 0 ? (
+   <>
+     <span className="text-rose-600 font-bold">
+       Defisit: +{formatNumber(kpiSummary.budgetUsedPercentage - 100, 1)}%
+     </span>
+     <span className="text-rose-600 font-semibold">Over Pagu &amp; Perlu Tambahan Dana</span>
+   </>
+ ) : (
+   <>
+     <span className="text-slate-500">
+       Sisa: {formatNumber(100 - kpiSummary.budgetUsedPercentage, 1)}%
+     </span>
+     <span className="text-emerald-700 font-semibold">Likuid &amp; Siap Belanja</span>
+   </>
+ )}
  </div>
  </div>
  </div>

@@ -9,7 +9,7 @@ import { compressImageHD } from '@/lib/image-compress';
 import { BudgetAllocationItem } from '@/lib/types';
 import {
   Wallet, Plus, Building2, TrendingUp, CreditCard, DollarSign,
-  AlertCircle, Trash2, FileSpreadsheet, FileText, Calendar, Filter,
+  AlertCircle, AlertTriangle, AlertOctagon, Trash2, FileSpreadsheet, FileText, Calendar, Filter,
   Upload, Download, CheckCircle2, ArrowDownToLine, Eye, EyeOff,
   Image as ImageIcon, Sparkles, X, ExternalLink, ShieldCheck, UserCheck,
   Coins, Clock, Receipt, Check, ArrowRight,
@@ -192,7 +192,32 @@ export function BudgetAllocationModule() {
   const todayDanaDiajukan = todayBudgets.reduce((s, b) => s + b.amountAllocated, 0);
   const todayBelanjaRealized = todayProcurements.reduce((s, p) => s + p.actualReceiptTotal, 0);
   const todayDanaDitarik = todayBudgets.reduce((s, b) => s + (b.withdrawnAmount || 0), 0);
-  const todaySisaKas = Math.max(0, todayDanaDiajukan - todayBelanjaRealized - todayDanaDitarik);
+  const todayNetBalance = todayDanaDiajukan - todayBelanjaRealized - todayDanaDitarik;
+  const todaySisaKas = Math.max(0, todayNetBalance);
+
+  // ── SINKRONISASI CERDAS: Riwayat Pemasukan Dana vs Realisasi Belanja Nyata ──
+  // Setiap alokasi anggaran menghitung realisasi live dari procurements pada tanggal & unit yang sesuai
+  const syncedBudgets = useMemo(() => {
+    return filteredBudgets.map((b) => {
+      const budgetDate = b.allocatedDate.slice(0, 10);
+      const matchingProcurements = procurements.filter((p) => {
+        const matchesUnit = b.sppgUnitId === 'ALL' || p.sppgUnitId === b.sppgUnitId || p.sppgUnitId === 'ALL';
+        const matchesDate = p.date.slice(0, 10) === budgetDate;
+        return matchesUnit && matchesDate;
+      });
+
+      const liveRealized = matchingProcurements.reduce((sum, p) => sum + p.actualReceiptTotal, 0);
+      const withdrawn = b.withdrawnAmount || 0;
+      const netRemaining = b.amountAllocated - liveRealized - withdrawn;
+
+      return {
+        ...b,
+        amountRealized: liveRealized,
+        remainingBudget: netRemaining,
+        isDeficit: netRemaining < 0,
+      };
+    });
+  }, [filteredBudgets, procurements]);
 
   // ── CARD 2: Akumulasi Keseluruhan (Master All-Time Overview) ──────────────
   const totalPemasukan = filteredBudgets.reduce((s, b) => s + b.amountAllocated, 0);
@@ -604,32 +629,46 @@ export function BudgetAllocationModule() {
 
           {/* 3. Sisa / Pengembalian Hari Ini */}
           <div className={`rounded-lg border p-3.5 shadow-xs ${
-            todaySisaKas > 0
+            todayNetBalance < 0
+              ? 'border-rose-300 bg-rose-50/60'
+              : todayNetBalance > 0
               ? 'border-indigo-300 bg-white'
               : todayDanaDitarik > 0
               ? 'border-emerald-200 bg-emerald-50/50'
               : 'border-slate-200 bg-white'
           }`}>
-            <div className="flex items-center justify-between text-xs text-slate-700 font-semibold mb-1">
-              <span>Sisa / Pengembalian Hari Ini</span>
-              <Coins className="h-4 w-4 text-indigo-600" />
+            <div className="flex items-center justify-between text-xs font-semibold mb-1">
+              <span className={todayNetBalance < 0 ? 'text-rose-800' : 'text-slate-700'}>
+                {todayNetBalance < 0 ? 'Defisit / Kurang Kas Hari Ini' : 'Sisa / Pengembalian Hari Ini'}
+              </span>
+              {todayNetBalance < 0 ? (
+                <AlertTriangle className="h-4 w-4 text-rose-600" />
+              ) : (
+                <Coins className="h-4 w-4 text-indigo-600" />
+              )}
             </div>
             <div className={`text-xl font-extrabold font-mono tabular-nums ${
-              todaySisaKas > 0 ? 'text-indigo-700' : 'text-slate-900'
+              todayNetBalance < 0 ? 'text-rose-600' : todayNetBalance > 0 ? 'text-indigo-700' : 'text-slate-900'
             }`}>
-              {formatRupiah(todaySisaKas)}
+              {todayNetBalance < 0
+                ? `-${formatRupiah(Math.abs(todayNetBalance))}`
+                : formatRupiah(todayNetBalance)}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              {todayDanaDitarik > 0 ? (
+            <div className="text-[11px] mt-1">
+              {todayNetBalance < 0 ? (
+                <span className="text-rose-700 font-semibold flex items-center gap-1">
+                  <span>🚨 Pengeluaran belanja melebihi dana diajukan hari ini</span>
+                </span>
+              ) : todayDanaDitarik > 0 ? (
                 <span className="text-emerald-700 font-medium">
                   {formatRupiah(todayDanaDitarik)} disetor kembali ke kas utama
                 </span>
-              ) : todaySisaKas > 0 ? (
+              ) : todayNetBalance > 0 ? (
                 <span className="text-indigo-700 font-medium">
                   Uang tunai/kembalian aktif di tangan pemegang dana
                 </span>
               ) : (
-                'Tidak ada sisa kembalian aktif'
+                <span className="text-slate-500">Dana terserap pas / sesuai belanja</span>
               )}
             </div>
           </div>
@@ -807,26 +846,48 @@ export function BudgetAllocationModule() {
             <div className="text-lg font-bold text-slate-900 font-mono tabular-nums">{formatRupiah(totalPengeluaran)}</div>
             <p className="text-[10px] text-slate-400 mt-1">{filteredProcurements.length} transaksi belanja</p>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-              <span>Total Saldo Kas Bersih</span>
-              <DollarSign className="h-4 w-4 text-indigo-500" />
+          <div className={`rounded-lg border p-4 ${saldo < 0 ? 'border-rose-300 bg-rose-50/40' : 'border-slate-200 bg-white'}`}>
+            <div className="flex items-center justify-between text-xs mb-2">
+              <span className={saldo < 0 ? 'text-rose-800 font-semibold' : 'text-slate-500'}>
+                {saldo < 0 ? 'Defisit Saldo Kas Bersih' : 'Total Saldo Kas Bersih'}
+              </span>
+              {saldo < 0 ? (
+                <AlertOctagon className="h-4 w-4 text-rose-600" />
+              ) : (
+                <DollarSign className="h-4 w-4 text-indigo-500" />
+              )}
             </div>
-            <div className={`text-lg font-bold font-mono tabular-nums ${saldo >= 0 ? 'text-indigo-700' : 'text-red-600'}`}>
-              {formatRupiah(saldo)}
+            <div className={`text-lg font-bold font-mono tabular-nums ${saldo < 0 ? 'text-rose-600' : 'text-indigo-700'}`}>
+              {saldo < 0 ? `-${formatRupiah(Math.abs(saldo))}` : formatRupiah(saldo)}
             </div>
             <p className="text-[10px] text-slate-400 mt-1">
-              {totalDitarikGlobal > 0 ? `Telah ditarik/kembali: ${formatRupiah(totalDitarikGlobal)}` : 'Sisa kas aktif operasional'}
+              {saldo < 0
+                ? '⚠️ Defisit kas: belanja melebihi total seluruh dana masuk'
+                : totalDitarikGlobal > 0
+                ? `Telah ditarik/kembali: ${formatRupiah(totalDitarikGlobal)}`
+                : 'Sisa kas aktif operasional'}
             </p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-white p-4">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
               <span>Penyerapan Dana</span>
-              <TrendingUp className="h-4 w-4 text-amber-500" />
+              <TrendingUp className={`h-4 w-4 ${absorptionRate > 100 ? 'text-rose-500' : 'text-amber-500'}`} />
             </div>
-            <div className="text-lg font-bold text-slate-900 font-mono tabular-nums">{absorptionRate.toFixed(1)}%</div>
+            <div className="flex items-center gap-2">
+              <div className={`text-lg font-bold font-mono tabular-nums ${absorptionRate > 100 ? 'text-rose-600' : 'text-slate-900'}`}>
+                {absorptionRate.toFixed(1)}%
+              </div>
+              {absorptionRate > 100 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">
+                  Over-Budget
+                </span>
+              )}
+            </div>
             <div className="w-full bg-slate-100 rounded-full h-1.5 mt-2 overflow-hidden">
-              <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${Math.min(100, absorptionRate)}%` }} />
+              <div
+                className={`h-1.5 rounded-full ${absorptionRate > 100 ? 'bg-rose-500' : 'bg-emerald-500'}`}
+                style={{ width: `${Math.min(100, absorptionRate)}%` }}
+              />
             </div>
           </div>
         </div>
@@ -858,14 +919,14 @@ export function BudgetAllocationModule() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredBudgets.length === 0 ? (
+              {syncedBudgets.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="py-10 text-center text-slate-400 text-xs">
                     Belum ada data pemasukan untuk filter ini.
                   </td>
                 </tr>
               ) : (
-                filteredBudgets.map(item => {
+                syncedBudgets.map(item => {
                   const usedPct = item.amountAllocated > 0 ? (item.amountRealized / item.amountAllocated) * 100 : 0;
                   return (
                     <tr key={item.id} className="hover:bg-slate-50/60 transition">
@@ -904,21 +965,32 @@ export function BudgetAllocationModule() {
                         )}
                       </td>
                       <td className="py-3 px-4 text-right font-mono font-bold text-slate-900 tabular-nums">{formatRupiah(item.amountAllocated)}</td>
-                      <td className="py-3 px-4 text-right font-mono text-emerald-700 tabular-nums">{formatRupiah(item.amountRealized)}</td>
+                      <td className="py-3 px-4 text-right font-mono font-semibold text-emerald-700 tabular-nums">{formatRupiah(item.amountRealized)}</td>
                       <td className="py-3 px-4 text-right font-mono tabular-nums">
-                        <div className="font-bold text-indigo-700">{formatRupiah(item.remainingBudget)}</div>
-                        {(item.withdrawnAmount || 0) > 0 && (
+                        <div className={`font-bold ${item.remainingBudget < 0 ? 'text-rose-600' : 'text-indigo-700'}`}>
+                          {item.remainingBudget < 0 ? `-${formatRupiah(Math.abs(item.remainingBudget))}` : formatRupiah(item.remainingBudget)}
+                        </div>
+                        {item.remainingBudget < 0 ? (
+                          <div className="text-[10px] text-rose-600 font-sans font-semibold">
+                            Defisit / Over Pagu
+                          </div>
+                        ) : (item.withdrawnAmount || 0) > 0 ? (
                           <div className="text-[10px] text-amber-700 font-sans">
                             Ditarik: {formatRupiah(item.withdrawnAmount || 0)}
                           </div>
-                        )}
+                        ) : null}
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
                           <div className="w-14 bg-slate-200 rounded-full h-1.5 overflow-hidden">
-                            <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${Math.min(100, usedPct)}%` }} />
+                            <div
+                              className={`h-1.5 rounded-full ${usedPct > 100 ? 'bg-rose-500' : 'bg-emerald-500'}`}
+                              style={{ width: `${Math.min(100, usedPct)}%` }}
+                            />
                           </div>
-                          <span className="font-mono text-[11px] text-slate-600">{usedPct.toFixed(0)}%</span>
+                          <span className={`font-mono text-[11px] ${usedPct > 100 ? 'font-bold text-rose-600' : 'text-slate-600'}`}>
+                            {usedPct.toFixed(0)}%{usedPct > 100 ? ' (Over)' : ''}
+                          </span>
                         </div>
                       </td>
                       <td className="py-3 px-4 text-slate-500 max-w-[160px] truncate">{item.notes || '-'}</td>

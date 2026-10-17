@@ -252,17 +252,25 @@ export function SplitScreenReceiptModal({ transaction, onClose }: SplitScreenRec
                     </span>
                   </div>
 
-                  <div className="p-1 sm:p-0 border-t sm:border-t-0 sm:border-l border-slate-100 pt-2 sm:pt-0 sm:pl-3">
-                    <span className="text-[10px] uppercase font-semibold text-slate-500 tracking-wider">
-                      Sisa Uang Kembali (Kas)
+                  <div className={`p-1 sm:p-0 border-t sm:border-t-0 sm:border-l border-slate-100 pt-2 sm:pt-0 sm:pl-3 ${selisih.over ? 'bg-rose-50/50 rounded-lg p-2' : ''}`}>
+                    <span className={`text-[10px] uppercase font-semibold tracking-wider ${selisih.over ? 'text-rose-700' : 'text-slate-500'}`}>
+                      {selisih.over ? 'Defisit / Kurang (Nombok)' : 'Sisa Uang Kembali (Kas)'}
                     </span>
-                    <div className="text-base sm:text-lg font-bold font-mono tabular-nums text-emerald-600 mt-0.5 break-words">
-                      {formatIDR(transaction.changeReturned)}
+                    <div className={`text-base sm:text-lg font-bold font-mono tabular-nums mt-0.5 break-words ${selisih.over ? 'text-rose-600' : 'text-emerald-600'}`}>
+                      {selisih.over ? `-${formatIDR(selisih.nominal)}` : `+${formatIDR(Math.abs(selisih.nominal))}`}
                     </div>
                     <div className={`flex items-center gap-1 text-[10px] font-medium mt-0.5 ${selisih.over ? 'text-rose-600' : 'text-emerald-700'}`}>
-                      <CheckCircle2 className="h-3 w-3 shrink-0" />
+                      {selisih.over ? (
+                        <AlertTriangle className="h-3 w-3 shrink-0 text-rose-600" />
+                      ) : (
+                        <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-600" />
+                      )}
                       <span className="break-words">
-                        Selisih {selisih.nominalText} ({selisih.persenText}) {isBalanceMatch ? '· klop' : '· ada varian'}
+                        {selisih.over
+                          ? `Kurang / Nombok ${selisih.nominalText} (${selisih.persenText}) · Melebihi Kasbon`
+                          : isBalanceMatch
+                          ? 'Rp 0 · Klop pas sesuai kasbon'
+                          : `Sisa Kembalian ${formatIDR(Math.abs(selisih.nominal))} (${selisih.persenText}) · Uang Kembali`}
                       </span>
                     </div>
                   </div>

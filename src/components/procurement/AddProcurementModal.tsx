@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '@/lib/store';
 import { SppgUnitId, ProcurementItem } from '@/lib/types';
 import { formatIDR, formatRupiah, hitungSelisih } from '@/lib/utils';
@@ -59,8 +59,8 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
   // Sumber Dana Belanja
   const [fundingSource, setFundingSource] = useState<'DANA_HARI_INI' | 'SISA_SEBELUMNYA' | 'KAS_GABUNGAN'>('DANA_HARI_INI');
 
-  // Cash / Kasbon Requested
-  const [amountRequested, setAmountRequested] = useState<number>(150000000);
+  // Cash / Kasbon Requested (default 0, disinkronkan otomatis dari pagu kas tersedia)
+  const [amountRequested, setAmountRequested] = useState<number>(0);
   const [notes, setNotes] = useState<string>('Pengadaan bahan dapur operasional gizi harian.');
 
   // Receipt photos — empty by default, only filled after real upload
@@ -103,13 +103,26 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
   const totalKasUtama = Math.max(0, totalAllPemasukan - totalAllPengeluaran);
   const [submitError, setSubmitError] = useState<string>('');
 
-  // Line items
+  // Auto-suggest kasbon jika ada dana hari ini dan belum diisi user
+  useEffect(() => {
+    if (sisaTersediaHariIni > 0 && amountRequested === 0) {
+      setAmountRequested(sisaTersediaHariIni);
+    }
+  }, [sisaTersediaHariIni]);
+
+  // Line items (Bersih 1 baris kosong, bukan dummy 147 juta)
   const [items, setItems] = useState<ProcurementItem[]>([
-    { id: '1', name: 'Ayam giling', category: 'Protein Hewani', quantity: 145, unit: 'Kg', unitPrice: 42000, subtotal: 6090000, isOcrMatched: true, isItemVerified: false },
-    { id: '2', name: 'Melon', category: 'Buah-buahan', quantity: 235, unit: 'Kg', unitPrice: 16500, subtotal: 3877500, isOcrMatched: true, isItemVerified: false },
-    { id: '3', name: 'Kacang tanah', category: 'Protein Nabati', quantity: 70, unit: 'Kg', unitPrice: 32000, subtotal: 2240000, isOcrMatched: true, isItemVerified: false },
-    { id: '4', name: 'Telur horn', category: 'Protein Hewani', quantity: 5, unit: 'Kg', unitPrice: 28000, subtotal: 140000, isOcrMatched: true, isItemVerified: false },
-    { id: '5', name: 'Beras Ramos Super (50 Kg)', category: 'Sembako & Tepung', quantity: 200, unit: 'Karung', unitPrice: 675000, subtotal: 135000000, isOcrMatched: true, isItemVerified: false },
+    {
+      id: '1',
+      name: '',
+      category: categories[0]?.name || 'Sayuran',
+      quantity: 1,
+      unit: units[0]?.symbol || 'Kg',
+      unitPrice: 0,
+      subtotal: 0,
+      isOcrMatched: false,
+      isItemVerified: false,
+    },
   ]);
 
   const actualReceiptTotal = items.reduce((acc, it) => acc + it.subtotal, 0);
@@ -278,6 +291,17 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError('');
+
+    // Validasi item: harus ada nama bahan dan subtotal > 0
+    const validItems = items.filter(
+      (it) => it.name.trim() !== '' && it.subtotal > 0 && it.quantity > 0
+    );
+
+    if (validItems.length === 0 || actualReceiptTotal <= 0) {
+      setSubmitError('Mohon isi minimal 1 rincian bahan belanja dengan nama, jumlah (qty), dan harga satuan yang valid.');
+      return;
+    }
+
     setIsSaving(true);
 
     const selectedUnitObj = isAllUnits ? undefined : sppgUnits.find((u) => u.id === sppgUnitId);
@@ -359,7 +383,7 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
       physicalReceiptImage: uploadedPhotos[0] ? 'PHYSICAL_RECEIPT_NEW' : '',
       fundingSource,
       notes: finalNotes,
-      items,
+      items: validItems,
     });
 
     if (!result.ok) {
@@ -1012,27 +1036,27 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
               <span className="text-[10px] text-slate-400">Jumlah seluruh item nota</span>
             </div>
 
-            <div className="p-3 bg-white rounded-lg border border-slate-200/80 shadow-xs">
-              <span className="text-[11px] text-slate-500 uppercase font-semibold block tracking-wider">
-                Sisa Uang Belanja (Kembalian):
+            <div className={`p-3 rounded-lg border shadow-xs ${selisih.over ? 'bg-rose-50/70 border-rose-200' : 'bg-white border-slate-200/80'}`}>
+              <span className={`text-[11px] uppercase font-semibold block tracking-wider ${selisih.over ? 'text-rose-800' : 'text-slate-500'}`}>
+                {selisih.over ? 'Defisit / Kurang (Nombok):' : 'Sisa Uang Belanja (Kembalian):'}
               </span>
-              <div className="font-mono font-bold text-emerald-600 text-base mt-0.5 break-words">
-                {formatRupiah(changeReturned)}
+              <div className={`font-mono font-bold text-base mt-0.5 break-words ${selisih.over ? 'text-rose-600' : 'text-emerald-600'}`}>
+                {selisih.over ? `-${formatRupiah(selisih.nominal)}` : `+${formatRupiah(changeReturned)}`}
               </div>
-              <span className="text-[10px] text-emerald-600 font-medium">
-                {actualReceiptTotal <= amountRequested ? '✓ Kasbon tertutup sempurna' : '⚠ Belanja melebihi kasbon'}
+              <span className={`text-[10px] font-medium ${selisih.over ? 'text-rose-600' : 'text-emerald-600'}`}>
+                {selisih.over ? '⚠️ Belanja melebihi uang kasbon diminta' : '✓ Uang kembali ke pemegang dana kas'}
               </span>
             </div>
 
-            <div className="p-3 bg-white rounded-lg border border-slate-200/80 shadow-xs">
-              <span className="text-[11px] text-slate-500 uppercase font-semibold block tracking-wider">
-                Selisih (Nota vs Kasbon):
+            <div className={`p-3 rounded-lg border shadow-xs ${selisih.over ? 'bg-rose-50/70 border-rose-200' : 'bg-white border-slate-200/80'}`}>
+              <span className={`text-[11px] uppercase font-semibold block tracking-wider ${selisih.over ? 'text-rose-800' : 'text-slate-500'}`}>
+                {selisih.over ? 'Status Selisih Nota:' : 'Selisih (Nota vs Kasbon):'}
               </span>
               <div className={`font-mono font-bold text-base mt-0.5 break-words ${selisih.over ? 'text-rose-600' : 'text-slate-800'}`}>
-                {selisih.nominalText}
+                {selisih.persenText}
               </div>
               <span className={`text-[10px] font-medium ${selisih.over ? 'text-rose-600' : 'text-slate-500'}`}>
-                {selisih.persenText} dari kasbon · otomatis
+                {selisih.over ? `${selisih.nominalText} nombok · over-budget` : `${selisih.nominalText} sisa · terkontrol`}
               </span>
             </div>
           </div>
