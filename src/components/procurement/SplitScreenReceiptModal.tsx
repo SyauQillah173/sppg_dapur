@@ -25,14 +25,16 @@ interface SplitScreenReceiptModalProps {
 }
 
 export function SplitScreenReceiptModal({ transaction, onClose }: SplitScreenReceiptModalProps) {
-  const { updateAuditStatus, userRole, ingredients } = useStore();
+  const { updateAuditStatus, userRole, currentUser, ingredients } = useStore();
 
   const [auditNotes, setAuditNotes] = useState<string>(
     transaction.auditNotes || 'Pemeriksaan fisik nota toko telah diverifikasi kesesuaian stempel basah, tanda tangan penerima, dan kuantitas barang masuk gudang.'
   );
-  const [auditorName, setAuditorName] = useState<string>(
-    transaction.auditedBy || 'Drs. Supriyanto, Ak., CA (Auditor Utama SPPG)'
-  );
+  const defaultApprover = transaction.auditedBy && !transaction.auditedBy.includes('Supriyanto')
+    ? transaction.auditedBy
+    : (currentUser?.name || (userRole === 'SUPERADMIN' ? 'Abdullah Syauqillah, S.Kom' : 'Drs. Supriyanto, Ak., CA'));
+
+  const [auditorName, setAuditorName] = useState<string>(defaultApprover);
   const [isSuccessNotification, setIsSuccessNotification] = useState<boolean>(false);
   const [isFlagModalOpen, setIsFlagModalOpen] = useState<boolean>(false);
   const [mobileTab, setMobileTab] = useState<'receipt' | 'reconciliation'>('reconciliation');
@@ -380,7 +382,7 @@ export function SplitScreenReceiptModal({ transaction, onClose }: SplitScreenRec
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                     <div>
-                      <label className="text-[10px] text-slate-500 font-medium">Auditor Penanggung Jawab:</label>
+                      <label className="text-[10px] text-slate-500 font-medium">Petugas ACC / Penanggung Jawab:</label>
                       <input
                         type="text"
                         value={auditorName}

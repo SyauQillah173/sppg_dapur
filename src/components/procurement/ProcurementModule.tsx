@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { useStore } from '@/lib/store';
 import { ProcurementTransaction, AuditStatus, SppgUnitId } from '@/lib/types';
 import { formatIDR, formatDateIndo, hitungSelisih } from '@/lib/utils';
-import { exportAllProcurementsToExcel } from '@/lib/excel-export';
+import { exportAllProcurementsToExcel, exportAllProcurementsPDF } from '@/lib/excel-export';
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal';
 import {
   Receipt,
@@ -18,6 +18,7 @@ import {
   Clock,
   ArrowUpDown,
   FileSpreadsheet,
+  FileText,
   Lock,
   Trash2,
 } from 'lucide-react';
@@ -100,6 +101,13 @@ export function ProcurementModule() {
     exportAllProcurementsToExcel(processedTransactions, unitLabel);
   };
 
+  const handleExportAllPDF = () => {
+    const unitLabel = selectedSppgUnit === 'ALL'
+      ? 'Semua SPPG (Gabungan 4 Unit)'
+      : sppgUnits.find((u) => u.id === selectedSppgUnit)?.name || selectedSppgUnit;
+    exportAllProcurementsPDF(processedTransactions, unitLabel);
+  };
+
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
     setIsDeleting(true);
@@ -138,6 +146,16 @@ export function ProcurementModule() {
           >
             <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
             <span>Ekspor Excel (.xlsx)</span>
+          </button>
+
+          {/* Export Rekap PDF Button */}
+          <button
+            type="button"
+            onClick={handleExportAllPDF}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 shadow-xs hover:bg-rose-100 transition"
+          >
+            <FileText className="h-3.5 w-3.5 text-rose-600" />
+            <span>Ekspor PDF</span>
           </button>
 
           {/* AI Scanner Button */}

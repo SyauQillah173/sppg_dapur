@@ -26,8 +26,8 @@ export const metadata: Metadata = {
   description: 'Portal internal manajemen operasional, logistik, dan keuangan 4 unit SPPG Dapur.',
   manifest: '/manifest.json',
   icons: {
-    icon: '/icon-192.png',
-    apple: '/icon-192.png',
+    icon: '/badan-gizi.png',
+    apple: '/badan-gizi.png',
   },
   appleWebApp: {
     capable: true,

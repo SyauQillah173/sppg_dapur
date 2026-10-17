@@ -50,7 +50,7 @@ export function Header({ onNavigateTab }: HeaderProps) {
     exportConsolidatedSPPGSummaryToExcel(sppgUnits, procurements, ingredients);
   };
 
-  const roleName = currentUser?.name || (userRole === 'SUPERADMIN' ? 'Superadmin' : 'Pemantau');
+  const roleName = currentUser?.name || (userRole === 'SUPERADMIN' ? 'Abdullah Syauqillah, S.Kom' : 'Pemantau');
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white">
@@ -67,9 +67,9 @@ export function Header({ onNavigateTab }: HeaderProps) {
           {/* Left: logo */}
           <div className="flex items-center gap-2.5 min-w-0">
             <img
-              src="/icon-192.png"
-              alt="SPPG Dapur Logo"
-              className="h-8 w-8 rounded-lg object-contain shadow-sm border border-slate-200/80 shrink-0 bg-white"
+              src="/badan-gizi.png"
+              alt="Badan Gizi SPPG Logo"
+              className="h-9 w-9 rounded-full object-contain shadow-xs border border-slate-200/80 shrink-0 bg-white"
             />
             <div className="min-w-0">
               <span className="text-sm font-semibold text-slate-900 truncate block">SPPG Dapur</span>

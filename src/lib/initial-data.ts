@@ -625,7 +625,7 @@ export const INITIAL_ADMIN_USERS: AdminUserItem[] = [
   {
     id: 'ADM-001',
     username: 'superadmin',
-    name: 'Superadmin Pengelola SPPG',
+    name: 'Abdullah Syauqillah, S.Kom',
     role: 'SUPERADMIN',
     createdAt: '2026-10-01T00:00:00Z',
   },

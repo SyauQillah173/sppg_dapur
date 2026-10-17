@@ -36,7 +36,7 @@ async function main() {
       {
         username: 'superadmin',
         password: hashPassword(superadminPassword),
-        name: 'Superadmin Pengelola SPPG',
+        name: 'Abdullah Syauqillah, S.Kom',
         role: UserRole.SUPERADMIN,
       },
       {

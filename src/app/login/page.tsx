@@ -45,9 +45,9 @@ export default function LoginPage() {
         <div className="mb-10">
           <div className="flex items-center gap-2.5 mb-8">
             <img
-              src="/icon-192.png"
-              alt="SPPG Dapur Logo"
-              className="h-10 w-10 rounded-xl object-contain shadow-sm border border-slate-200/80 shrink-0 bg-white"
+              src="/badan-gizi.png"
+              alt="Badan Gizi SPPG Logo"
+              className="h-11 w-11 rounded-full object-contain shadow-xs border border-slate-200/80 shrink-0 bg-white"
             />
             <span className="text-sm font-semibold text-slate-900">SPPG Dapur</span>
           </div>

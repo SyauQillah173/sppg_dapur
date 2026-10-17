@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import { SppgUnit } from './types';
 
 export interface BudgetImportRow {
@@ -142,17 +142,77 @@ export async function parseBudgetWorkbook(file: File, units: SppgUnit[]): Promis
   return { rows, errors };
 }
 
-/** Template kosong dengan header resmi + satu baris contoh. */
+/** Template kosong dengan header resmi + baris contoh terformat rapi. */
 export function downloadBudgetTemplate() {
   const ws = XLSX.utils.aoa_to_sheet([
     ['TEMPLATE IMPORT DANA MASUK — SPPG DAPUR'],
-    ['Isi kolom Tanggal (YYYY-MM-DD), Unit SPPG (nama/kode, atau "Semua SPPG"), Periode Fiskal, Dana Masuk, Keterangan'],
+    ['Petunjuk: Isi Tanggal (YYYY-MM-DD), Unit SPPG (nama/kode unit atau "Semua SPPG"), Periode Fiskal, Nominal Dana Masuk, Keterangan'],
     [],
     TEMPLATE_HEADERS,
     ['2026-10-16', 'SPPG ABAR ABIR 02', 'Oktober 2026', 150000000, 'Pagu Operasional Tahap 2'],
-    ['2026-10-16', 'Semua SPPG', 'Oktober 2026', 400000000, 'Dana gabungan 4 dapur'],
+    ['2026-10-16', 'Semua SPPG', 'Oktober 2026', 400000000, 'Dana gabungan 4 dapur sentra'],
   ]);
-  ws['!cols'] = [{ wch: 20 }, { wch: 28 }, { wch: 18 }, { wch: 16 }, { wch: 40 }];
+
+  ws['!cols'] = [{ wch: 22 }, { wch: 30 }, { wch: 18 }, { wch: 20 }, { wch: 42 }];
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } },
+  ];
+
+  const border = {
+    top: { style: 'thin', color: { rgb: 'CBD5E1' } },
+    bottom: { style: 'thin', color: { rgb: 'CBD5E1' } },
+    left: { style: 'thin', color: { rgb: 'CBD5E1' } },
+    right: { style: 'thin', color: { rgb: 'CBD5E1' } },
+  };
+
+  // Title row
+  if (ws['A1']) {
+    ws['A1'].s = {
+      font: { name: 'Calibri', bold: true, sz: 13, color: { rgb: 'FFFFFF' } },
+      fill: { fgColor: { rgb: '0F172A' }, patternType: 'solid' },
+      alignment: { horizontal: 'center', vertical: 'center' },
+    };
+  }
+
+  // Subtitle row
+  if (ws['A2']) {
+    ws['A2'].s = {
+      font: { name: 'Calibri', sz: 9.5, color: { rgb: 'CBD5E1' } },
+      fill: { fgColor: { rgb: '1E293B' }, patternType: 'solid' },
+      alignment: { horizontal: 'center', vertical: 'center' },
+    };
+  }
+
+  // Header row (Row 4)
+  ['A', 'B', 'C', 'D', 'E'].forEach((col, idx) => {
+    const cell = `${col}4`;
+    if (ws[cell]) {
+      ws[cell].s = {
+        font: { name: 'Calibri', bold: true, sz: 10, color: { rgb: 'FFFFFF' } },
+        fill: { fgColor: { rgb: '1E3A8A' }, patternType: 'solid' },
+        alignment: { horizontal: idx === 3 ? 'right' : idx === 0 ? 'center' : 'left', vertical: 'center' },
+        border,
+      };
+    }
+  });
+
+  // Example data rows (Rows 5 & 6)
+  [5, 6].forEach((rowNum, rIdx) => {
+    ['A', 'B', 'C', 'D', 'E'].forEach((col, cIdx) => {
+      const cell = `${col}${rowNum}`;
+      if (ws[cell]) {
+        ws[cell].s = {
+          font: { name: 'Calibri', sz: 10, color: { rgb: '0F172A' } },
+          fill: { fgColor: { rgb: rIdx % 2 === 0 ? 'FFFFFF' : 'F8FAFC' }, patternType: 'solid' },
+          alignment: { horizontal: cIdx === 3 ? 'right' : cIdx === 0 ? 'center' : 'left', vertical: 'center' },
+          numFmt: cIdx === 3 ? '#,##0' : undefined,
+          border,
+        };
+      }
+    });
+  });
+
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Template Dana Masuk');
   XLSX.writeFile(wb, 'Template-Import-Dana-Masuk.xlsx');
