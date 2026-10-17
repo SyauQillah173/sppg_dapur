@@ -207,6 +207,13 @@ model ProcurementOrder {
   auditNotes           String?
   discrepancyReason    String?
   notes                String?
+  // Transparansi Pengembalian Sisa Kasbon ke Bendahara
+  isChangeReturned     Boolean           @default(false)
+  returnProofUrl       String?
+  returnedAt           DateTime?
+  returnedBy           String?
+  returnedTo           String?
+  returnNotes          String?
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
 

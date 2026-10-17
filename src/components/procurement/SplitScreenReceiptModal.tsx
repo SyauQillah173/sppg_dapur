@@ -273,6 +273,22 @@ export function SplitScreenReceiptModal({ transaction, onClose }: SplitScreenRec
                           : `Sisa Kembalian ${formatIDR(Math.abs(selisih.nominal))} (${selisih.persenText}) · Uang Kembali`}
                       </span>
                     </div>
+
+                    {Math.abs(selisih.nominal) > 0 && !selisih.over && (
+                      <div className="mt-2 pt-1.5 border-t border-slate-100">
+                        {transaction.isChangeReturned ? (
+                          <div className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300">
+                            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                            <span>Sisa Kas Lunas Disetor ke Bendahara</span>
+                          </div>
+                        ) : (
+                          <div className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-900 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300">
+                            <AlertTriangle className="h-3 w-3 text-amber-600" />
+                            <span>Sisa Kas Belum Disetorkan ke Bendahara</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 

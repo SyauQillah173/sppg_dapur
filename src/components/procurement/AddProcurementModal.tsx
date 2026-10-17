@@ -46,10 +46,49 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
   const [receiptNumber, setReceiptNumber] = useState<string>(''); // opsional — boleh dikosongkan
   const [sppgUnitId, setSppgUnitId] = useState<SppgUnitId | 'ALL'>(sppgUnits[0]?.id || 'SPPG-AA02');
 
-  // Supplier state (Dropdown or custom input)
-  const [supplierId, setSupplierId] = useState<string>(suppliers[0]?.id || '');
-  const [isCustomSupplier, setIsCustomSupplier] = useState<boolean>(false);
-  const [customSupplierName, setCustomSupplierName] = useState<string>('');
+  // Multi-CV / Supplier selection state (mendukung belanja dari beberapa CV sekaligus)
+  const [selectedSupplierIds, setSelectedSupplierIds] = useState<string[]>(
+    suppliers[0]?.id ? [suppliers[0].id] : []
+  );
+  const [customSuppliers, setCustomSuppliers] = useState<string[]>([]);
+  const [newCustomCvInput, setNewCustomCvInput] = useState<string>('');
+  const [isAddingNewCv, setIsAddingNewCv] = useState<boolean>(false);
+  const [isCvDropdownOpen, setIsCvDropdownOpen] = useState<boolean>(false);
+
+  const toggleSupplier = (id: string) => {
+    setSelectedSupplierIds((prev) => {
+      if (prev.includes(id)) {
+        if (prev.length === 1 && customSuppliers.length === 0) return prev; // pertahankan minimal 1 CV
+        return prev.filter((s) => s !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
+  };
+
+  const handleAddCustomCv = () => {
+    const trimmed = newCustomCvInput.trim();
+    if (!trimmed) return;
+    if (!customSuppliers.includes(trimmed)) {
+      setCustomSuppliers((prev) => [...prev, trimmed]);
+      addSupplier({
+        name: trimmed,
+        picName: 'Kontak Toko',
+        phone: '-',
+        address: 'Gresik, Jawa Timur',
+        bankAccount: 'Tunai Kas',
+        suppliedCategory: 'Bahan Dapur Segar',
+        activeStatus: true,
+        rating: 5.0,
+      });
+    }
+    setNewCustomCvInput('');
+    setIsAddingNewCv(false);
+  };
+
+  const removeCustomCv = (name: string) => {
+    setCustomSuppliers((prev) => prev.filter((c) => c !== name));
+  };
 
   // Requester / Employee state (Dropdown or custom input)
   const [requesterId, setRequesterId] = useState<string>(employees[0]?.id || '');
@@ -254,11 +293,9 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
             s.name.toLowerCase().includes(scannedSup.toLowerCase())
           );
           if (matchingSupplier) {
-            setSupplierId(matchingSupplier.id);
-            setIsCustomSupplier(false);
+            setSelectedSupplierIds([matchingSupplier.id]);
           } else {
-            setCustomSupplierName(scannedSup);
-            setIsCustomSupplier(true);
+            setCustomSuppliers([scannedSup]);
           }
         }
 
@@ -307,31 +344,18 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
     const selectedUnitObj = isAllUnits ? undefined : sppgUnits.find((u) => u.id === sppgUnitId);
     const targetUnitName = isAllUnits ? 'Semua SPPG (Gabungan 4 Unit)' : selectedUnitObj?.name || sppgUnitId;
 
-    // Supplier resolution
-    let finalSupplierId = supplierId;
-    let finalSupplierName = '';
-    let finalSupplierAddress = '';
-
-    if (isCustomSupplier && customSupplierName.trim()) {
-      finalSupplierName = customSupplierName.trim();
-      finalSupplierId = `SUP-QUICK-${Date.now().toString().slice(-4)}`;
-      // Also register to store
-      addSupplier({
-        name: finalSupplierName,
-        picName: 'Kontak Toko',
-        phone: '-',
-        address: 'Gresik, Jawa Timur',
-        bankAccount: 'Tunai Kas',
-        suppliedCategory: 'Bahan Dapur Segar',
-        activeStatus: true,
-        rating: 5.0,
-      });
-    } else {
-      const selectedSupplierObj = suppliers.find((s) => s.id === supplierId);
-      finalSupplierId = selectedSupplierObj?.id || 'SUP-01';
-      finalSupplierName = selectedSupplierObj?.name || 'CV Rekanan Dapur';
-      finalSupplierAddress = selectedSupplierObj?.address || '';
+    // Multi-CV resolution: kumpulkan seluruh CV / Supplier belanja
+    const selectedSupplierObjs = suppliers.filter((s) => selectedSupplierIds.includes(s.id));
+    const allCvNames: string[] = [
+      ...selectedSupplierObjs.map((s) => s.name),
+      ...customSuppliers,
+    ];
+    if (allCvNames.length === 0 && suppliers[0]) {
+      allCvNames.push(suppliers[0].name);
     }
+    const finalSupplierName = allCvNames.join(', ');
+    const finalSupplierId = selectedSupplierIds.length > 0 ? selectedSupplierIds.join(',') : (suppliers[0]?.id || 'SUP-01');
+    const finalSupplierAddress = selectedSupplierObjs[0]?.address || 'Gresik, Jawa Timur';
 
     // Requester resolution
     let finalRequesterId = requesterId;
@@ -362,7 +386,9 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
       : fundingSource === 'SISA_SEBELUMNYA'
       ? 'Sisa Kas Sebelumnya (Rollover)'
       : 'Pagu Kas Operasional Gabungan';
-    const finalNotes = notes ? `[Sumber Dana: ${sourceLabel}] ${notes}` : `[Sumber Dana: ${sourceLabel}]`;
+    const finalNotes = notes
+      ? `[Sumber Dana: ${sourceLabel}] [CV Belanja: ${finalSupplierName}] ${notes} SUPPLIER_NAMES: ${finalSupplierName}`
+      : `[Sumber Dana: ${sourceLabel}] [CV Belanja: ${finalSupplierName}] SUPPLIER_NAMES: ${finalSupplierName}`;
 
     const result = await addProcurement({
       receiptNumber: receiptNumber.trim() || '-',
@@ -693,42 +719,105 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
               )}
             </div>
 
-            {/* Supplier / CV with Inline Add */}
+            {/* Multi-CV / Supplier Selection with Inline Add */}
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="font-semibold text-slate-700 uppercase tracking-wider">
-                  Nama CV / Supplier:
+                <label className="font-semibold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>Nama CV / Supplier:</span>
+                  <span className="text-[10px] lowercase font-normal text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
+                    Bisa pilih beberapa
+                  </span>
                 </label>
                 <button
                   type="button"
-                  onClick={() => setIsCustomSupplier(!isCustomSupplier)}
+                  onClick={() => setIsAddingNewCv(!isAddingNewCv)}
                   className="text-[10px] text-blue-600 hover:underline font-semibold"
                 >
-                  {isCustomSupplier ? 'Pilih dari Daftar' : '+ Ketik Baru'}
+                  {isAddingNewCv ? 'Tutup Input' : '+ Ketik Baru'}
                 </button>
               </div>
-              {isCustomSupplier ? (
-                <input
-                  type="text"
-                  required
-                  value={customSupplierName}
-                  onChange={(e) => setCustomSupplierName(e.target.value)}
-                  placeholder="Ketik nama CV / Toko baru..."
-                  className="w-full rounded-md border border-blue-400 bg-blue-50/30 px-2.5 py-2 text-xs text-slate-800 focus:border-slate-800 focus:outline-none"
-                />
-              ) : (
-                <select
-                  value={supplierId}
-                  onChange={(e) => setSupplierId(e.target.value)}
-                  className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-2 text-xs text-slate-800 focus:border-slate-800 focus:outline-none"
-                >
-                  {suppliers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.suppliedCategory})
-                    </option>
-                  ))}
-                </select>
+
+              {/* Form Input CV Baru jika belanja dari toko/pasar baru */}
+              {isAddingNewCv && (
+                <div className="flex items-center gap-1.5 mb-2">
+                  <input
+                    type="text"
+                    value={newCustomCvInput}
+                    onChange={(e) => setNewCustomCvInput(e.target.value)}
+                    placeholder="Ketik nama CV / Toko belanja baru..."
+                    className="flex-1 rounded-md border border-blue-400 bg-blue-50/40 px-2.5 py-1.5 text-xs text-slate-800 focus:border-slate-800 focus:outline-none"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleAddCustomCv();
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddCustomCv}
+                    className="px-2.5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shrink-0 cursor-pointer"
+                  >
+                    Tambah
+                  </button>
+                </div>
               )}
+
+              {/* Multi-Select Pills / Chips */}
+              <div className="rounded-lg border border-slate-300 bg-slate-50/60 p-2 space-y-1.5 max-h-36 overflow-y-auto">
+                <div className="text-[10px] text-slate-500 font-medium">
+                  Centang satu atau beberapa CV belanja:
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {suppliers.map((s) => {
+                    const isSelected = selectedSupplierIds.includes(s.id);
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => toggleSupplier(s.id)}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition cursor-pointer border ${
+                          isSelected
+                            ? 'bg-blue-600 text-white border-blue-700 shadow-2xs font-semibold'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <span>{isSelected ? '✓' : '+'}</span>
+                        <span className="truncate max-w-[170px]">{s.name}</span>
+                      </button>
+                    );
+                  })}
+
+                  {/* Custom Suppliers added on the fly */}
+                  {customSuppliers.map((cName) => (
+                    <span
+                      key={cName}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold bg-emerald-600 text-white border border-emerald-700 shadow-2xs"
+                    >
+                      <span>✓ {cName}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeCustomCv(cName)}
+                        className="hover:text-rose-200 text-xs ml-0.5 cursor-pointer"
+                        title="Hapus CV kustom ini"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Ringkasan CV terpilih */}
+              <div className="text-[10px] text-slate-500 mt-1 truncate">
+                CV Terpilih:{' '}
+                <strong className="text-slate-800">
+                  {[
+                    ...suppliers.filter((s) => selectedSupplierIds.includes(s.id)).map((s) => s.name),
+                    ...customSuppliers,
+                  ].join(', ') || 'Belum ada yang dipilih'}
+                </strong>
+              </div>
             </div>
 
             {/* Nominal Uang Diminta / Kasbon */}

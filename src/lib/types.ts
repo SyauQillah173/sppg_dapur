@@ -56,6 +56,12 @@ export interface ProcurementTransaction {
   discrepancyReason?: string;
   notes?: string;
   fundingSource?: 'DANA_HARI_INI' | 'SISA_SEBELUMNYA' | 'KAS_GABUNGAN';
+  isChangeReturned?: boolean;
+  returnProofUrl?: string;
+  returnedAt?: string;
+  returnedBy?: string;
+  returnedTo?: string;
+  returnNotes?: string;
   createdAt: string;
 }
 

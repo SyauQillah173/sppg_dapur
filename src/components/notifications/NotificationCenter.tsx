@@ -68,15 +68,89 @@ export function NotificationCenter({ onNavigateTab }: NotificationCenterProps) {
     };
   }, [isOpen]);
 
-  // Request browser desktop notification permission on user interaction
-  const requestNotificationPermission = async () => {
+  const [hasNotificationPermission, setHasNotificationPermission] = useState<boolean>(false);
+  const [isTestingNotif, setIsTestingNotif] = useState<boolean>(false);
+
+  useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
-      if (Notification.permission === 'default') {
-        try {
-          await Notification.requestPermission();
-        } catch {}
+      setHasNotificationPermission(Notification.permission === 'granted');
+    }
+  }, []);
+
+  // Universal Push Notification Helper that works on Android PWA, Chrome Mobile, and Desktop
+  const triggerDeviceNotification = useCallback(async (title: string, message: string) => {
+    if (typeof window === 'undefined') return;
+
+    // 1. Physical vibration for mobile devices (haptic alert)
+    try {
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate([200, 100, 200]);
+      }
+    } catch {}
+
+    // 2. Check notification permissions
+    if (!('Notification' in window) || Notification.permission !== 'granted') {
+      return;
+    }
+
+    const notificationOptions = {
+      body: message,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      vibrate: [200, 100, 200] as any,
+      data: { url: '/' },
+      tag: 'sppg-dapur-realtime',
+    };
+
+    // 3. Service Worker registration.showNotification (CRITICAL for Chrome Android & Installed PWA)
+    if ('serviceWorker' in navigator) {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        if (reg && typeof reg.showNotification === 'function') {
+          await reg.showNotification(title, notificationOptions);
+          return;
+        }
+      } catch (swErr) {
+        console.warn('Service worker showNotification fallback:', swErr);
       }
     }
+
+    // 4. Desktop constructor fallback
+    try {
+      new Notification(title, notificationOptions);
+    } catch (err) {
+      console.warn('Native notification constructor failed:', err);
+    }
+  }, []);
+
+  // Request browser desktop / mobile notification permission on user interaction
+  const requestNotificationPermission = async () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      try {
+        const perm = await Notification.requestPermission();
+        if (perm === 'granted') {
+          setHasNotificationPermission(true);
+          playNotificationChime();
+          await triggerDeviceNotification(
+            '🔔 Notifikasi SPPG Dapur Aktif!',
+            'Perangkat HP Anda berhasil terhubung dengan sistem. Update alokasi kas, belanja, dan sisa kas akan masuk realtime.'
+          );
+        }
+      } catch (e) {
+        console.warn('Permission request error:', e);
+      }
+    }
+  };
+
+  // Test Notification on mobile device
+  const handleTestDeviceNotification = async () => {
+    setIsTestingNotif(true);
+    playNotificationChime();
+    await triggerDeviceNotification(
+      '🔊 Uji Notifikasi & Getar Berhasil!',
+      'Sistem notifikasi realtime SPPG Dapur berfungsi sempurna di perangkat ini. Kepala SPPG & Auditor siap menerima pembaruan transaksi.'
+    );
+    setTimeout(() => setIsTestingNotif(false), 2000);
   };
 
   // Fetch notifications and trigger live sync
@@ -108,16 +182,9 @@ export function NotificationCenter({ onNavigateTab }: NotificationCenterProps) {
             // 1. Play audio chime
             playNotificationChime();
 
-            // 2. Show native browser notification if allowed
-            if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-              const latest = newItems[0];
-              try {
-                new Notification(latest.title, {
-                  body: latest.message,
-                  icon: '/icon-192.png',
-                });
-              } catch {}
-            }
+            // 2. Trigger Universal Android PWA / Mobile Push Notification & Vibration
+            const latest = newItems[0];
+            triggerDeviceNotification(latest.title, latest.message);
 
             // 3. Queue in-app floating toast
             setToastQueue((prev) => [...newItems.slice(0, 3), ...prev].slice(0, 5));
@@ -334,6 +401,42 @@ export function NotificationCenter({ onNavigateTab }: NotificationCenterProps) {
                   </button>
                 )}
               </div>
+            </div>
+
+            {/* Push Notification Device Status & Test Banner */}
+            <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-[11px]">
+                {hasNotificationPermission ? (
+                  <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    Notifikasi HP Aktif
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-amber-700 font-medium">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    Notifikasi HP Belum Diizinkan
+                  </span>
+                )}
+              </div>
+
+              {hasNotificationPermission ? (
+                <button
+                  type="button"
+                  onClick={handleTestDeviceNotification}
+                  disabled={isTestingNotif}
+                  className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition cursor-pointer"
+                >
+                  {isTestingNotif ? 'Mengirim Tes...' : '🔊 Tes Notif HP'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={requestNotificationPermission}
+                  className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition cursor-pointer shadow-2xs"
+                >
+                  Izinkan Notif
+                </button>
+              )}
             </div>
 
             {/* Notification List */}

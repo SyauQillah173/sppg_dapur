@@ -21,7 +21,11 @@ import {
   FileText,
   Lock,
   Trash2,
+  ShieldCheck,
+  Eye,
 } from 'lucide-react';
+import { ReturnChangeModal } from './ReturnChangeModal';
+import { ViewReturnProofModal } from './ViewReturnProofModal';
 
 export function ProcurementModule() {
   const {
@@ -41,6 +45,8 @@ export function ProcurementModule() {
   const [sortAsc, setSortAsc] = useState<boolean>(false);
   const [deleteTarget, setDeleteTarget] = useState<ProcurementTransaction | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [returnChangeTarget, setReturnChangeTarget] = useState<ProcurementTransaction | null>(null);
+  const [viewProofTarget, setViewProofTarget] = useState<ProcurementTransaction | null>(null);
 
   // Check if a transaction has any item with price anomaly
   const hasAnomaly = (trx: ProcurementTransaction) => {
@@ -84,6 +90,21 @@ export function ProcurementModule() {
         return 0;
       });
   }, [filteredProcurements, statusFilter, searchQuery, sortField, sortAsc]);
+
+  // Transaksi yang memiliki sisa kasbon tetapi belum disetorkan balik ke Bendahara
+  const unreturnedTrx = useMemo(() => {
+    return filteredProcurements.filter((p) => {
+      const sisa = p.changeReturned > 0 ? p.changeReturned : Math.max(0, p.amountRequested - p.actualReceiptTotal);
+      return sisa > 0 && !p.isChangeReturned;
+    });
+  }, [filteredProcurements]);
+
+  const totalUnreturned = useMemo(() => {
+    return unreturnedTrx.reduce((sum, p) => {
+      const sisa = p.changeReturned > 0 ? p.changeReturned : Math.max(0, p.amountRequested - p.actualReceiptTotal);
+      return sum + sisa;
+    }, 0);
+  }, [unreturnedTrx]);
 
   const toggleSort = (field: 'date' | 'actualReceiptTotal' | 'receiptNumber') => {
     if (sortField === field) {
@@ -202,6 +223,28 @@ export function ProcurementModule() {
         </div>
       )}
 
+      {/* Institutional Cash Return Transparency Banner */}
+      {totalUnreturned > 0 && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border border-amber-300 bg-linear-to-r from-amber-50 to-orange-50 p-3.5 text-xs text-amber-950 shadow-xs">
+          <div className="flex items-start gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500 text-white shrink-0 shadow-xs mt-0.5">
+              <ShieldCheck className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="font-bold text-amber-900 text-xs sm:text-sm flex items-center gap-2">
+                <span>Transparansi Sisa Kasbon: Belum Disetorkan ke Bendahara</span>
+                <span className="rounded-full bg-amber-200/90 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                  {unreturnedTrx.length} Transaksi
+                </span>
+              </div>
+              <p className="text-[11px] text-amber-800 mt-0.5">
+                Terdapat total <strong className="font-mono text-amber-950 font-bold">{formatIDR(totalUnreturned)}</strong> kelebihan uang kasbon di tangan peminta belanja yang wajib dikembalikan ke kas bendahara SPPG beserta bukti transfer bank.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
         <div className="flex flex-col xs:flex-row flex-1 items-stretch xs:items-center gap-2">
@@ -265,7 +308,7 @@ export function ProcurementModule() {
       {/* High-Density Data Table */}
       <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse min-w-[880px]">
+          <table className="w-full text-left text-xs border-collapse min-w-[940px]">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">
               <tr>
                 <th
@@ -288,7 +331,7 @@ export function ProcurementModule() {
                 </th>
                 <th className="py-2.5 px-3">Tujuan SPPG</th>
                 <th className="py-2.5 px-3">Peminta (Karyawan)</th>
-                <th className="py-2.5 px-3">CV / Supplier</th>
+                <th className="py-2.5 px-3">CV / Rekanan Belanja</th>
                 <th className="py-2.5 px-3 text-right">Dana Diminta</th>
                 <th
                   className="py-2.5 px-3 text-right cursor-pointer hover:text-slate-900"
@@ -299,7 +342,7 @@ export function ProcurementModule() {
                     <ArrowUpDown className="h-3 w-3" />
                   </div>
                 </th>
-                <th className="py-2.5 px-3 text-right">Uang Kembali / Selisih</th>
+                <th className="py-2.5 px-3 text-right">Sisa Kas & Setoran Bendahara</th>
                 <th className="py-2.5 px-3 text-center">Status Audit</th>
                 <th className="py-2.5 px-3 text-right">Aksi</th>
               </tr>
@@ -348,8 +391,24 @@ export function ProcurementModule() {
                       <td className="py-2.5 px-3 font-medium text-slate-800 whitespace-nowrap">
                         {trx.requesterName}
                       </td>
-                      <td className="py-2.5 px-3 text-slate-700 truncate max-w-[160px]">
-                        {trx.supplierName}
+                      <td className="py-2.5 px-3 text-slate-700 max-w-[200px]">
+                        {trx.supplierName.includes(',') ? (
+                          <div className="flex flex-wrap gap-1">
+                            {trx.supplierName.split(',').map((sup, idx) => (
+                              <span
+                                key={idx}
+                                className="inline-block bg-slate-100 text-slate-800 text-[10px] px-1.5 py-0.5 rounded border border-slate-200 truncate max-w-[180px]"
+                                title={sup.trim()}
+                              >
+                                {sup.trim()}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="truncate max-w-[160px]" title={trx.supplierName}>
+                            {trx.supplierName}
+                          </div>
+                        )}
                       </td>
                       <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-700 whitespace-nowrap">
                         {formatIDR(trx.amountRequested)}
@@ -368,14 +427,34 @@ export function ProcurementModule() {
                             </div>
                           </>
                         ) : sel.nominal < 0 ? (
-                          <>
+                          <div className="flex flex-col items-end gap-1">
                             <div className="font-mono tabular-nums font-bold text-emerald-600">
                               +{formatIDR(Math.abs(sel.nominal))}
                             </div>
-                            <div className="text-[10px] font-mono tabular-nums text-emerald-700 font-medium">
-                              {sel.persenText} Uang Kembali
-                            </div>
-                          </>
+                            {trx.isChangeReturned ? (
+                              <button
+                                type="button"
+                                onClick={() => setViewProofTarget(trx)}
+                                className="inline-flex items-center gap-1 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-2 py-0.5 text-[10px] font-bold border border-emerald-300 transition shadow-2xs cursor-pointer"
+                                title="Sisa kas telah disetor ke bendahara. Klik untuk melihat bukti transfer"
+                              >
+                                <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                                <span>Lunas Disetor</span>
+                                <Eye className="h-3 w-3 opacity-70" />
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setReturnChangeTarget(trx)}
+                                className="inline-flex items-center gap-1 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 px-2 py-0.5 text-[10px] font-bold border border-amber-300 animate-pulse transition shadow-2xs cursor-pointer"
+                                title="Kelebihan kas belum dikembalikan. Klik untuk upload bukti transfer setoran ke bendahara"
+                              >
+                                <AlertTriangle className="h-3 w-3 text-amber-600" />
+                                <span>Belum Disetor</span>
+                                <span className="underline ml-0.5 font-extrabold text-blue-700">Setor TF</span>
+                              </button>
+                            )}
+                          </div>
                         ) : (
                           <>
                             <div className="font-mono tabular-nums font-medium text-slate-600">
@@ -466,6 +545,28 @@ export function ProcurementModule() {
         onConfirm={handleConfirmDelete}
         onClose={() => setDeleteTarget(null)}
       />
+
+      {/* Modal Setor Bukti TF Sisa Kasbon */}
+      {returnChangeTarget && (
+        <ReturnChangeModal
+          transaction={returnChangeTarget}
+          onClose={() => setReturnChangeTarget(null)}
+          onSuccess={() => setReturnChangeTarget(null)}
+        />
+      )}
+
+      {/* Modal Lihat Bukti TF Sisa Kasbon */}
+      {viewProofTarget && (
+        <ViewReturnProofModal
+          transaction={viewProofTarget}
+          onClose={() => setViewProofTarget(null)}
+          onEditProof={() => {
+            const target = viewProofTarget;
+            setViewProofTarget(null);
+            setReturnChangeTarget(target);
+          }}
+        />
+      )}
     </div>
   );
 }

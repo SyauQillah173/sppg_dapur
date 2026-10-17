@@ -36,6 +36,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         data.receiptPhotoUrl = body.receiptPhotoUrl || null;
         data.physicalReceiptImage = body.receiptPhotoUrl ? 'PHYSICAL_RECEIPT_NEW' : null;
       }
+      if (body.isChangeReturned !== undefined) data.isChangeReturned = Boolean(body.isChangeReturned);
+      if (body.returnProofUrl !== undefined) data.returnProofUrl = body.returnProofUrl || null;
+      if (body.returnedAt !== undefined) data.returnedAt = body.returnedAt ? new Date(body.returnedAt) : null;
+      if (body.returnedBy !== undefined) data.returnedBy = body.returnedBy || null;
+      if (body.returnedTo !== undefined) data.returnedTo = body.returnedTo || null;
+      if (body.returnNotes !== undefined) data.returnNotes = body.returnNotes || null;
+
       if (body.status) {
         data.status = body.status as AuditStatus;
         if (body.status === AuditStatus.VERIFIED) data.auditedAt = new Date();
@@ -54,6 +61,24 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         data,
         include: { items: true },
       });
+
+      // Jika sisa kas baru saja dikembalikan, catat notifikasi sistem
+      if (body.isChangeReturned && !existing.isChangeReturned) {
+        try {
+          await tx.systemNotification.create({
+            data: {
+              type: 'CHANGE_RETURNED',
+              title: 'Pengembalian Sisa Kas Lunas',
+              message: `${body.returnedBy || 'Pemegang Kasbon'} telah menyetorkan sisa uang kasbon nota ${order.receiptNumber} sebesar Rp ${Number(order.changeReturned).toLocaleString('id-ID')} kepada ${body.returnedTo || 'Bendahara SPPG'}. Bukti TF terlampir.`,
+              actorName: body.returnedBy || 'Pemegang Kasbon',
+              amount: order.changeReturned,
+              referenceId: order.id,
+            },
+          });
+        } catch (e) {
+          console.error('Failed to log change return notification:', e);
+        }
+      }
 
       await applyOrderAggregates(tx, order, 1);
       return order;

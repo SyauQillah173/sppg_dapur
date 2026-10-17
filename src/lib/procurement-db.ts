@@ -18,6 +18,19 @@ export function orderToApp(
       : lookups?.unitMap?.get(order.sppgUnitId) || order.sppgUnitId;
   const emp = lookups?.empMap?.get(order.requesterId);
   const sup = lookups?.supMap?.get(order.supplierId);
+  let supplierName = sup?.name || 'CV Rekanan Dapur';
+  let supplierAddress = sup?.address || 'Gresik, Jawa Timur';
+
+  if (order.notes && order.notes.includes('SUPPLIER_NAMES:')) {
+    const match = order.notes.match(/SUPPLIER_NAMES:\s*([^\n;]+)/);
+    if (match && match[1]) {
+      supplierName = match[1].trim();
+    }
+  } else if (order.supplierId && (order.supplierId.includes(',') || !sup)) {
+    const ids = order.supplierId.split(',').map((s: string) => s.trim());
+    const names = ids.map((id: string) => lookups?.supMap?.get(id)?.name || id);
+    supplierName = names.join(', ');
+  }
 
   return {
     id: order.id,
@@ -29,8 +42,8 @@ export function orderToApp(
     requesterName: emp?.name || 'Petugas Pengadaan',
     requesterRole: emp?.roleTitle || 'Staf Belanja',
     supplierId: order.supplierId,
-    supplierName: sup?.name || 'CV Rekanan Dapur',
-    supplierAddress: sup?.address || 'Gresik, Jawa Timur',
+    supplierName,
+    supplierAddress,
     amountRequested: Number(order.amountRequested),
     actualReceiptTotal: Number(order.actualReceiptTotal),
     changeReturned: Number(order.changeReturned),
@@ -42,6 +55,12 @@ export function orderToApp(
     auditNotes: order.auditNotes || undefined,
     discrepancyReason: order.discrepancyReason || undefined,
     notes: order.notes || undefined,
+    isChangeReturned: Boolean(order.isChangeReturned),
+    returnProofUrl: order.returnProofUrl || '',
+    returnedAt: order.returnedAt ? new Date(order.returnedAt).toISOString() : undefined,
+    returnedBy: order.returnedBy || undefined,
+    returnedTo: order.returnedTo || undefined,
+    returnNotes: order.returnNotes || undefined,
     createdAt: new Date(order.createdAt).toISOString(),
     items: items.map((it) => ({
       id: it.id,
@@ -86,10 +105,14 @@ export async function applyOrderAggregates(
     });
   }
 
-  await tx.supplier.updateMany({
-    where: { id: order.supplierId },
-    data: { totalDisbursed: { increment: total }, totalTransactions: { increment: sign } },
-  });
+  const supplierIds = (order.supplierId || '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (supplierIds.length > 0) {
+    const supShare = total / supplierIds.length;
+    await tx.supplier.updateMany({
+      where: { id: { in: supplierIds } },
+      data: { totalDisbursed: { increment: supShare }, totalTransactions: { increment: sign } },
+    });
+  }
 }
 
 /** Periksa anomali harga tiap item terhadap harga patokan bahan (naik > 20%). */

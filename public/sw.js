@@ -100,3 +100,17 @@ self.addEventListener('notificationclick', (event) => {
     })
   );
 });
+
+// Direct message listener from client pages to display mobile push notification
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+    const { title, options } = event.data;
+    self.registration.showNotification(title || 'SPPG Dapur - Notifikasi', {
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      vibrate: [200, 100, 200],
+      ...options,
+    });
+  }
+});
+

@@ -677,15 +677,15 @@ export function BudgetAllocationModule() {
 
       {/* Filter bar */}
       <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-3">
-        <div className="flex flex-wrap gap-3 items-end">
+        <div className="flex flex-wrap gap-2.5 sm:gap-3 items-end">
 
           {/* Unit SPPG */}
-          <div>
+          <div className="w-full sm:w-auto">
             <label className="block text-[11px] font-medium text-slate-500 mb-1">Unit SPPG</label>
             <select
               value={localUnit}
               onChange={e => setLocalUnit(e.target.value)}
-              className="h-8 rounded-md border border-slate-300 px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900"
+              className="w-full sm:w-auto h-8 rounded-md border border-slate-300 px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white"
             >
               <option value="ALL">Semua Unit (4 Dapur)</option>
               {sppgUnits.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
@@ -693,15 +693,15 @@ export function BudgetAllocationModule() {
           </div>
 
           {/* Periode mode */}
-          <div>
+          <div className="w-full sm:w-auto">
             <label className="block text-[11px] font-medium text-slate-500 mb-1">Filter Berdasarkan</label>
-            <div className="flex rounded-md border border-slate-200 overflow-hidden">
+            <div className="flex rounded-md border border-slate-200 overflow-hidden bg-white">
               {(['tanggal', 'bulan', 'tahun'] as const).map(m => (
                 <button
                   key={m}
                   type="button"
                   onClick={() => setPeriodeMode(m)}
-                  className={`px-3 py-1.5 text-xs font-medium transition ${periodeMode === m ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
+                  className={`flex-1 sm:flex-none px-3 py-1.5 text-xs font-medium transition ${periodeMode === m ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}
                 >
                   {m.charAt(0).toUpperCase() + m.slice(1)}
                 </button>
@@ -710,21 +710,21 @@ export function BudgetAllocationModule() {
           </div>
 
           {/* Date input */}
-          <div>
+          <div className="w-full sm:w-auto">
             <label className="block text-[11px] font-medium text-slate-500 mb-1">
               {periodeMode === 'tanggal' ? 'Pilih Tanggal' : periodeMode === 'bulan' ? 'Pilih Bulan' : 'Pilih Tahun'}
             </label>
             {periodeMode === 'tanggal' && (
               <input type="date" value={filterTanggal} onChange={e => setFilterTanggal(e.target.value)}
-                className="h-8 rounded-md border border-slate-300 px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900" />
+                className="w-full sm:w-auto h-8 rounded-md border border-slate-300 px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white" />
             )}
             {periodeMode === 'bulan' && (
               <input type="month" value={filterBulan} onChange={e => setFilterBulan(e.target.value)}
-                className="h-8 rounded-md border border-slate-300 px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900" />
+                className="w-full sm:w-auto h-8 rounded-md border border-slate-300 px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white" />
             )}
             {periodeMode === 'tahun' && (
               <select value={filterTahun} onChange={e => setFilterTahun(e.target.value)}
-                className="h-8 rounded-md border border-slate-300 px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900">
+                className="w-full sm:w-auto h-8 rounded-md border border-slate-300 px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white">
                 <option value="">Semua Tahun</option>
                 {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
               </select>
@@ -732,10 +732,10 @@ export function BudgetAllocationModule() {
           </div>
 
           {/* Rekap mode */}
-          <div>
+          <div className="w-full sm:w-auto">
             <label className="block text-[11px] font-medium text-slate-500 mb-1">Rekapitulasi</label>
             <select value={rekapMode} onChange={e => setRekapMode(e.target.value as RekapMode)}
-              className="h-8 rounded-md border border-slate-300 px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900">
+              className="w-full sm:w-auto h-8 rounded-md border border-slate-300 px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white">
               <option value="harian">Harian</option>
               <option value="mingguan">Mingguan</option>
               <option value="bulanan">Bulanan</option>
@@ -744,10 +744,10 @@ export function BudgetAllocationModule() {
           </div>
 
           {/* Jenis */}
-          <div>
+          <div className="w-full sm:w-auto">
             <label className="block text-[11px] font-medium text-slate-500 mb-1">Jenis Rekap</label>
             <select value={rekapJenis} onChange={e => setRekapJenis(e.target.value as RekapJenis)}
-              className="h-8 rounded-md border border-slate-300 px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900">
+              className="w-full sm:w-auto h-8 rounded-md border border-slate-300 px-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white">
               <option value="semua">Semua (Pemasukan & Pengeluaran)</option>
               <option value="pemasukan">Pemasukan Saja</option>
               <option value="pengeluaran">Pengeluaran Saja</option>
@@ -755,7 +755,7 @@ export function BudgetAllocationModule() {
           </div>
 
           {/* Export / Import buttons */}
-          <div className="flex flex-wrap gap-2 ml-auto">
+          <div className="w-full sm:w-auto flex flex-wrap gap-2 sm:ml-auto items-center pt-1 sm:pt-0">
             {!isReadOnly && (
               <>
                 <input
@@ -817,9 +817,9 @@ export function BudgetAllocationModule() {
           CARD 2: AKUMULASI KESELURUHAN (MASTER TOTALS - TETAP & TERHITUNG RAPI)
       ────────────────────────────────────────────────────────────────────────── */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
           <div className="flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-slate-700" />
+            <Building2 className="h-4 w-4 text-slate-700 shrink-0" />
             <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
               Akumulasi Keuangan Seluruh Periode (Tetap & Terhitung Rapi)
             </h2>
@@ -831,8 +831,8 @@ export function BudgetAllocationModule() {
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
           <div className="rounded-lg border border-slate-200 bg-white p-3 sm:p-4 min-w-0 shadow-2xs">
-            <div className="flex items-center justify-between text-xs text-slate-500 mb-2 truncate">
-              <span className="truncate">Total Seluruh Pemasukan</span>
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
+              <span className="font-semibold text-slate-700 text-xs truncate">Total Pemasukan</span>
               <Wallet className="h-4 w-4 text-blue-500 shrink-0" />
             </div>
             <div className="text-sm sm:text-base lg:text-lg font-bold text-slate-900 font-mono tabular-nums tracking-tight whitespace-nowrap overflow-hidden text-ellipsis" title={formatRupiah(totalPemasukan)}>
@@ -841,8 +841,8 @@ export function BudgetAllocationModule() {
             <p className="text-[10px] text-slate-400 mt-1 truncate">{filteredBudgets.length} alokasi kas tercatat</p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-white p-3 sm:p-4 min-w-0 shadow-2xs">
-            <div className="flex items-center justify-between text-xs text-slate-500 mb-2 truncate">
-              <span className="truncate">Total Seluruh Pengeluaran</span>
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
+              <span className="font-semibold text-slate-700 text-xs truncate">Total Pengeluaran</span>
               <CreditCard className="h-4 w-4 text-emerald-500 shrink-0" />
             </div>
             <div className="text-sm sm:text-base lg:text-lg font-bold text-slate-900 font-mono tabular-nums tracking-tight whitespace-nowrap overflow-hidden text-ellipsis" title={formatRupiah(totalPengeluaran)}>
@@ -851,9 +851,9 @@ export function BudgetAllocationModule() {
             <p className="text-[10px] text-slate-400 mt-1 truncate">{filteredProcurements.length} transaksi belanja</p>
           </div>
           <div className={`rounded-lg border p-3 sm:p-4 min-w-0 shadow-2xs ${saldo < 0 ? 'border-rose-300 bg-rose-50/40' : 'border-slate-200 bg-white'}`}>
-            <div className="flex items-center justify-between text-xs mb-2 truncate">
-              <span className={`truncate ${saldo < 0 ? 'text-rose-800 font-semibold' : 'text-slate-500'}`}>
-                {saldo < 0 ? 'Defisit Saldo Kas Bersih' : 'Total Saldo Kas Bersih'}
+            <div className="flex items-center justify-between text-xs mb-2">
+              <span className={`font-semibold text-xs truncate ${saldo < 0 ? 'text-rose-800' : 'text-slate-700'}`}>
+                {saldo < 0 ? 'Defisit Saldo Kas' : 'Saldo Kas Bersih'}
               </span>
               {saldo < 0 ? (
                 <AlertOctagon className="h-4 w-4 text-rose-600 shrink-0" />
@@ -873,8 +873,8 @@ export function BudgetAllocationModule() {
             </p>
           </div>
           <div className="rounded-lg border border-slate-200 bg-white p-3 sm:p-4 min-w-0 shadow-2xs">
-            <div className="flex items-center justify-between text-xs text-slate-500 mb-2 truncate">
-              <span className="truncate">Penyerapan Dana</span>
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
+              <span className="font-semibold text-slate-700 text-xs truncate">Penyerapan Dana</span>
               <TrendingUp className={`h-4 w-4 shrink-0 ${absorptionRate > 100 ? 'text-rose-500' : 'text-amber-500'}`} />
             </div>
             <div className="flex items-center gap-2">
