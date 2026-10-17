@@ -1,11 +1,13 @@
 // Service Worker for SPPG Dapur PWA
-const CACHE_NAME = 'sppg-dapur-v1';
+const CACHE_NAME = 'sppg-dapur-v2';
 const PRECACHE_ASSETS = [
   '/',
   '/manifest.json',
+  '/badan-gizi.png',
   '/icon-192.png',
   '/icon-512.png',
-  '/icon.svg',
+  '/icon-maskable.png',
+  '/apple-touch-icon.png',
 ];
 
 // Install: precache essential shell assets

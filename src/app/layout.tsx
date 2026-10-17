@@ -26,8 +26,15 @@ export const metadata: Metadata = {
   description: 'Portal internal manajemen operasional, logistik, dan keuangan 4 unit SPPG Dapur.',
   manifest: '/manifest.json',
   icons: {
-    icon: '/badan-gizi.png',
-    apple: '/badan-gizi.png',
+    icon: [
+      { url: '/badan-gizi.png', type: 'image/png' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+      { url: '/badan-gizi.png' },
+    ],
   },
   appleWebApp: {
     capable: true,
