@@ -1632,7 +1632,7 @@ export function MasterDataCMS() {
                       <input
                         type="number"
                         min={0}
-                        step={500}
+                        step="any"
                         value={ingForm.lastPurchasePrice}
                         onChange={(e) =>
                           setIngForm({ ...ingForm, lastPurchasePrice: e.target.value })

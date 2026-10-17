@@ -1369,11 +1369,12 @@ export function BudgetAllocationModule() {
                   <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500 font-bold">Rp</span>
                   <input
                     type="number"
-                    step="500000"
+                    step="any"
                     min="1"
                     required
                     value={amountAllocated}
                     onChange={e => setAmountAllocated(e.target.value)}
+                    placeholder="Contoh: 170000000"
                     className="w-full rounded-md border border-slate-300 pl-10 pr-3 py-2 text-sm font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
                   />
                 </div>
@@ -1739,11 +1740,13 @@ export function BudgetAllocationModule() {
                   <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500 font-bold">Rp</span>
                   <input
                     type="number"
+                    step="any"
                     required
                     min="1"
                     max={withdrawTargetBudget.remainingBudget}
                     value={withdrawAmount}
                     onChange={e => setWithdrawAmount(e.target.value)}
+                    placeholder="Contoh: 5000000"
                     className="w-full rounded-md border border-slate-300 pl-10 pr-3 py-2 text-sm font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
                   />
                 </div>

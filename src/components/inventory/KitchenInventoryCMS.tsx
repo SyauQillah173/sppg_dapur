@@ -817,7 +817,7 @@ export function KitchenInventoryCMS() {
  <input
  type="number"
  min={0}
- step={500}
+ step="any"
  value={ingPrice}
  onChange={(e) => setIngPrice(Number(e.target.value))}
  className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 font-mono"

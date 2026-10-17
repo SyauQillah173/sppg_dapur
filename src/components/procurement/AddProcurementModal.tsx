@@ -744,7 +744,7 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
                   type="number"
                   required
                   min={0}
-                  step={1000}
+                  step="any"
                   value={amountRequested}
                   onChange={(e) => setAmountRequested(Number(e.target.value))}
                   className="w-full rounded-md border border-slate-300 bg-white pl-9 pr-2.5 py-2 font-mono font-bold text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
@@ -860,7 +860,7 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
                           <input
                             type="number"
                             min={0}
-                            step={500}
+                            step="any"
                             value={item.unitPrice}
                             onChange={(e) => handleItemChange(idx, 'unitPrice', Number(e.target.value))}
                             className="w-full rounded border border-slate-300 px-1 py-1 text-xs text-right font-mono font-bold tabular-nums focus:border-slate-800 focus:outline-none"
@@ -1001,7 +1001,7 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
                         <input
                           type="number"
                           min={0}
-                          step={500}
+                          step="any"
                           value={item.unitPrice}
                           onChange={(e) => handleItemChange(idx, 'unitPrice', Number(e.target.value))}
                           className="w-full rounded-lg border border-slate-300 px-2.5 py-2 text-xs font-mono font-bold tabular-nums text-slate-900 focus:border-slate-800 focus:outline-none"
