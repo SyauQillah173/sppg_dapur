@@ -41,6 +41,7 @@ const SEC: Record<string, string> = {
     "img-src 'self' data: blob: https:",
     "connect-src 'self' https:",
     "font-src 'self' data:",
+    "object-src 'none'",
     "frame-ancestors 'none'",
     "form-action 'self'",
     "base-uri 'self'",

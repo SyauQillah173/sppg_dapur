@@ -28,15 +28,40 @@ enum UserRole {
 }
 
 model AdminUser {
-  id        String   @id @default(cuid())
-  username  String   @unique
-  password  String   // Hashed / secure password
+  id        String        @id @default(cuid())
+  username  String        @unique
+  password  String        // Hashed / secure password
   name      String
-  role      UserRole @default(EXECUTIVE_AUDITOR) // SUPERADMIN | EXECUTIVE_AUDITOR
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  role      UserRole      @default(EXECUTIVE_AUDITOR) // SUPERADMIN | EXECUTIVE_AUDITOR
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  sessions  UserSession[]
 
   @@map("admin_users")
+}
+
+model UserSession {
+  id           String    @id @default(cuid())
+  userId       String
+  tokenHash    String    @unique
+  deviceType   String    @default("Desktop") // "Mobile", "Tablet", "Desktop"
+  deviceName   String    // e.g. "Samsung Galaxy S23", "iPhone 15", "Windows PC"
+  browserName  String    // e.g. "Chrome Mobile", "Safari Mobile", "Google Chrome"
+  osName       String    // e.g. "Android 14", "iOS 17.5", "Windows 11"
+  ipAddress    String    // e.g. "180.252.xxx.xxx"
+  location     String?   // e.g. "Indonesia"
+  userAgent    String
+  isActive     Boolean   @default(true)
+  lastActiveAt DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  revokedAt    DateTime?
+  revokedBy    String?   // "USER_SELF", "REMOTE_LOGOUT", "ADMIN", "SESSION_TIMEOUT"
+
+  user         AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+  @@index([tokenHash])
+  @@map("user_sessions")
 }
 
 model SppgUnit {

@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { AuditStatus } from '@prisma/client';
 import { requireAuth, requireSuperadmin } from '@/lib/api-auth';
 import { applyOrderAggregates, orderToApp, withAnomalyCheck } from '@/lib/procurement-db';
+import { sanitizeObject } from '@/lib/sanitize';
 
 
 /** Daftar pembelanjaan + rincian bahannya (tabel procurement_orders & procurement_items). */
@@ -55,7 +56,8 @@ export async function POST(req: NextRequest) {
   if ('error' in auth) return auth.error;
 
   try {
-    const body = await req.json();
+    const rawBody = await req.json();
+    const body = sanitizeObject(rawBody) as any;
     const {
       id,
       receiptNumber,

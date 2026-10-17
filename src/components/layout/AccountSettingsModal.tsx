@@ -2,17 +2,18 @@
 
 import React, { useState } from 'react';
 import { useStore } from '@/lib/store';
-import { KeyRound, X, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import { KeyRound, X, AlertCircle, CheckCircle2, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 
 interface AccountSettingsModalProps {
   onClose: () => void;
+  onOpenSessions?: () => void;
 }
 
 /**
  * Ubah username / password akun yang sedang login.
  * Setelah berhasil, sesi ditutup otomatis supaya user login ulang dengan data baru.
  */
-export function AccountSettingsModal({ onClose }: AccountSettingsModalProps) {
+export function AccountSettingsModal({ onClose, onOpenSessions }: AccountSettingsModalProps) {
   const { currentUser, logout } = useStore();
 
   const [username, setUsername] = useState(currentUser?.username || '');
@@ -169,6 +170,22 @@ export function AccountSettingsModal({ onClose }: AccountSettingsModalProps) {
               </button>
             </div>
           </div>
+
+          {onOpenSessions && (
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenSessions();
+                }}
+                className="w-full py-2.5 px-3 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-semibold text-slate-700 flex items-center justify-center gap-2 transition"
+              >
+                <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                <span>Lihat Riwayat Perangkat & Sesi Login</span>
+              </button>
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
             <button type="button" onClick={onClose} disabled={isSaving}

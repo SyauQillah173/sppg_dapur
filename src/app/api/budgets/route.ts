@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, requireSuperadmin } from '@/lib/api-auth';
 import { applyBudgetToUnits, budgetToApp } from '@/lib/budget-db';
+import { sanitizeObject } from '@/lib/sanitize';
 
 
 /** Daftar dana masuk / pagu kas (tabel budget_allocations). */
@@ -47,7 +48,8 @@ export async function POST(req: NextRequest) {
   if ('error' in auth) return auth.error;
 
   try {
-    const body = await req.json();
+    const rawBody = await req.json();
+    const body = sanitizeObject(rawBody) as any;
     const rows: any[] = Array.isArray(body?.items) ? body.items : [body];
     const skipped: string[] = [];
 

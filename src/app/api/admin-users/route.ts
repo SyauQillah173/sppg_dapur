@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { requireAuth, requireSuperadmin, parseSessionToken } from '@/lib/api-auth';
 import { UserRole } from '@prisma/client';
 import { hashPassword } from '@/lib/password';
+import { sanitizeText } from '@/lib/sanitize';
 
 
 export async function GET(req: NextRequest) {
@@ -54,7 +55,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const cleanUsername = String(username).trim().toLowerCase();
+    const cleanUsername = sanitizeText(username).toLowerCase();
+    const cleanName = sanitizeText(name);
     if (cleanUsername.length < 3 || cleanUsername.length > 64) {
       return NextResponse.json({ success: false, error: 'Username harus 3-64 karakter.' }, { status: 400 });
     }

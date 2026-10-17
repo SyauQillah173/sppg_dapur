@@ -17,6 +17,7 @@ import {
 import { exportConsolidatedSPPGSummaryToExcel } from '@/lib/excel-export';
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal';
 import { AccountSettingsModal } from './AccountSettingsModal';
+import { DeviceSessionsModal } from './DeviceSessionsModal';
 import { PwaInstallButton } from '@/components/pwa/PwaInstallButton';
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
 
@@ -41,6 +42,7 @@ export function Header({ onNavigateTab }: HeaderProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [isSessionsModalOpen, setIsSessionsModalOpen] = useState(false);
 
   const handleUnit = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSelectedSppgUnit(e.target.value as SppgUnitId | 'ALL');
@@ -143,6 +145,16 @@ export function Header({ onNavigateTab }: HeaderProps) {
 
             <button
               type="button"
+              onClick={() => setIsSessionsModalOpen(true)}
+              className="h-8 px-2.5 rounded-md border border-slate-200 text-[12px] text-slate-700 hover:bg-slate-50 transition inline-flex items-center gap-1.5"
+              title="Riwayat login perangkat & sesi aktif"
+            >
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+              <span className="hidden xl:inline">Perangkat</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setIsAccountModalOpen(true)}
               className="h-8 px-2.5 rounded-md border border-slate-200 text-[12px] text-slate-600 hover:bg-slate-50 transition inline-flex items-center gap-1.5"
               title="Ubah username & password akun saya"
@@ -229,6 +241,14 @@ export function Header({ onNavigateTab }: HeaderProps) {
               </button>
               <button
                 type="button"
+                onClick={() => { setIsSessionsModalOpen(true); setMobileOpen(false); }}
+                className="flex-1 h-9 flex items-center justify-center gap-1.5 rounded-md border border-slate-200 text-[12px] text-slate-700 hover:bg-slate-50"
+              >
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                Perangkat
+              </button>
+              <button
+                type="button"
                 onClick={() => { setIsAccountModalOpen(true); setMobileOpen(false); }}
                 className="flex-1 h-9 flex items-center justify-center gap-1.5 rounded-md border border-slate-200 text-[12px] text-slate-600 hover:bg-slate-50"
               >
@@ -267,7 +287,13 @@ export function Header({ onNavigateTab }: HeaderProps) {
         onClose={() => setIsLogoutModalOpen(false)}
       />
 
-      {isAccountModalOpen && <AccountSettingsModal onClose={() => setIsAccountModalOpen(false)} />}
+      {isAccountModalOpen && (
+        <AccountSettingsModal
+          onClose={() => setIsAccountModalOpen(false)}
+          onOpenSessions={() => setIsSessionsModalOpen(true)}
+        />
+      )}
+      {isSessionsModalOpen && <DeviceSessionsModal onClose={() => setIsSessionsModalOpen(false)} />}
     </header>
   );
 }

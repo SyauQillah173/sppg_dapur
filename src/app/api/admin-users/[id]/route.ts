@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { requireAuth, requireSuperadmin, parseSessionToken } from '@/lib/api-auth';
 import { UserRole } from '@prisma/client';
 import { hashPassword } from '@/lib/password';
+import { sanitizeText } from '@/lib/sanitize';
 
 export async function PATCH(
   req: NextRequest,
@@ -31,7 +32,7 @@ export async function PATCH(
     const updateData: any = {};
 
     if (body.username !== undefined && String(body.username).trim() !== '') {
-      const cleanUsername = String(body.username).trim().toLowerCase();
+      const cleanUsername = sanitizeText(body.username).toLowerCase();
       if (cleanUsername.length < 3 || cleanUsername.length > 64) {
         return NextResponse.json({ success: false, error: 'Username harus 3-64 karakter.' }, { status: 400 });
       }
@@ -44,7 +45,7 @@ export async function PATCH(
       updateData.username = cleanUsername;
     }
 
-    if (body.name) updateData.name = String(body.name).trim();
+    if (body.name) updateData.name = sanitizeText(body.name);
 
     // Peran hanya boleh diubah oleh superadmin — akun tidak bisa menaikkan haknya sendiri.
     if (body.role && isSuperadmin) {

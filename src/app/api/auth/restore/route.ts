@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSessionToken, parseSessionToken, setSessionCookie } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { UserRole } from '@/lib/types';
+import { isSessionRevoked, createOrUpdateSession } from '@/lib/session-manager';
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,6 +18,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Token sesi telah kadaluwarsa (lebih dari 30 hari) atau tidak valid.' }, { status: 401 });
     }
 
+    // Periksa apakah perangkat ini telah di-logout jarak jauh
+    const revoked = await isSessionRevoked(token);
+    if (revoked) {
+      return NextResponse.json(
+        { success: false, error: 'Sesi perangkat telah dicabut atau dikeluarkan secara jarak jauh.', revoked: true },
+        { status: 401 }
+      );
+    }
+
     let userToReturn = sessionUser;
     try {
       const dbUser = await prisma.adminUser.findUnique({
@@ -29,6 +39,10 @@ export async function POST(req: NextRequest) {
     }
 
     const freshToken = await createSessionToken(userToReturn);
+
+    // Daftarkan / update sesi perangkat
+    await createOrUpdateSession(userToReturn.id, freshToken, req);
+
     const res = NextResponse.json({
       success: true,
       token: freshToken,
