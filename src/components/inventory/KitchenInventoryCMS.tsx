@@ -155,11 +155,11 @@ export function KitchenInventoryCMS() {
  return stockLedgers.filter((l) => l.sppgUnitId === selectedSppgUnit);
  }, [stockLedgers, selectedSppgUnit]);
 
- const handleSaveIngredient = (e: React.FormEvent) => {
+ const handleSaveIngredient = async (e: React.FormEvent) => {
  e.preventDefault();
  const catObj = categories.find((c) => c.name === ingCategory);
  if (editingIngredient) {
- updateIngredient(editingIngredient.id, {
+ await updateIngredient(editingIngredient.id, {
  name: ingName,
  category: ingCategory,
  categoryId: catObj?.id || 'CAT-01',
@@ -171,7 +171,7 @@ export function KitchenInventoryCMS() {
  });
  setEditingIngredient(null);
  } else {
- addIngredient({
+ await addIngredient({
  name: ingName,
  category: ingCategory,
  categoryId: catObj?.id || 'CAT-01',
