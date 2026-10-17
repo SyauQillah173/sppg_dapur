@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { AuditStatus } from '@prisma/client';
 import { requireSuperadmin } from '@/lib/api-auth';
 import { applyOrderAggregates, orderToApp, withAnomalyCheck } from '@/lib/procurement-db';
+import { deleteNotaPhoto, deleteNotaPhotos, cleanupOrphanedPhotos } from '@/lib/nota-storage';
 
 /** Edit nota belanja: nominal, tanggal, unit, peminta, supplier, rincian bahan, status. */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -33,11 +34,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (body.changeReturned !== undefined) data.changeReturned = Number(body.changeReturned) || 0;
       if (body.notes !== undefined) data.notes = body.notes || null;
       if (body.receiptPhotoUrl !== undefined) {
+        if (existing.receiptPhotoUrl && existing.receiptPhotoUrl !== body.receiptPhotoUrl) {
+          await deleteNotaPhoto(existing.receiptPhotoUrl, tx);
+        }
         data.receiptPhotoUrl = body.receiptPhotoUrl || null;
         data.physicalReceiptImage = body.receiptPhotoUrl ? 'PHYSICAL_RECEIPT_NEW' : null;
       }
       if (body.isChangeReturned !== undefined) data.isChangeReturned = Boolean(body.isChangeReturned);
-      if (body.returnProofUrl !== undefined) data.returnProofUrl = body.returnProofUrl || null;
+      if (body.returnProofUrl !== undefined) {
+        if (existing.returnProofUrl && existing.returnProofUrl !== body.returnProofUrl) {
+          await deleteNotaPhoto(existing.returnProofUrl, tx);
+        }
+        data.returnProofUrl = body.returnProofUrl || null;
+      }
       if (body.returnedAt !== undefined) data.returnedAt = body.returnedAt ? new Date(body.returnedAt) : null;
       if (body.returnedBy !== undefined) data.returnedBy = body.returnedBy || null;
       if (body.returnedTo !== undefined) data.returnedTo = body.returnedTo || null;
@@ -163,9 +172,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     await prisma.$transaction(async (tx) => {
       await applyOrderAggregates(tx, existing, -1);
       await tx.procurementOrder.delete({ where: { id } });
+      // Hapus foto nota belanja dan bukti transfer sisa kas dari PostgreSQL agar tidak memenuhi database!
+      await deleteNotaPhotos([existing.receiptPhotoUrl, existing.returnProofUrl], tx);
     });
 
-    return NextResponse.json({ success: true, message: 'Nota belanja dihapus.' });
+    // Otomatis bersihkan foto yatim yang tidak terpakai di background
+    cleanupOrphanedPhotos().catch(console.error);
+
+    return NextResponse.json({ success: true, message: 'Nota belanja dihapus beserta foto fisiknya.' });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
   }

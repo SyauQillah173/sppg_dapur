@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireSuperadmin } from '@/lib/api-auth';
 import { applyBudgetToUnits, budgetToApp } from '@/lib/budget-db';
+import { deleteNotaPhotos, cleanupOrphanedPhotos } from '@/lib/nota-storage';
 
 /** Edit catatan dana masuk. */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -98,12 +99,26 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       return NextResponse.json({ success: false, error: 'Catatan dana masuk tidak ditemukan.' }, { status: 404 });
     }
 
+    const photosToDelete: string[] = [];
+    if (existing.notes) {
+      const matches = existing.notes.matchAll(/nota-\d+-[a-z0-9]{1,10}\.(jpg|jpeg|png|webp|heic|heif)/gi);
+      for (const m of matches) {
+        photosToDelete.push(m[0]);
+      }
+    }
+
     await prisma.$transaction(async (tx) => {
       await applyBudgetToUnits(tx, existing.sppgUnitId, -Number(existing.amountAllocated));
       await tx.budgetAllocation.delete({ where: { id } });
+      if (photosToDelete.length > 0) {
+        await deleteNotaPhotos(photosToDelete, tx);
+      }
     });
 
-    return NextResponse.json({ success: true, message: 'Catatan dana masuk dihapus.' });
+    // Otomatis bersihkan foto yatim yang tidak terpakai
+    cleanupOrphanedPhotos().catch(console.error);
+
+    return NextResponse.json({ success: true, message: 'Catatan dana masuk dihapus beserta bukti transfernya.' });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
   }
