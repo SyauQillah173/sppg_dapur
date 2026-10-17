@@ -68,7 +68,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   return parseSessionToken(token);
 }
 
-export async function setSessionCookie(res: { cookies: { set: Function } }, user: SessionUser) {
+export async function setSessionCookie(res: { cookies: { set: Function } }, user: SessionUser): Promise<string> {
   const token = await createSessionToken(user);
   res.cookies.set(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
@@ -77,6 +77,7 @@ export async function setSessionCookie(res: { cookies: { set: Function } }, user
     path: '/',
     maxAge: 60 * 60 * 24 * 30, // 30 hari
   });
+  return token;
 }
 
 export async function clearSessionCookie() {

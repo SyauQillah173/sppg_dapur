@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { parseSessionToken, setSessionCookie } from '@/lib/auth';
+import { createSessionToken, parseSessionToken, setSessionCookie } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { UserRole } from '@/lib/types';
 
@@ -28,14 +28,21 @@ export async function POST(req: NextRequest) {
       // offline / DB unreachable, fallback to verified token payload
     }
 
+    const freshToken = await createSessionToken(userToReturn);
     const res = NextResponse.json({
       success: true,
+      token: freshToken,
       user: userToReturn,
       message: 'Sesi login berhasil dipulihkan secara otomatis.',
     });
 
-    // Re-issue cookie with 30-day rolling expiration
-    await setSessionCookie(res, userToReturn);
+    res.cookies.set('giziflow_session', freshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 30, // 30 hari
+    });
     return res;
   } catch (error: unknown) {
     console.error('Session restore error:', error);

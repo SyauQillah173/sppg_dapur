@@ -19,9 +19,10 @@ export async function GET(req: NextRequest) {
     } catch { /* DB unreachable */ }
 
     const response = NextResponse.json({ success: true, user: userToReturn });
-    // Rolling session: setiap kali user membuka aplikasi, perpanjang masa aktif 30 hari ke depan
-    await setSessionCookie(response, userToReturn);
-    return response;
+    const freshToken = await setSessionCookie(response, userToReturn);
+    return NextResponse.json({ success: true, user: userToReturn, token: freshToken }, {
+      headers: response.headers,
+    });
   } catch {
     return NextResponse.json({ success: false, error: 'Server error' }, { status: 500 });
   }

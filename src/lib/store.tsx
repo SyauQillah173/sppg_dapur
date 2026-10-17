@@ -124,11 +124,19 @@ interface StoreContextType {
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<CurrentUser | null>({
-    id: 'admin-super-01',
-    username: 'superadmin',
-    name: 'Superadmin Pengelola SPPG',
-    role: 'SUPERADMIN',
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('giziflow_session_user');
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return {
+      id: 'admin-super-01',
+      username: 'superadmin',
+      name: 'Superadmin Pengelola SPPG',
+      role: 'SUPERADMIN',
+    };
   });
   const [userRole, setUserRole] = useState<UserRole>('SUPERADMIN');
   // serverRole = actual role from DB — ceiling for UI switching
@@ -148,21 +156,56 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   // Jangan push ke server sebelum state awal selesai dimuat (hindari seed menimpa data server)
   const hydratedRef = useRef(false);
 
-  // Sync role with current user
+  // Sync role with current user & persist active session
   useEffect(() => {
-    // Fetch logged in session from server
-    fetch('/api/auth/me')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data && data.success && data.user) {
-          setCurrentUser(data.user);
-          setUserRole(data.user.role);
-          setServerRole(data.user.role); // lock ceiling
+    const syncSession = async () => {
+      try {
+        const res = await fetch('/api/auth/me', { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.success && data?.user) {
+            setCurrentUser(data.user);
+            setUserRole(data.user.role);
+            setServerRole(data.user.role); // lock ceiling
+            if (typeof window !== 'undefined') {
+              try {
+                if (data.token) localStorage.setItem('giziflow_session_token', data.token);
+                localStorage.setItem('giziflow_session_user', JSON.stringify(data.user));
+              } catch {}
+            }
+            return;
+          }
         }
-      })
-      .catch(() => {
-        // Fallback to default
-      });
+
+        // Jika cookie tertahan pada standalone PWA launcher, coba restore via token
+        if (typeof window !== 'undefined') {
+          const storedToken = localStorage.getItem('giziflow_session_token');
+          if (storedToken) {
+            const rRes = await fetch('/api/auth/restore', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: storedToken }),
+            });
+            if (rRes.ok) {
+              const rData = await rRes.json();
+              if (rData?.success && rData?.user) {
+                setCurrentUser(rData.user);
+                setUserRole(rData.user.role);
+                setServerRole(rData.user.role);
+                try {
+                  if (rData.token) localStorage.setItem('giziflow_session_token', rData.token);
+                  localStorage.setItem('giziflow_session_user', JSON.stringify(rData.user));
+                } catch {}
+              }
+            }
+          }
+        }
+      } catch {
+        // Fallback to cached user
+      }
+    };
+
+    syncSession();
   }, []);
 
   // Sync userRole when changed — AUDITOR cannot escalate to SUPERADMIN

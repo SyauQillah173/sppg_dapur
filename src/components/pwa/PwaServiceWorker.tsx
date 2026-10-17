@@ -8,6 +8,11 @@ export function PwaServiceWorker() {
       navigator.serviceWorker
         .register('/sw.js')
         .then((reg) => {
+          // Segera periksa pembaruan Service Worker saat aplikasi dibuka
+          try {
+            reg.update();
+          } catch {}
+
           // Check for sw update
           reg.onupdatefound = () => {
             const installing = reg.installing;

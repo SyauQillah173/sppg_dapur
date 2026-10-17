@@ -22,6 +22,10 @@ export default function LoginPage() {
         if (meRes.ok) {
           const meData = await meRes.json();
           if (meData?.success && meData?.user) {
+            try {
+              if (meData.token) localStorage.setItem('giziflow_session_token', meData.token);
+              localStorage.setItem('giziflow_session_user', JSON.stringify(meData.user));
+            } catch {}
             window.location.replace('/');
             return;
           }
@@ -38,6 +42,10 @@ export default function LoginPage() {
           if (restoreRes.ok) {
             const restoreData = await restoreRes.json();
             if (restoreData?.success && restoreData?.user) {
+              try {
+                if (restoreData.token) localStorage.setItem('giziflow_session_token', restoreData.token);
+                localStorage.setItem('giziflow_session_user', JSON.stringify(restoreData.user));
+              } catch {}
               window.location.replace('/');
               return;
             }
