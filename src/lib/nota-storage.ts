@@ -73,7 +73,7 @@ export async function cleanupOrphanedPhotos(client?: any): Promise<{ deletedCoun
 
     const [allPhotos, orders, budgets] = await Promise.all([
       prismaClient.notaPhoto.findMany({ select: { name: true } }),
-      prismaClient.procurementOrder.findMany({ select: { receiptPhotoUrl: true, returnProofUrl: true } }),
+      (prismaClient.procurementOrder as any).findMany({ select: { receiptPhotoUrl: true, returnProofUrl: true } }),
       prismaClient.budgetAllocation.findMany({ select: { notes: true } }),
     ]);
 
@@ -82,7 +82,7 @@ export async function cleanupOrphanedPhotos(client?: any): Promise<{ deletedCoun
     for (const o of orders) {
       const p1 = extractNotaName(o.receiptPhotoUrl);
       if (p1) activeNames.add(p1);
-      const p2 = extractNotaName(o.returnProofUrl);
+      const p2 = extractNotaName((o as any).returnProofUrl);
       if (p2) activeNames.add(p2);
     }
 

@@ -6,7 +6,7 @@ async function main() {
   });
   console.log(`📸 Total foto di tabel nota_photos: ${photos.length}`);
 
-  const orders = await prisma.procurementOrder.findMany({
+  const orders: any[] = await (prisma.procurementOrder as any).findMany({
     select: { id: true, receiptNumber: true, receiptPhotoUrl: true, returnProofUrl: true },
   });
   console.log(`🛒 Total pesanan/belanja di DB: ${orders.length}`);
@@ -21,11 +21,11 @@ async function main() {
 
   for (const o of orders) {
     if (o.receiptPhotoUrl) {
-      const match = o.receiptPhotoUrl.match(/nota-[^/?"'\s]+\.[a-z0-9]+/i);
+      const match = String(o.receiptPhotoUrl).match(/nota-[^/?"'\s]+\.[a-z0-9]+/i);
       if (match) usedNames.add(match[0]);
     }
     if (o.returnProofUrl) {
-      const match = o.returnProofUrl.match(/nota-[^/?"'\s]+\.[a-z0-9]+/i);
+      const match = String(o.returnProofUrl).match(/nota-[^/?"'\s]+\.[a-z0-9]+/i);
       if (match) usedNames.add(match[0]);
     }
   }
