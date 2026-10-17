@@ -20,7 +20,8 @@ async function verifyToken(token: string): Promise<{ username: string; role: str
     for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ sig.charCodeAt(i);
     if (diff !== 0) return null;
     const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8'));
-    if (!parsed.iat || Date.now() / 1000 - parsed.iat > 60 * 60 * 24 * 7) return null;
+    // Token max age: 30 hari (2.592.000 detik)
+    if (!parsed.iat || Date.now() / 1000 - parsed.iat > 60 * 60 * 24 * 30) return null;
     if (!parsed.username || !parsed.role) return null;
     return { username: parsed.username, role: parsed.role };
   } catch { return null; }
@@ -83,6 +84,18 @@ export async function middleware(request: NextRequest) {
 
   const res = NextResponse.next();
   Object.entries(SEC).forEach(([k, v]) => res.headers.set(k, v));
+
+  // Rolling session: selama user aktif membuka aplikasi, masa berlaku cookie diperpanjang 30 hari ke depan
+  if (token && session) {
+    res.cookies.set('giziflow_session', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 30, // 30 hari
+    });
+  }
+
   return res;
 }
 

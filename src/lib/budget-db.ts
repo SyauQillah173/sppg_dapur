@@ -38,6 +38,9 @@ export function budgetToApp(row: any, unitMap?: Map<string, string>) {
     withdrawnAmount: Number(row.withdrawnAmount ?? meta.withdrawnAmount) || 0,
     withdrawnAt: row.withdrawnAt || meta.withdrawnAt || undefined,
     withdrawnBy: row.withdrawnBy || meta.withdrawnBy || '',
+    withdrawnRecipient: row.withdrawnRecipient || meta.withdrawnRecipient || '',
+    withdrawnSpender: row.withdrawnSpender || meta.withdrawnSpender || '',
+    withdrawnProofUrl: row.withdrawnProofUrl || meta.withdrawnProofUrl || '',
     withdrawnNote: row.withdrawnNote || meta.withdrawnNote || '',
   };
 }

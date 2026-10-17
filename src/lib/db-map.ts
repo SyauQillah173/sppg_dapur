@@ -141,6 +141,9 @@ export function toBudget(row: any, units: SppgUnit[]): BudgetAllocationItem {
     withdrawnAmount: num(row.withdrawnAmount ?? meta.withdrawnAmount),
     withdrawnAt: row.withdrawnAt || meta.withdrawnAt || undefined,
     withdrawnBy: row.withdrawnBy || meta.withdrawnBy || '',
+    withdrawnRecipient: row.withdrawnRecipient || meta.withdrawnRecipient || '',
+    withdrawnSpender: row.withdrawnSpender || meta.withdrawnSpender || '',
+    withdrawnProofUrl: row.withdrawnProofUrl || meta.withdrawnProofUrl || '',
     withdrawnNote: row.withdrawnNote || meta.withdrawnNote || '',
   };
 }

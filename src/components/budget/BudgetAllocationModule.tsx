@@ -70,6 +70,12 @@ export function BudgetAllocationModule() {
   const [withdrawTargetBudget, setWithdrawTargetBudget] = useState<BudgetAllocationItem | null>(null);
   const [withdrawAmount, setWithdrawAmount] = useState<string>('');
   const [withdrawBy, setWithdrawBy] = useState<string>('');
+  const [withdrawRecipient, setWithdrawRecipient] = useState<string>('');
+  const [withdrawSpender, setWithdrawSpender] = useState<string>('');
+  const [withdrawProofUrl, setWithdrawProofUrl] = useState<string>('');
+  const [withdrawProofPreview, setWithdrawProofPreview] = useState<string>('');
+  const [isUploadingWithdrawProof, setIsUploadingWithdrawProof] = useState<boolean>(false);
+  const [withdrawProofCompressionInfo, setWithdrawProofCompressionInfo] = useState<string | null>(null);
   const [withdrawDate, setWithdrawDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [withdrawNote, setWithdrawNote] = useState<string>('');
   const [isWithdrawing, setIsWithdrawing] = useState<boolean>(false);
@@ -277,17 +283,78 @@ export function BudgetAllocationModule() {
   };
 
   // ── Tarik Sisa Dana handlers ──────────────────────────────────────────────
+  const selectWithdrawTarget = (target: BudgetAllocationItem) => {
+    setWithdrawTargetBudget(target);
+    setWithdrawAmount(String(target.remainingBudget || 0));
+    setWithdrawBy(currentUser?.name || 'Abdullah Syauqillah, S.Kom (Superadmin)');
+    setWithdrawRecipient(target.withdrawnRecipient || 'Drs. Supriyanto, Ak., CA (Auditor Eksekutif / Bendahara)');
+
+    // Otomatis deteksi staf yang membelanjakan dari transaksi pengadaan belanja pada tanggal & unit alokasi
+    const matchingProcurements = procurements.filter(p => {
+      const matchDate = p.date.slice(0, 10) === target.allocatedDate.slice(0, 10);
+      const matchUnit = target.sppgUnitId === 'ALL' || p.sppgUnitId === target.sppgUnitId;
+      return matchDate && matchUnit;
+    });
+    const spenders = Array.from(new Set(matchingProcurements.map(p => p.requesterName).filter(Boolean)));
+    const detectedSpender = spenders.length > 0 ? spenders.join(', ') : (target.withdrawnSpender || 'Siti Aminah / Tim Pengadaan Dapur SPPG');
+    setWithdrawSpender(target.withdrawnSpender || detectedSpender);
+
+    setWithdrawDate(new Date().toISOString().slice(0, 10));
+    setWithdrawNote(
+      target.withdrawnNote ||
+      `Berita acara penarikan sisa kas tanggal ${new Date(target.allocatedDate).toLocaleDateString('id-ID')} disetor kembali ke kas utama / auditor.`
+    );
+    setWithdrawProofUrl(target.withdrawnProofUrl || '');
+    setWithdrawProofPreview(target.withdrawnProofUrl || '');
+    setWithdrawProofCompressionInfo(null);
+    setWithdrawError('');
+  };
+
   const handleOpenWithdrawModal = (budget?: BudgetAllocationItem) => {
     if (isReadOnly) return;
-    const target = budget || todayBudgets.find(b => b.remainingBudget > 0) || filteredBudgets.find(b => b.remainingBudget > 0);
-    if (!target) return;
-    setWithdrawTargetBudget(target);
-    setWithdrawAmount(String(target.remainingBudget));
-    setWithdrawBy(currentUser?.name || 'Abdullah Syauqillah, S.Kom (Superadmin)');
-    setWithdrawDate(new Date().toISOString().slice(0, 10));
-    setWithdrawNote(`Penarikan sisa kas tanggal ${new Date(target.allocatedDate).toLocaleDateString('id-ID')} disetor kembali ke kas utama / auditor.`);
-    setWithdrawError('');
+    const candidates = budgetAllocations.filter(b => b.remainingBudget > 0);
+    const target =
+      budget ||
+      todayBudgets.find(b => b.remainingBudget > 0) ||
+      candidates[0] ||
+      todayBudgets[0] ||
+      filteredBudgets[0] ||
+      budgetAllocations[0];
+
+    if (!target) {
+      alert('Belum ada catatan alokasi dana kas operasional. Silakan catat dana masuk baru terlebih dahulu.');
+      return;
+    }
+    selectWithdrawTarget(target);
     setIsWithdrawModalOpen(true);
+  };
+
+  const handleWithdrawProofUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingWithdrawProof(true);
+    setWithdrawProofCompressionInfo('Mengompres bukti serah terima kas ke HD WebP...');
+
+    try {
+      const comp = await compressImageHD(file, 1280, 1280, 0.78);
+      setWithdrawProofPreview(comp.dataUrl);
+      setWithdrawProofCompressionInfo(`HD WebP: ${comp.formattedCompressed} (Hemat ${comp.reductionPercentage}% dari ${comp.formattedOriginal})`);
+
+      const uploadData = new FormData();
+      uploadData.append('file', comp.file);
+      const uploadRes = await fetch('/api/upload', { method: 'POST', body: uploadData });
+      const uploadJson = await uploadRes.json();
+      if (uploadJson?.success && uploadJson.url) {
+        setWithdrawProofUrl(uploadJson.url);
+      }
+    } catch (err: any) {
+      console.error('Upload withdraw proof error:', err);
+      setWithdrawProofPreview(URL.createObjectURL(file));
+      setWithdrawProofCompressionInfo(null);
+    } finally {
+      setIsUploadingWithdrawProof(false);
+    }
   };
 
   const handleConfirmWithdraw = async (e: React.FormEvent) => {
@@ -311,7 +378,10 @@ export function BudgetAllocationModule() {
     const result = await updateBudgetAllocation(withdrawTargetBudget.id, {
       withdrawnAmount: newWithdrawnTotal,
       withdrawnAt: new Date(withdrawDate).toISOString(),
-      withdrawnBy: withdrawBy.trim() || 'Petugas Penarik Kas',
+      withdrawnBy: withdrawBy.trim() || 'Abdullah Syauqillah, S.Kom (Superadmin)',
+      withdrawnRecipient: withdrawRecipient.trim() || 'Drs. Supriyanto, Ak., CA (Auditor Eksekutif)',
+      withdrawnSpender: withdrawSpender.trim() || 'Tim Pengadaan Dapur',
+      withdrawnProofUrl: withdrawProofUrl || undefined,
       withdrawnNote: withdrawNote.trim() || 'Sisa kas ditarik/disetor kembali ke kas utama.',
       remainingBudget: Math.max(0, withdrawTargetBudget.remainingBudget - amountNum),
     });
@@ -324,6 +394,9 @@ export function BudgetAllocationModule() {
 
     setIsWithdrawModalOpen(false);
     setWithdrawTargetBudget(null);
+    setWithdrawProofUrl('');
+    setWithdrawProofPreview('');
+    setWithdrawProofCompressionInfo(null);
   };
 
   // ── import Excel ──────────────────────────────────────────────────────────
@@ -380,16 +453,20 @@ export function BudgetAllocationModule() {
         </div>
         {!isReadOnly && (
           <div className="flex items-center gap-2">
-            {todaySisaKas > 0 && (
-              <button
-                type="button"
-                onClick={() => handleOpenWithdrawModal()}
-                className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition shadow-xs"
-              >
-                <ArrowDownToLine className="h-3.5 w-3.5" />
-                Tarik Sisa Hari Ini
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => handleOpenWithdrawModal()}
+              className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100 transition shadow-xs"
+              title="Tarik atau kelola sisa pengembalian kas operasional"
+            >
+              <ArrowDownToLine className="h-3.5 w-3.5 text-amber-700" />
+              <span>Tarik Sisa Kas</span>
+              {todaySisaKas > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-amber-200 text-amber-900 font-bold">
+                  {formatRupiah(todaySisaKas)}
+                </span>
+              )}
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -438,20 +515,22 @@ export function BudgetAllocationModule() {
           </div>
 
           <div className="flex items-center gap-2">
-            {todaySisaKas > 0 && !isReadOnly && (
+            {!isReadOnly && (
               <button
                 type="button"
                 onClick={() => handleOpenWithdrawModal()}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 transition shadow-xs"
               >
                 <ArrowDownToLine className="h-3.5 w-3.5" />
-                Tarik Sisa Hari Ini ({formatRupiah(todaySisaKas)})
+                {todaySisaKas > 0
+                  ? `Tarik Sisa Kas Hari Ini (${formatRupiah(todaySisaKas)})`
+                  : 'Tarik / Kelola Sisa Kas'}
               </button>
             )}
             {todayDanaDitarik > 0 && todaySisaKas === 0 && (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
                 <Check className="h-3.5 w-3.5 text-emerald-600" />
-                Sisa Rp {formatRupiah(todayDanaDitarik)} telah ditarik (Kas Bersih Rp 0)
+                Sisa Rp {formatRupiah(todayDanaDitarik)} telah disetor balik (Kas Bersih Rp 0)
               </span>
             )}
           </div>
@@ -843,6 +922,178 @@ export function BudgetAllocationModule() {
         </div>
       </div>
 
+      {/* ──────────────────────────────────────────────────────────────────────────
+          TABLE: RIWAYAT TRANSPARANSI PENARIKAN SISA KAS (BERITA ACARA PENGEMBALIAN)
+          Transparansi penuh:
+          - Yang Mengajukan Penarikan
+          - Yang Membelanjakan Sampai Tersisa
+          - Yang Menerima Penarikan Sisa Kas
+          - Nominal Sisa Ditarik & Nihilisasi Kas
+          - Bukti Serah Terima Kas (Lightbox preview HD)
+      ────────────────────────────────────────────────────────────────────────── */}
+      <div className="rounded-lg border border-amber-200 bg-white overflow-hidden shadow-xs">
+        <div className="border-b border-amber-200 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-gradient-to-r from-amber-50/80 via-white to-amber-50/40">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-amber-600 text-white shadow-2xs">
+              <ArrowDownToLine className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold text-slate-900">
+                  Riwayat Penarikan Sisa Kas & Berita Acara Pengembalian
+                </h2>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                  Transparan & Terverifikasi
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Laporan pertanggungjawaban sisa dana: pihak pengaju penarikan, petugas yang membelanjakan sampai tersisa, dan pejabat penerima kas.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="font-mono text-slate-600 bg-white px-2.5 py-1 rounded border border-amber-200">
+              Total Sisa Ditarik: <strong className="text-amber-800">{formatRupiah(totalDitarikGlobal)}</strong>
+            </span>
+            {!isReadOnly && (
+              <button
+                type="button"
+                onClick={() => handleOpenWithdrawModal()}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-amber-600 text-white text-xs font-semibold hover:bg-amber-700 transition shadow-2xs"
+              >
+                <Plus className="h-3 w-3" />
+                Tarik Sisa Kas
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse min-w-[1000px]">
+            <thead className="bg-amber-50/60 border-b border-amber-200 text-slate-700 font-semibold text-[11px] uppercase">
+              <tr>
+                <th className="py-3 px-4">Tgl Tarik / Alokasi</th>
+                <th className="py-3 px-4">Unit SPPG</th>
+                <th className="py-3 px-4">Yang Mengajukan Penarikan</th>
+                <th className="py-3 px-4">Yang Membelanjakan (Tersisa)</th>
+                <th className="py-3 px-4">Yang Menerima Sisa Kas</th>
+                <th className="py-3 px-4 text-center">Bukti Serah Terima</th>
+                <th className="py-3 px-4 text-right">Sisa Ditarik</th>
+                <th className="py-3 px-4 text-right">Sisa Akhir Kas</th>
+                <th className="py-3 px-4">Keterangan / Berita Acara</th>
+                {!isReadOnly && <th className="py-3 px-4 text-center">Aksi</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredBudgets.filter(b => (b.withdrawnAmount || 0) > 0).length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="py-8 text-center text-slate-400 text-xs">
+                    <div className="max-w-md mx-auto space-y-1">
+                      <p className="font-semibold text-slate-600">Belum ada sisa kas yang ditarik untuk filter ini.</p>
+                      <p className="text-[11px] text-slate-400">
+                        Sisa dana operasional belanja tetap tersimpan aman di kas aktif dapur (rollover) atau Anda dapat menariknya kapan saja menjadi Rp 0.
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredBudgets
+                  .filter(b => (b.withdrawnAmount || 0) > 0)
+                  .map(item => (
+                    <tr key={`withdrawn-${item.id}`} className="hover:bg-amber-50/30 transition">
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <div className="font-bold text-slate-800 font-mono">
+                          {item.withdrawnAt ? new Date(item.withdrawnAt).toLocaleDateString('id-ID') : new Date(item.allocatedDate).toLocaleDateString('id-ID')}
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          Pagu: {new Date(item.allocatedDate).toLocaleDateString('id-ID')}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="inline-block rounded px-2 py-0.5 text-[10px] font-semibold bg-slate-100 text-slate-700">
+                          {item.sppgUnitName}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="font-semibold text-blue-900 flex items-center gap-1">
+                          <UserCheck className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                          <span>{item.withdrawnBy || 'Abdullah Syauqillah, S.Kom (Superadmin)'}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-500">Pemohon Penarikan</span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="font-semibold text-amber-900 flex items-center gap-1">
+                          <Receipt className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                          <span>{item.withdrawnSpender || 'Tim Pengadaan Dapur'}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-500">Membelanjakan Kas</span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="font-semibold text-emerald-900 flex items-center gap-1">
+                          <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          <span>{item.withdrawnRecipient || 'Drs. Supriyanto, Ak., CA (Auditor)'}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-500">Penerima Kas Sisa</span>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        {item.withdrawnProofUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => setActiveProofModal({
+                              url: item.withdrawnProofUrl!,
+                              title: `Bukti Serah Terima Sisa Kas - ${item.sppgUnitName}`,
+                              meta: `Pengaju: ${item.withdrawnBy || '-'} | Penerima: ${item.withdrawnRecipient || '-'} | Pembelanja: ${item.withdrawnSpender || '-'} | Nominal: ${formatRupiah(item.withdrawnAmount || 0)}`
+                            })}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-semibold hover:bg-emerald-100 transition shadow-2xs"
+                          >
+                            <ImageIcon className="h-3.5 w-3.5 text-emerald-600" />
+                            <span>Lihat Bukti HD</span>
+                          </button>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 italic">Tanpa Foto</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono font-bold text-amber-800 tabular-nums">
+                        {formatRupiah(item.withdrawnAmount || 0)}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        {item.remainingBudget === 0 ? (
+                          <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                            Nihil (Rp 0)
+                          </span>
+                        ) : (
+                          <span className="font-mono font-semibold text-indigo-700">
+                            {formatRupiah(item.remainingBudget)}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-slate-600 max-w-[200px] truncate">
+                        {item.withdrawnNote || 'Sisa kas disetor kembali ke kas utama'}
+                      </td>
+                      {!isReadOnly && (
+                        <td className="py-3 px-4 text-center whitespace-nowrap">
+                          {item.remainingBudget > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenWithdrawModal(item)}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-100 border border-amber-300 text-[10px] font-bold text-amber-900 hover:bg-amber-200 transition shadow-2xs"
+                            >
+                              <ArrowDownToLine className="h-3 w-3" />
+                              <span>Tarik Lagi</span>
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-emerald-700 font-medium">Selesai</span>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* Table: Riwayat Pengeluaran ringkas */}
       <div className="rounded-lg border border-slate-200 bg-white overflow-hidden shadow-xs">
         <div className="border-b border-slate-200 px-4 py-3 flex items-center justify-between bg-slate-50/50">
@@ -1192,29 +1443,36 @@ export function BudgetAllocationModule() {
       )}
 
       {/* ──────────────────────────────────────────────────────────────────────────
-          MODAL: TARIK / SETOR BALIK SISA DANA (KEMBALIKAN KE RP 0)
+          MODAL: BERITA ACARA PENARIKAN SISA KAS (TRANSPARAN & CERDAS)
+          - Nama yang Mengajukan Penarikan
+          - Nama yang Membelanjakan Sampai Tersisa (auto-detect dari transaksi belanja)
+          - Nama yang Menerima Penarikan Sisa Kas (Auditor / Bendahara)
+          - Pilihan Opsional: Bebas ditarik seluruhnya (Rp 0), sebagian, atau disimpan
+          - Bukti Serah Terima Kas (HD WebP)
       ────────────────────────────────────────────────────────────────────────── */}
       {isWithdrawModalOpen && withdrawTargetBudget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden animate-in fade-in duration-200">
-            <div className="border-b border-slate-200 px-6 py-4 flex items-center justify-between bg-amber-50">
-              <div className="flex items-center gap-2">
-                <ArrowDownToLine className="h-5 w-5 text-amber-700" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl border border-amber-300 max-w-xl w-full overflow-hidden my-auto animate-in fade-in duration-200">
+            <div className="border-b border-amber-200 px-6 py-4 flex items-center justify-between bg-gradient-to-r from-amber-50 via-white to-amber-50/50">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-600 text-white shadow-xs">
+                  <ArrowDownToLine className="h-5 w-5" />
+                </div>
                 <div>
-                  <h3 className="font-bold text-slate-900 text-sm">Tarik / Setor Balik Sisa Kas</h3>
-                  <p className="text-[11px] text-slate-500">Pengembalian sisa dana kas harian agar menjadi Rp 0</p>
+                  <h3 className="font-bold text-slate-900 text-sm">Berita Acara Penarikan / Pengembalian Sisa Kas</h3>
+                  <p className="text-[11px] text-slate-500">Transparansi penuh pihak pengaju, pembelanja, dan penerima sisa kas.</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsWithdrawModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 text-lg"
+                className="text-slate-400 hover:text-slate-600 text-xl font-bold p-1"
               >
                 &times;
               </button>
             </div>
 
-            <form onSubmit={handleConfirmWithdraw} className="p-6 space-y-3.5 text-xs">
+            <form onSubmit={handleConfirmWithdraw} className="p-6 space-y-4 text-xs">
               {withdrawError && (
                 <div className="flex items-center gap-2 rounded-md bg-red-50 border border-red-200 p-2.5 text-red-700">
                   <AlertCircle className="h-4 w-4 shrink-0" />
@@ -1222,24 +1480,155 @@ export function BudgetAllocationModule() {
                 </div>
               )}
 
+              {/* Info Banner Opsional Cerdas */}
+              <div className="rounded-lg border border-blue-200 bg-blue-50/70 p-3 text-[11px] text-blue-900 space-y-1">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <Sparkles className="h-3.5 w-3.5 text-blue-600" />
+                  <span>Sistem Kas Cerdas & Transparan</span>
+                </div>
+                <p className="text-blue-800 leading-relaxed">
+                  Sisa kas bersifat fleksibel: Anda bebas menarik seluruh sisa kas (nihil Rp 0), menarik sebagian, atau tidak ditarik (sisa tetap mengendap aman di dapur sebagai saldo kas berjalan).
+                </p>
+              </div>
+
+              {/* Dropdown Pemilihan Alokasi Anggaran */}
+              <div>
+                <label className="block font-semibold text-slate-700 uppercase mb-1">
+                  Pilih Alokasi Anggaran Kas
+                </label>
+                <select
+                  value={withdrawTargetBudget.id}
+                  onChange={e => {
+                    const picked = budgetAllocations.find(b => b.id === e.target.value);
+                    if (picked) selectWithdrawTarget(picked);
+                  }}
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                >
+                  {budgetAllocations.map(b => (
+                    <option key={b.id} value={b.id}>
+                      {new Date(b.allocatedDate).toLocaleDateString('id-ID')} &bull; {b.sppgUnitName} &bull; Pagu: {formatRupiah(b.amountAllocated)} &bull; Sisa: {formatRupiah(b.remainingBudget)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {/* Rincian Alokasi Target */}
-              <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 space-y-1">
+              <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-3 space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-600 font-medium">Unit SPPG:</span>
+                  <span className="text-slate-600">Unit SPPG:</span>
                   <span className="font-bold text-slate-900">{withdrawTargetBudget.sppgUnitName}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-slate-600 font-medium">Tanggal Alokasi:</span>
+                  <span className="text-slate-600">Tanggal Alokasi:</span>
                   <span className="font-mono text-slate-800">{new Date(withdrawTargetBudget.allocatedDate).toLocaleDateString('id-ID')}</span>
                 </div>
-                <div className="flex items-center justify-between border-t border-amber-200/80 pt-1 font-mono">
-                  <span className="text-slate-600 font-medium">Sisa Kas Tersedia:</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-600">Dana Pagu / Telah Dibelanjakan:</span>
+                  <span className="font-mono text-slate-700">
+                    {formatRupiah(withdrawTargetBudget.amountAllocated)} &bull; Belanja: {formatRupiah(withdrawTargetBudget.amountRealized)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between border-t border-amber-200 pt-1.5 font-mono">
+                  <span className="font-semibold text-slate-700">Sisa Kas Saat Ini:</span>
                   <span className="font-bold text-indigo-700 text-sm">{formatRupiah(withdrawTargetBudget.remainingBudget)}</span>
                 </div>
               </div>
 
+              {/* Tiga Pihak Penanggung Jawab Transparansi */}
+              <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3.5 space-y-3">
+                <div className="text-[11px] font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-200 pb-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5 text-slate-700" />
+                  <span>3 Pihak Penanggung Jawab Sisa Kas</span>
+                </div>
+
+                {/* 1. Yang Mengajukan Penarikan */}
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <UserCheck className="h-3.5 w-3.5 text-blue-600" />
+                      1. Nama yang Mengajukan Penarikan
+                    </span>
+                    <span className="text-[10px] text-blue-600 font-normal">Pemohon Penarikan</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={withdrawBy}
+                    onChange={e => setWithdrawBy(e.target.value)}
+                    placeholder="Misal: Abdullah Syauqillah, S.Kom (Superadmin)"
+                    className="w-full rounded-md border border-slate-300 p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-0.5">Pihak pengelola yang meminta atau memproses sisa kas ditarik.</p>
+                </div>
+
+                {/* 2. Yang Membelanjakan Sampai Tersisa */}
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Receipt className="h-3.5 w-3.5 text-amber-600" />
+                      2. Nama yang Membelanjakan Sampai Tersisa
+                    </span>
+                    <span className="text-[10px] text-amber-600 font-normal">Petugas Belanja</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={withdrawSpender}
+                    onChange={e => setWithdrawSpender(e.target.value)}
+                    placeholder="Misal: Siti Aminah / Tim Pengadaan Dapur"
+                    className="w-full rounded-md border border-slate-300 p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    Otomatis dideteksi dari staf peminta pada transaksi belanja tanggal ini.
+                  </p>
+                </div>
+
+                {/* 3. Yang Menerima Penarikan Sisa Kas */}
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                      3. Nama yang Menerima Penarikan Sisa Kas
+                    </span>
+                    <span className="text-[10px] text-emerald-600 font-normal">Penerima Kas</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={withdrawRecipient}
+                    onChange={e => setWithdrawRecipient(e.target.value)}
+                    placeholder="Misal: Drs. Supriyanto, Ak., CA (Auditor) / Bendahara Utama"
+                    className="w-full rounded-md border border-slate-300 p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-0.5">Pejabat atau auditor yang menerima uang tunai / transfer pengembalian sisa kas.</p>
+                </div>
+              </div>
+
+              {/* Nominal Penarikan */}
               <div>
-                <label className="block font-semibold text-slate-700 uppercase mb-1">Nominal yang Ditarik / Disetor Balik (Rp)</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-slate-700 uppercase">
+                    Nominal Sisa yang Ditarik (Rp)
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setWithdrawAmount(String(withdrawTargetBudget.remainingBudget))}
+                      className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 hover:bg-amber-200 transition"
+                    >
+                      Tarik Semua (100%)
+                    </button>
+                    {withdrawTargetBudget.remainingBudget > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setWithdrawAmount(String(Math.round(withdrawTargetBudget.remainingBudget / 2)))}
+                        className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
+                      >
+                        50%
+                      </button>
+                    )}
+                  </div>
+                </div>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500 font-bold">Rp</span>
                   <input
@@ -1249,26 +1638,18 @@ export function BudgetAllocationModule() {
                     max={withdrawTargetBudget.remainingBudget}
                     value={withdrawAmount}
                     onChange={e => setWithdrawAmount(e.target.value)}
-                    className="w-full rounded-md border border-slate-300 pl-10 pr-3 py-2 text-sm font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    className="w-full rounded-md border border-slate-300 pl-10 pr-3 py-2 text-sm font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
                   />
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1 font-mono">
-                  = {formatRupiah(Number(withdrawAmount) || 0)}
-                </p>
+                <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1">
+                  <span className="font-mono">= {formatRupiah(Number(withdrawAmount) || 0)}</span>
+                  <span>
+                    Sisa kas setelah penarikan: <strong className="font-mono text-slate-800">{formatRupiah(Math.max(0, withdrawTargetBudget.remainingBudget - (Number(withdrawAmount) || 0)))}</strong>
+                  </span>
+                </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 uppercase mb-1">Petugas yang Menarik / Menyetor</label>
-                <input
-                  type="text"
-                  required
-                  value={withdrawBy}
-                  onChange={e => setWithdrawBy(e.target.value)}
-                  placeholder="Nama pemegang uang / auditor yang menarik"
-                  className="w-full rounded border border-slate-300 p-2 text-slate-800"
-                />
-              </div>
-
+              {/* Tanggal Penarikan */}
               <div>
                 <label className="block font-semibold text-slate-700 uppercase mb-1">Tanggal Penarikan</label>
                 <input
@@ -1276,18 +1657,85 @@ export function BudgetAllocationModule() {
                   required
                   value={withdrawDate}
                   onChange={e => setWithdrawDate(e.target.value)}
-                  className="w-full rounded border border-slate-300 p-2 font-mono text-slate-800"
+                  className="w-full rounded-md border border-slate-300 p-2 font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
                 />
               </div>
 
+              {/* Bukti Serah Terima Sisa Kas (HD WebP) */}
+              <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block font-semibold text-slate-700 uppercase text-[11px]">
+                    Foto Bukti Serah Terima Sisa Kas (Opsional)
+                  </label>
+                  <span className="text-[10px] text-slate-400">Kompresi HD WebP Otomatis</span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-amber-300 bg-white text-xs font-semibold text-amber-800 hover:bg-amber-50 transition shadow-2xs">
+                    <Upload className="h-3.5 w-3.5 text-amber-600" />
+                    <span>{isUploadingWithdrawProof ? 'Mengompres & Mengunggah...' : 'Pilih Foto Bukti Serah Terima'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleWithdrawProofUpload}
+                      disabled={isUploadingWithdrawProof}
+                      className="hidden"
+                    />
+                  </label>
+
+                  {withdrawProofCompressionInfo && (
+                    <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-100 px-2 py-1 rounded">
+                      {withdrawProofCompressionInfo}
+                    </span>
+                  )}
+                </div>
+
+                {withdrawProofPreview && (
+                  <div className="flex items-center gap-3 pt-2 border-t border-slate-200">
+                    <div className="relative w-14 h-14 rounded-lg border border-amber-300 overflow-hidden bg-white shadow-2xs">
+                      <img src={withdrawProofPreview} alt="Bukti Penarikan" className="w-full h-full object-cover" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-bold text-slate-800">Bukti Serah Terima Terlampir</p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setActiveProofModal({
+                            url: withdrawProofPreview,
+                            title: 'Preview Bukti Serah Terima Sisa Kas',
+                            meta: `Nominal: ${formatRupiah(Number(withdrawAmount) || 0)} · Pengaju: ${withdrawBy} · Penerima: ${withdrawRecipient}`,
+                          })}
+                          className="text-[11px] text-blue-600 font-semibold hover:underline"
+                        >
+                          Lihat Ukuran Penuh
+                        </button>
+                        <span className="text-slate-300">&bull;</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setWithdrawProofPreview('');
+                            setWithdrawProofUrl('');
+                            setWithdrawProofCompressionInfo(null);
+                          }}
+                          className="text-[11px] text-red-600 font-semibold hover:underline"
+                        >
+                          Hapus Foto
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Keterangan / Berita Acara */}
               <div>
-                <label className="block font-semibold text-slate-700 uppercase mb-1">Keterangan / Berita Acara</label>
+                <label className="block font-semibold text-slate-700 uppercase mb-1">Berita Acara / Keterangan Penarikan</label>
                 <textarea
                   rows={2}
                   value={withdrawNote}
                   onChange={e => setWithdrawNote(e.target.value)}
-                  placeholder="Keterangan penutupan sisa kas..."
-                  className="w-full rounded border border-slate-300 p-2 text-slate-800"
+                  placeholder="Keterangan penutupan / berita acara pengembalian sisa kas..."
+                  className="w-full rounded-md border border-slate-300 p-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
                 />
               </div>
 
@@ -1301,10 +1749,10 @@ export function BudgetAllocationModule() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isWithdrawing}
-                  className="rounded-md bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50 transition shadow-xs"
+                  disabled={isWithdrawing || isUploadingWithdrawProof}
+                  className="rounded-md bg-amber-600 px-5 py-2 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50 transition shadow-xs"
                 >
-                  {isWithdrawing ? 'Menyimpan...' : 'Tarik Sisa & Nihilkan Kas'}
+                  {isWithdrawing ? 'Menyimpan...' : 'Proses Penarikan Sisa Kas'}
                 </button>
               </div>
             </form>

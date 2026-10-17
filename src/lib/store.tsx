@@ -580,6 +580,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         withdrawnAmount: item.withdrawnAmount,
         withdrawnAt: item.withdrawnAt,
         withdrawnBy: item.withdrawnBy,
+        withdrawnRecipient: item.withdrawnRecipient,
+        withdrawnSpender: item.withdrawnSpender,
+        withdrawnProofUrl: item.withdrawnProofUrl,
         withdrawnNote: item.withdrawnNote,
       })),
     });

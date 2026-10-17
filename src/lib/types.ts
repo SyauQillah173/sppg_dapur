@@ -171,6 +171,9 @@ export interface BudgetAllocationItem {
   withdrawnAmount?: number;
   withdrawnAt?: string;
   withdrawnBy?: string;
+  withdrawnRecipient?: string;
+  withdrawnSpender?: string;
+  withdrawnProofUrl?: string;
   withdrawnNote?: string;
 }
 

@@ -37,10 +37,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         withdrawnAmount: body.withdrawnAmount !== undefined ? Number(body.withdrawnAmount) : (oldMeta.withdrawnAmount || 0),
         withdrawnAt: body.withdrawnAt !== undefined ? body.withdrawnAt : oldMeta.withdrawnAt,
         withdrawnBy: body.withdrawnBy !== undefined ? body.withdrawnBy : (oldMeta.withdrawnBy || ''),
+        withdrawnRecipient: body.withdrawnRecipient !== undefined ? body.withdrawnRecipient : (oldMeta.withdrawnRecipient || ''),
+        withdrawnSpender: body.withdrawnSpender !== undefined ? body.withdrawnSpender : (oldMeta.withdrawnSpender || ''),
+        withdrawnProofUrl: body.withdrawnProofUrl !== undefined ? body.withdrawnProofUrl : (oldMeta.withdrawnProofUrl || ''),
         withdrawnNote: body.withdrawnNote !== undefined ? body.withdrawnNote : (oldMeta.withdrawnNote || ''),
       };
 
-      const hasMeta = mergedMeta.requestedBy || mergedMeta.requesterFor || mergedMeta.cashHolder || mergedMeta.transferProofUrl || mergedMeta.withdrawnAmount > 0;
+      const hasMeta = mergedMeta.requestedBy || mergedMeta.requesterFor || mergedMeta.cashHolder || mergedMeta.transferProofUrl || mergedMeta.withdrawnAmount > 0 || mergedMeta.withdrawnRecipient || mergedMeta.withdrawnSpender || mergedMeta.withdrawnProofUrl;
       const serializedNotes = hasMeta ? JSON.stringify(mergedMeta) : (body.notes !== undefined ? body.notes : existing.notes);
 
       // Kembalikan dulu pengaruh catatan lama ke pagu kas unit (dikurangi sisa yang sudah ditarik sebelumnya jika ada)

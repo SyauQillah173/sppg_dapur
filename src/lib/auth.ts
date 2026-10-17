@@ -53,8 +53,9 @@ export async function parseSessionToken(token: string): Promise<SessionUser | nu
     const valid = await hmacVerify(payload, sig);
     if (!valid) return null;
     const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8'));
-    // Token max age: 7 days
-    if (!parsed.iat || Date.now() / 1000 - parsed.iat > 60 * 60 * 24 * 7) return null;
+    // Token max age: 30 hari (2.592.000 detik)
+    // Sesi aktif selama user membuka aplikasi, otomatis logout jika 30 hari tidak dibuka
+    if (!parsed.iat || Date.now() / 1000 - parsed.iat > 60 * 60 * 24 * 30) return null;
     if (!parsed.username || !parsed.role) return null;
     return { id: parsed.id, username: parsed.username, name: parsed.name, role: parsed.role as UserRole };
   } catch { return null; }
@@ -74,7 +75,7 @@ export async function setSessionCookie(res: { cookies: { set: Function } }, user
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
     path: '/',
-    maxAge: 60 * 60 * 24 * 7,
+    maxAge: 60 * 60 * 24 * 30, // 30 hari
   });
 }
 
