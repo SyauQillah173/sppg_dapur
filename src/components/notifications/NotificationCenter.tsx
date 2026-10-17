@@ -14,6 +14,7 @@ import {
   ExternalLink,
   ChevronRight,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 
 export interface SystemNotificationItem {
@@ -148,6 +149,59 @@ export function NotificationCenter({ onNavigateTab }: NotificationCenterProps) {
     } catch {}
   };
 
+  // Delete single notification
+  const handleDeleteNotification = async (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const target = notifications.find((n) => n.id === id);
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    if (target && !target.isRead) {
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+    }
+    dismissToast(id);
+
+    try {
+      await fetch(`/api/notifications?id=${id}`, {
+        method: 'DELETE',
+      });
+    } catch (err) {
+      console.error('Failed to delete notification:', err);
+    }
+  };
+
+  // Clear all notifications
+  const handleClearAll = async (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (notifications.length === 0) return;
+    if (typeof window !== 'undefined' && !window.confirm('Bersihkan seluruh riwayat notifikasi?')) {
+      return;
+    }
+    setNotifications([]);
+    setUnreadCount(0);
+    setToastQueue([]);
+
+    try {
+      await fetch('/api/notifications?action=all', {
+        method: 'DELETE',
+      });
+    } catch (err) {
+      console.error('Failed to clear notifications:', err);
+    }
+  };
+
+  // Clear read notifications
+  const handleClearRead = async (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setNotifications((prev) => prev.filter((n) => !n.isRead));
+
+    try {
+      await fetch('/api/notifications?action=read', {
+        method: 'DELETE',
+      });
+    } catch (err) {
+      console.error('Failed to clear read notifications:', err);
+    }
+  };
+
   // Remove toast
   const dismissToast = (id: string) => {
     setToastQueue((prev) => prev.filter((t) => t.id !== id));
@@ -225,16 +279,30 @@ export function NotificationCenter({ onNavigateTab }: NotificationCenterProps) {
                   </span>
                 )}
               </div>
-              {unreadCount > 0 && (
-                <button
-                  type="button"
-                  onClick={handleMarkAllRead}
-                  className="inline-flex items-center gap-1 text-[11px] text-slate-300 hover:text-white transition cursor-pointer"
-                >
-                  <CheckCheck className="h-3 w-3" />
-                  <span>Tandai Dibaca</span>
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {unreadCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleMarkAllRead}
+                    title="Tandai semua sudah dibaca"
+                    className="inline-flex items-center gap-1 text-[11px] text-slate-300 hover:text-white transition cursor-pointer"
+                  >
+                    <CheckCheck className="h-3 w-3" />
+                    <span className="hidden sm:inline">Tandai Dibaca</span>
+                  </button>
+                )}
+                {notifications.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearAll}
+                    title="Hapus semua riwayat notifikasi"
+                    className="inline-flex items-center gap-1 text-[11px] text-rose-300 hover:text-rose-100 transition cursor-pointer"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    <span>Hapus Semua</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Notification List */}
@@ -249,7 +317,7 @@ export function NotificationCenter({ onNavigateTab }: NotificationCenterProps) {
                   <div
                     key={item.id}
                     onClick={() => handleItemClick(item)}
-                    className={`p-3.5 flex items-start gap-3 transition cursor-pointer hover:bg-slate-50 ${
+                    className={`group p-3.5 flex items-start gap-3 transition cursor-pointer hover:bg-slate-50 relative ${
                       !item.isRead ? 'bg-blue-50/40' : 'bg-white'
                     }`}
                   >
@@ -258,12 +326,22 @@ export function NotificationCenter({ onNavigateTab }: NotificationCenterProps) {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-1">
-                        <span className="text-xs font-semibold text-slate-900 truncate">
+                        <span className="text-xs font-semibold text-slate-900 truncate pr-2">
                           {item.title}
                         </span>
-                        <span className="text-[10px] font-mono text-slate-400 shrink-0">
-                          {formatTimeAgo(item.createdAt)}
-                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-[10px] font-mono text-slate-400">
+                            {formatTimeAgo(item.createdAt)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteNotification(item.id, e)}
+                            title="Hapus notifikasi ini"
+                            className="opacity-70 sm:opacity-0 group-hover:opacity-100 transition flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
                       </div>
                       <p className="text-[11px] text-slate-600 line-clamp-2 mt-0.5 leading-relaxed">
                         {item.message}
@@ -283,10 +361,20 @@ export function NotificationCenter({ onNavigateTab }: NotificationCenterProps) {
             </div>
 
             {/* Footer */}
-            <div className="p-2 border-t border-slate-100 bg-slate-50 text-center">
+            <div className="px-3 py-2 border-t border-slate-100 bg-slate-50 flex items-center justify-between text-[11px]">
               <span className="text-[10px] text-slate-500 font-mono">
-                Sinkronisasi Otomatis PostgreSQL Neon Live
+                {notifications.length} notifikasi tersimpan
               </span>
+              {notifications.some((n) => n.isRead) && (
+                <button
+                  type="button"
+                  onClick={handleClearRead}
+                  className="inline-flex items-center gap-1 text-[10px] text-slate-600 hover:text-rose-600 font-medium transition cursor-pointer"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  <span>Bersihkan yang sudah dibaca</span>
+                </button>
+              )}
             </div>
           </div>
         )}
