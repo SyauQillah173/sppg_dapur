@@ -54,207 +54,68 @@ import { MealDelivery, MasterIngredient } from '@/lib/types';
 
 const STORAGE_KEY = 'sppg_meal_distributions_v1';
 
-const INITIAL_DELIVERIES: MealDelivery[] = [
-  {
-    id: 'del-1',
-    dispatchNumber: 'SJ-SPPG-20261018-01',
-    sppgUnitId: 'SPPG-AA02',
-    sppgUnitName: 'SPPG ABAR ABIR 02',
-    schoolName: 'SDN 1 Abar-Abir',
-    schoolAddress: 'Jl. Raya Pendidikan No. 12, Kec. Bungah',
-    schoolType: 'SD',
-    contactPerson: 'Ibu Ratna, S.Pd',
-    contactPhone: '0813-8890-1234',
-    menuCode: 'MENU-20261018-SIANG',
-    menuTitle: 'Paket Sehat Ceria (Ayam Teriyaki & Melon Segar)',
-    menuDetails: {
-      carb: 'Nasi Putih Pulen Wangi (150g)',
-      protein: 'Ayam Fillet Teriyaki Panggang (60g)',
-      veggie: 'Tumis Brokoli & Wortel Pipil (50g)',
-      fruit: 'Melon Potong Segar (1 Potong)',
-      dairy: 'Susu UHT Segar 125ml (1 Kotak)',
-    },
-    targetPortions: 450,
-    deliveredPortions: 450,
-    absentStudents: 3,
-    surplusHandling: '3 Porsi dialihkan ke Guru Pendamping Kelas 1-3 & Petugas Piket',
-    status: 'COMPLETED',
-    departureTime: '10:45 WIB',
-    estimatedArrival: '11:05 WIB',
-    actualArrival: '11:02 WIB',
-    driverName: 'Pak Joko Suwarno',
-    driverPhone: '0812-9901-2345',
-    vehiclePlate: 'W 1823 BX (Pickup Thermal Box)',
-    foodTemperature: '64.5°C (Sangat Hangat & Optimal)',
-    foodSafetyWindow: 'Batas Konsumsi: 13:30 WIB (Aman)',
-    recipientName: 'Ibu Ratna, S.Pd (Guru Piket)',
-    recipientNip: '19820412 200801 2 009',
-    bastNumber: 'BAST-MBG-20261018-001',
-    isSigned: true,
-    isStockDeducted: true,
-    deductedItems: [
-      { name: 'Beras Super Pulen', quantity: 27, unit: 'Kg' },
-      { name: 'Ayam giling', quantity: 27, unit: 'Kg' },
-      { name: 'Brokoli Segar', quantity: 22.5, unit: 'Kg' },
-      { name: 'Melon Segar', quantity: 22.5, unit: 'Kg' },
-      { name: 'Susu UHT Fresh', quantity: 450, unit: 'Pack' },
-    ],
-    notes: 'Kondisi makanan diterima lengkap, hangat, wadah tersegel rapi tanpa kendala.',
-    createdAt: '2026-10-18T10:30:00Z',
-  },
-  {
-    id: 'del-2',
-    dispatchNumber: 'SJ-SPPG-20261018-02',
-    sppgUnitId: 'SPPG-AA02',
-    sppgUnitName: 'SPPG ABAR ABIR 02',
-    schoolName: 'SMPN 2 Karang Anyar',
-    schoolAddress: 'Jl. Pemuda Harapan No. 05, Bungah',
-    schoolType: 'SMP',
-    contactPerson: 'Bpk. Hendra Kusuma, M.Pd',
-    contactPhone: '0812-4456-7890',
-    menuCode: 'MENU-20261018-SIANG',
-    menuTitle: 'Paket Sehat Ceria (Ayam Teriyaki & Melon Segar)',
-    menuDetails: {
-      carb: 'Nasi Putih Pulen Wangi (180g)',
-      protein: 'Ayam Fillet Teriyaki Panggang (70g)',
-      veggie: 'Tumis Brokoli & Wortel Pipil (60g)',
-      fruit: 'Melon Potong Segar (1 Potong)',
-      dairy: 'Susu UHT Segar 125ml (1 Kotak)',
-    },
-    targetPortions: 500,
-    deliveredPortions: 500,
-    absentStudents: 0,
-    surplusHandling: 'Semua siswa hadir lengkap 100%',
-    status: 'COMPLETED',
-    departureTime: '11:00 WIB',
-    estimatedArrival: '11:25 WIB',
-    actualArrival: '11:20 WIB',
-    driverName: 'Pak Budi Santoso',
-    driverPhone: '0857-1122-3344',
-    vehiclePlate: 'W 2940 DA (Mobil Box Insulated)',
-    foodTemperature: '62.0°C (Hangat)',
-    foodSafetyWindow: 'Batas Konsumsi: 13:30 WIB (Aman)',
-    recipientName: 'Bpk. Hendra Kusuma, M.Pd (Waka Kesiswaan)',
-    recipientNip: '19790615 200501 1 008',
-    bastNumber: 'BAST-MBG-20261018-002',
-    isSigned: true,
-    isStockDeducted: true,
-    deductedItems: [
-      { name: 'Beras Super Pulen', quantity: 30, unit: 'Kg' },
-      { name: 'Ayam giling', quantity: 30, unit: 'Kg' },
-      { name: 'Brokoli Segar', quantity: 25, unit: 'Kg' },
-      { name: 'Melon Segar', quantity: 25, unit: 'Kg' },
-      { name: 'Susu UHT Fresh', quantity: 500, unit: 'Pack' },
-    ],
-    notes: 'Didistribusikan ke 14 ruang kelas tepat saat jam istirahat siang.',
-    createdAt: '2026-10-18T10:45:00Z',
-  },
-  {
-    id: 'del-3',
-    dispatchNumber: 'SJ-SPPG-20261018-03',
-    sppgUnitId: 'SPPG-AA02',
-    sppgUnitName: 'SPPG ABAR ABIR 02',
-    schoolName: 'MI Miftahul Huda',
-    schoolAddress: 'Desa Abar-Abir RT 03/RW 01',
-    schoolType: 'MI',
-    contactPerson: 'Ustadz Ahmad Fauzi',
-    contactPhone: '0857-9912-3456',
-    menuCode: 'MENU-20261018-SIANG',
-    menuTitle: 'Paket Sehat Ceria (Ayam Teriyaki & Melon Segar)',
-    menuDetails: {
-      carb: 'Nasi Putih Pulen Wangi (150g)',
-      protein: 'Ayam Fillet Teriyaki Panggang (60g)',
-      veggie: 'Tumis Brokoli & Wortel Pipil (50g)',
-      fruit: 'Melon Potong Segar (1 Potong)',
-      dairy: 'Susu UHT Segar 125ml (1 Kotak)',
-    },
-    targetPortions: 250,
-    deliveredPortions: 0,
-    absentStudents: 0,
-    surplusHandling: 'Menunggu konfirmasi kedatangan',
-    status: 'IN_TRANSIT',
-    departureTime: '11:30 WIB',
-    estimatedArrival: '11:45 WIB',
-    driverName: 'Pak Joko Suwarno (Rute 2)',
-    driverPhone: '0812-9901-2345',
-    vehiclePlate: 'W 1823 BX (Pickup Thermal Box)',
-    foodTemperature: '65.0°C (Dalam Thermal Box)',
-    foodSafetyWindow: 'Batas Konsumsi: 13:30 WIB (Aman)',
-    recipientName: 'Ustadz Ahmad Fauzi',
-    bastNumber: 'BAST-MBG-20261018-003 (Draft)',
-    isSigned: false,
-    isStockDeducted: true,
-    deductedItems: [
-      { name: 'Beras Super Pulen', quantity: 15, unit: 'Kg' },
-      { name: 'Ayam giling', quantity: 15, unit: 'Kg' },
-      { name: 'Brokoli Segar', quantity: 12.5, unit: 'Kg' },
-      { name: 'Melon Segar', quantity: 12.5, unit: 'Kg' },
-      { name: 'Susu UHT Fresh', quantity: 250, unit: 'Pack' },
-    ],
-    notes: 'Driver sedang dalam perjalanan, jarak tempuh ~1.5 km.',
-    createdAt: '2026-10-18T11:20:00Z',
-  },
-];
+// Data pengiriman murni real-time dari database (tidak ada lagi dummy initial mock)
+const INITIAL_DELIVERIES: MealDelivery[] = [];
 
 /**
  * Helper untuk menghitung estimasi bahan gudang dapur MBG berdasarkan gramasi resmi per porsi siswa
+ * Terhubung langsung secara real-time dengan master stok bahan di gudang (Menu 4).
  */
 function computeMBGDeductionList(targetPortions: number, allIngredients: MasterIngredient[]) {
   const portions = Math.max(1, Number(targetPortions) || 1);
 
   // Standar Gramasi Bahan Mentah MBG per porsi anak sekolah:
   // 1. Karbohidrat (Beras): ~60 gram beras mentah / porsi -> (portions * 60) / 1000 Kg
-  // 2. Protein (Daging Ayam/Sapi): ~60 gram mentah / porsi -> (portions * 60) / 1000 Kg
-  // 3. Sayuran (Brokoli/Wortel/Sayur): ~50 gram mentah / porsi -> (portions * 50) / 1000 Kg
-  // 4. Buah Segar (Melon/Semangka): ~50 gram / porsi -> (portions * 50) / 1000 Kg
-  // 5. Susu UHT / Minuman: 1 pack (kotak/botol) / porsi -> portions Pack
-
+  // 2. Protein (Daging Ayam/Sapi/Telur): ~60 gram mentah / porsi -> (portions * 60) / 1000 Kg
+  // 3. Sayuran (Selada/Brokoli/Wortel/Sayur): ~50 gram mentah / porsi -> (portions * 50) / 1000 Kg
+  // 4. Buah Segar (Melon/Semangka/Pisang): ~50 gram / porsi -> (portions * 50) / 1000 Kg
+  // 5. Minuman / Bahan Penunjang: 1 pack / porsi -> portions Pack
   const specs = [
     {
-      category: 'Karbohidrat (Beras)',
-      keywords: ['beras', 'nasi'],
+      category: 'Karbohidrat (Beras / Tepung)',
+      keywords: ['beras', 'nasi', 'tepung terigu', 'tepung'],
       defaultName: 'Beras Super Pulen',
       qtyNeeded: Number(((portions * 60) / 1000).toFixed(1)),
       unit: 'Kg',
     },
     {
-      category: 'Protein Hewani (Ayam/Daging)',
-      keywords: ['ayam', 'daging', 'telur'],
+      category: 'Protein Hewani (Ayam / Daging / Telur)',
+      keywords: ['ayam', 'daging', 'telur horn', 'telur', 'ikan', 'sapi'],
       defaultName: 'Ayam giling',
       qtyNeeded: Number(((portions * 60) / 1000).toFixed(1)),
       unit: 'Kg',
     },
     {
-      category: 'Sayuran (Brokoli/Wortel)',
-      keywords: ['brokoli', 'wortel', 'sayur', 'selada'],
-      defaultName: 'Brokoli Segar',
+      category: 'Sayuran (Selada / Tomat / Sayur)',
+      keywords: ['selada', 'tomat', 'daun bawang', 'bawang bombai', 'brokoli', 'wortel', 'sayur'],
+      defaultName: 'Selada',
       qtyNeeded: Number(((portions * 50) / 1000).toFixed(1)),
       unit: 'Kg',
     },
     {
-      category: 'Buah Segar (Melon/Semangka)',
-      keywords: ['melon', 'semangka', 'pisang', 'buah'],
-      defaultName: 'Melon Segar',
+      category: 'Buah Segar (Melon / Semangka)',
+      keywords: ['melon', 'semangka', 'pisang', 'buah', 'jeruk'],
+      defaultName: 'Melon',
       qtyNeeded: Number(((portions * 50) / 1000).toFixed(1)),
       unit: 'Kg',
     },
     {
-      category: 'Minuman Bergizi (Susu UHT)',
-      keywords: ['susu', 'uht'],
-      defaultName: 'Susu UHT Fresh 125ml',
-      qtyNeeded: portions,
-      unit: 'Pack',
+      category: 'Minuman / Bumbu Lemak (Susu / Mentega)',
+      keywords: ['susu', 'uht', 'mentega', 'minyak', 'bumbu'],
+      defaultName: 'Mentega',
+      qtyNeeded: portions <= 200 ? Number(((portions * 10) / 1000).toFixed(1)) : portions,
+      unit: portions <= 200 ? 'Kg' : 'Pack',
     },
   ];
 
   return specs.map((spec) => {
-    // Cari kecocokan di database master ingredients
+    // Cari kecocokan di database master ingredients secara real-time
     const matched = allIngredients.find((ing) => {
       const nameLower = ing.name.toLowerCase();
       return spec.keywords.some((k) => nameLower.includes(k));
     });
 
-    const currentStock = matched ? Number(matched.currentStock) || 0 : 50;
+    const currentStock = matched ? Number(matched.currentStock) || 0 : 0;
     const remainingStock = Math.max(0, currentStock - spec.qtyNeeded);
     const isDeficit = currentStock < spec.qtyNeeded;
 
@@ -468,7 +329,6 @@ export function MealDistributionConcept() {
   const [signingDelivery, setSigningDelivery] = useState<MealDelivery | null>(null);
   const [viewStockItemsModal, setViewStockItemsModal] = useState<any[] | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MealDelivery | null>(null);
-  const [seedConfirmModal, setSeedConfirmModal] = useState(false);
   const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -521,20 +381,15 @@ export function MealDistributionConcept() {
   // Kalkulator Costing State
   const [costingPortions, setCostingPortions] = useState(1200);
   const [costingBudget, setCostingBudget] = useState(18000000); // Rp 18.000.000 (Rp 15.000 / porsi)
-  const [isDbLoaded, setIsDbLoaded] = useState(false);
-
   // Ambil data pengiriman riil dari database PostgreSQL saat load
   useEffect(() => {
-    refreshDistributions().finally(() => setIsDbLoaded(true));
+    refreshDistributions();
   }, [refreshDistributions]);
 
-  // Gabungkan list data: gunakan data database riil saat sudah ter-load
+  // Data pengiriman murni real-time dari database PostgreSQL (Clean Slate, tidak ada dummy)
   const activeDeliveriesList: MealDelivery[] = useMemo(() => {
-    if (isDbLoaded) {
-      return distributions;
-    }
-    return distributions && distributions.length > 0 ? distributions : INITIAL_DELIVERIES;
-  }, [distributions, isDbLoaded]);
+    return distributions || [];
+  }, [distributions]);
 
   // Hitung estimasi bahan yang akan dipotong untuk form penambahan
   const estimatedDeductions = useMemo(() => {
@@ -801,26 +656,6 @@ export function MealDistributionConcept() {
     }
   };
 
-  // Eksekusi Simpan Contoh Data ke PostgreSQL dari Custom In-App Modal
-  const confirmExecuteSeed = async () => {
-    setIsSubmitting(true);
-    try {
-      for (const item of INITIAL_DELIVERIES) {
-        await addDistribution({
-          ...item,
-          deductStockNow: false, // jangan dobel potong stok untuk seed awal
-        });
-      }
-      await refreshDistributions();
-      setSeedConfirmModal(false);
-      showToast('Berhasil menyimpan 3 contoh data distribusi ke database PostgreSQL!', 'success');
-    } catch (err: any) {
-      showToast('Gagal menyimpan ke database: ' + err?.message, 'error');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   // Kalkulasi Food Costing Tab 2
   const costPerPortion = costingPortions > 0 ? Math.round(costingBudget / costingPortions) : 0;
 
@@ -866,18 +701,10 @@ export function MealDistributionConcept() {
               <Plus className="w-4 h-4" />
               + Buat Surat Jalan Baru
             </button>
-            {distributions.length === 0 && (
-              <button
-                onClick={() => setSeedConfirmModal(true)}
-                type="button"
-                disabled={isSubmitting}
-                title="Sinkronkan contoh data awal ke PostgreSQL"
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-indigo-200 transition"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isSubmitting ? 'animate-spin' : ''}`} />
-                Simpan ke Database
-              </button>
-            )}
+            <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Real-Time Gudang Aktif</span>
+            </div>
           </div>
         </div>
 
@@ -1079,8 +906,29 @@ export function MealDistributionConcept() {
           </div>
 
           {/* Delivery Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filteredDeliveries.map((delivery) => {
+          {filteredDeliveries.length === 0 ? (
+            <div className="bg-white rounded-2xl border-2 border-dashed border-slate-200 p-10 sm:p-14 text-center max-w-lg mx-auto shadow-2xs space-y-4 my-6">
+              <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+                <Truck className="w-8 h-8" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-base font-bold text-slate-800">Daftar Pengiriman Bersih (Real-Time)</h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+                  Semua data uji coba telah dibersihkan. Sekarang Anda siap melakukan simulasi pengiriman makanan MBG ke sekolah dan pemotongan stok bahan mentah dari gudang secara langsung.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(true)}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20 transition"
+              >
+                <Plus className="w-4 h-4" />
+                + Buat Surat Jalan Baru
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {filteredDeliveries.map((delivery) => {
               const isCompleted = delivery.status === 'COMPLETED';
               const isInTransit = delivery.status === 'IN_TRANSIT';
               const isPreparing = delivery.status === 'PREPARING';
@@ -1311,7 +1159,8 @@ export function MealDistributionConcept() {
               );
             })}
           </div>
-        </div>
+        )}
+      </div>
       )}
 
       {/* 4. TAB 2: KALKULATOR HPP & GIZI PER PORSI */}
@@ -1465,8 +1314,15 @@ export function MealDistributionConcept() {
             </div>
           </div>
 
-          <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
-            {activeDeliveriesList.map((del) => (
+          {activeDeliveriesList.length === 0 ? (
+            <div className="bg-slate-50 rounded-xl p-8 text-center border border-dashed border-slate-200">
+              <FileCheck2 className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-xs text-slate-600 font-bold">Belum Ada Dokumen Surat Jalan / BAST</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">Surat Jalan dan format BAST resmi akan otomatis tersedia di sini saat Anda membuat rute pengiriman baru.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
+              {activeDeliveriesList.map((del) => (
               <div
                 key={del.id}
                 className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white hover:bg-slate-50 transition"
@@ -1506,7 +1362,8 @@ export function MealDistributionConcept() {
               </div>
             ))}
           </div>
-        </div>
+        )}
+      </div>
       )}
 
       {/* 6. TAB 4: PETA ALUR RANTAI PASOK MBG */}
@@ -2590,55 +2447,6 @@ export function MealDistributionConcept() {
         </div>
       )}
 
-      {/* CUSTOM IN-APP MODAL: KONFIRMASI SIMPAN KE DATABASE POSTGRESQL */}
-      {seedConfirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
-                <RefreshCw className="w-5 h-5" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-base font-bold text-slate-900">Simpan ke Database PostgreSQL?</h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Sinkronisasi 3 contoh data jadwal pengiriman ke database Neon
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSeedConfirmModal(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Sistem akan menyimpan data 3 rute pengiriman simulasi ini ke tabel database PostgreSQL Anda secara permanen.
-            </p>
-
-            <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
-              <button
-                type="button"
-                disabled={isSubmitting}
-                onClick={() => setSeedConfirmModal(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                disabled={isSubmitting}
-                onClick={confirmExecuteSeed}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition flex items-center gap-1.5 shadow-xs"
-              >
-                {isSubmitting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                Ya, Simpan ke Database
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* CUSTOM IN-APP MODAL: PREVIEW FOTO KERTAS BAST BERTANDA TANGAN */}
       {previewPhotoUrl && (
