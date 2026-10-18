@@ -296,7 +296,19 @@ export function MealDistributionConcept() {
   const [isSigningModalOpen, setIsSigningModalOpen] = useState(false);
   const [signingDelivery, setSigningDelivery] = useState<MealDelivery | null>(null);
   const [viewStockItemsModal, setViewStockItemsModal] = useState<any[] | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<MealDelivery | null>(null);
+  const [seedConfirmModal, setSeedConfirmModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // In-App Toast Notification
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast((curr) => (curr?.message === message ? null : curr));
+    }, 4500);
+  };
 
   // Form State untuk Tambah Pengiriman Baru
   const [newForm, setNewForm] = useState({
@@ -395,7 +407,7 @@ export function MealDistributionConcept() {
   const handleCreateDelivery = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newForm.schoolName.trim()) {
-      alert('Nama sekolah penerima wajib diisi');
+      showToast('Nama sekolah penerima wajib diisi', 'error');
       return;
     }
 
@@ -453,10 +465,11 @@ export function MealDistributionConcept() {
 
       const res = await addDistribution(payload);
       if (res && !res.ok) {
-        alert('Gagal menyimpan pengiriman: ' + (res.error || 'Terjadi kendala pada server'));
+        showToast('Gagal menyimpan pengiriman: ' + (res.error || 'Terjadi kendala pada server'), 'error');
         return;
       }
 
+      showToast('Surat jalan berhasil diterbitkan & stok bahan otomatis terpotong!', 'success');
       setIsAddModalOpen(false);
       // Reset Form
       setNewForm({
@@ -542,10 +555,11 @@ export function MealDistributionConcept() {
 
       const res = await updateDistribution(signingDelivery.id, updates);
       if (res && !res.ok) {
-        alert('Gagal mengesahkan BAST: ' + (res.error || 'Terjadi kendala pada server'));
+        showToast('Gagal mengesahkan BAST: ' + (res.error || 'Terjadi kendala pada server'), 'error');
         return;
       }
 
+      showToast(`BAST untuk ${signingDelivery.schoolName} resmi disahkan & selesai!`, 'success');
       setIsSigningModalOpen(false);
       setSigningDelivery(null);
       if (selectedDelivery && selectedDelivery.id === signingDelivery.id) {
@@ -556,21 +570,33 @@ export function MealDistributionConcept() {
     }
   };
 
-  // Hapus Pengiriman dengan proteksi restore stok
-  const handleDeleteDelivery = async (delivery: MealDelivery) => {
-    const warningMsg = delivery.isStockDeducted
-      ? `Hapus surat jalan "${delivery.dispatchNumber}" untuk ${delivery.schoolName}?\n\nPERHATIAN: Stok bahan gudang yang sebelumnya dipotong (${delivery.targetPortions} porsi) akan OTOMATIS DIKEMBALIKAN (RESTORE) ke gudang dapur!`
-      : `Hapus surat jalan "${delivery.dispatchNumber}" untuk ${delivery.schoolName}?`;
-
-    if (!confirm(warningMsg)) return;
-
-    await deleteDistribution(delivery.id);
-    if (selectedDelivery?.id === delivery.id) setSelectedDelivery(null);
+  // Eksekusi Hapus Pengiriman dari Custom In-App Modal
+  const confirmExecuteDelete = async () => {
+    if (!deleteTarget) return;
+    setIsSubmitting(true);
+    try {
+      const wasDeducted = deleteTarget.isStockDeducted;
+      const schoolName = deleteTarget.schoolName;
+      const res = await deleteDistribution(deleteTarget.id);
+      if (res && !res.ok) {
+        showToast('Gagal menghapus pengiriman: ' + (res.error || 'Terjadi kendala server'), 'error');
+        return;
+      }
+      if (selectedDelivery?.id === deleteTarget.id) setSelectedDelivery(null);
+      setDeleteTarget(null);
+      showToast(
+        wasDeducted
+          ? `Surat jalan ${schoolName} dihapus & stok bahan otomatis dikembalikan (restore) ke gudang!`
+          : `Surat jalan ${schoolName} berhasil dihapus.`,
+        'success'
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  // Seed Contoh Pengiriman ke Database jika masih kosong
-  const handleSeedDemoData = async () => {
-    if (!confirm('Simpan 3 contoh data jadwal pengiriman distribusi MBG ini secara permanen ke database PostgreSQL Neon?')) return;
+  // Eksekusi Simpan Contoh Data ke PostgreSQL dari Custom In-App Modal
+  const confirmExecuteSeed = async () => {
     setIsSubmitting(true);
     try {
       for (const item of INITIAL_DELIVERIES) {
@@ -580,7 +606,10 @@ export function MealDistributionConcept() {
         });
       }
       await refreshDistributions();
-      alert('Berhasil menyimpan 3 contoh data distribusi ke database PostgreSQL!');
+      setSeedConfirmModal(false);
+      showToast('Berhasil menyimpan 3 contoh data distribusi ke database PostgreSQL!', 'success');
+    } catch (err: any) {
+      showToast('Gagal menyimpan ke database: ' + err?.message, 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -633,7 +662,7 @@ export function MealDistributionConcept() {
             </button>
             {distributions.length === 0 && (
               <button
-                onClick={handleSeedDemoData}
+                onClick={() => setSeedConfirmModal(true)}
                 type="button"
                 disabled={isSubmitting}
                 title="Sinkronkan contoh data awal ke PostgreSQL"
@@ -981,7 +1010,7 @@ export function MealDistributionConcept() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleDeleteDelivery(delivery)}
+                        onClick={() => setDeleteTarget(delivery)}
                         className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-100 transition"
                         title="Hapus Pengiriman (Restore Stok)"
                       >
@@ -2083,6 +2112,149 @@ export function MealDistributionConcept() {
           </div>
         </div>
       )}
+
+      {/* CUSTOM IN-APP MODAL: KONFIRMASI HAPUS SURAT JALAN & RESTORE STOK */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-base font-bold text-slate-900">Hapus Surat Jalan Pengiriman?</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  No. Surat Jalan: <span className="font-mono font-bold text-slate-700">{deleteTarget.dispatchNumber}</span>
+                </p>
+                <p className="text-xs font-semibold text-indigo-900 mt-0.5">{deleteTarget.schoolName}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {deleteTarget.isStockDeducted ? (
+              <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs space-y-2 text-rose-950">
+                <div className="flex items-center gap-2 font-bold text-rose-800">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>Stok Bahan Gudang Akan Dikembalikan (Restore)</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-rose-900/90">
+                  Pengiriman ini sebelumnya telah memotong stok gudang sebesar <strong>{deleteTarget.targetPortions} porsi</strong>. Jika Anda menghapus data ini, sistem akan <strong>secara otomatis mengembalikan stok bahan mentah</strong> ke gudang dapur Anda:
+                </p>
+                {deleteTarget.deductedItems && deleteTarget.deductedItems.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {deleteTarget.deductedItems.map((item: any, idx: number) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1 bg-white border border-rose-200 text-rose-800 font-bold px-2 py-0.5 rounded-md text-[10px]"
+                      >
+                        +{item.quantity} {item.unit} {item.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 leading-relaxed">
+                Jadwal surat jalan ini akan dihapus dari sistem pengiriman.
+              </div>
+            )}
+
+            <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={confirmExecuteDelete}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white transition flex items-center gap-1.5 shadow-xs"
+              >
+                {isSubmitting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                Ya, Hapus {deleteTarget.isStockDeducted ? '& Kembalikan Stok' : ''}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOM IN-APP MODAL: KONFIRMASI SIMPAN KE DATABASE POSTGRESQL */}
+      {seedConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                <RefreshCw className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-base font-bold text-slate-900">Simpan ke Database PostgreSQL?</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Sinkronisasi 3 contoh data jadwal pengiriman ke database Neon
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSeedConfirmModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Sistem akan menyimpan data 3 rute pengiriman simulasi ini ke tabel database PostgreSQL Anda secara permanen.
+            </p>
+
+            <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={() => setSeedConfirmModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={confirmExecuteSeed}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition flex items-center gap-1.5 shadow-xs"
+              >
+                {isSubmitting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                Ya, Simpan ke Database
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IN-APP TOAST NOTIFICATION BANNER */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl border text-xs font-semibold bg-slate-900 text-white border-slate-800 animate-in slide-in-from-bottom-3 duration-200">
+          {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+          {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
+          {toast.type === 'info' && <Info className="w-4 h-4 text-indigo-400 shrink-0" />}
+          <span className="leading-snug">{toast.message}</span>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="ml-2 text-slate-400 hover:text-white transition p-0.5"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
+
