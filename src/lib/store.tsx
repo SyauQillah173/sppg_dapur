@@ -38,7 +38,6 @@ interface ModalState {
     | 'ADD_PROCUREMENT'
     | 'ADD_INGREDIENT'
     | 'EDIT_INGREDIENT'
-    | 'RECORD_MUTATION'
     | 'ADD_SUPPLIER'
     | 'ADD_EMPLOYEE'
     | 'ADD_BUDGET'

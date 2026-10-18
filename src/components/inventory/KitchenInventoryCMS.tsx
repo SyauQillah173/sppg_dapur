@@ -59,7 +59,6 @@ export function KitchenInventoryCMS() {
  // Modals inside component
  const [showAddIngredientModal, setShowAddIngredientModal] = useState<boolean>(false);
  const [editingIngredient, setEditingIngredient] = useState<MasterIngredient | null>(null);
- const [showMutationModal, setShowMutationModal] = useState<boolean>(false);
  const [showCategoryModal, setShowCategoryModal] = useState<boolean>(false);
  const [showUnitModal, setShowUnitModal] = useState<boolean>(false);
 
@@ -72,14 +71,7 @@ export function KitchenInventoryCMS() {
  const [ingPrice, setIngPrice] = useState<number>(25000);
  const [ingDistribution, setIngDistribution] = useState<Record<string, number>>({});
 
- // Mutation form state
- const [mutationType, setMutationType] = useState<StockMutationType>('KELUAR');
- const [mutationIngId, setMutationIngId] = useState<string>(ingredients[0]?.id || '');
- const [mutationQty, setMutationQty] = useState<number>(10);
- const [mutationSppgUnit, setMutationSppgUnit] = useState<SppgUnitId>('SPPG-AA02');
- const [mutationRef, setMutationRef] = useState<string>('MENU-20261016-SIANG');
- const [mutationPurpose, setMutationPurpose] = useState<string>('Porsi Makan Siang Siswa (1.200 Porsi)');
- const [mutationOfficer, setMutationOfficer] = useState<string>('Dewi Lestari (Juru Masak)');
+
 
  // Edit & Delete Mutation state
  const [editingMutation, setEditingMutation] = useState<StockLedgerEntry | null>(null);
@@ -248,27 +240,7 @@ export function KitchenInventoryCMS() {
    setEditingCategory(null);
  };
 
- const handleRecordMutation = (e: React.FormEvent) => {
- e.preventDefault();
- const targetIng = ingredients.find((i) => i.id === mutationIngId);
- const targetUnit = sppgUnits.find((u) => u.id === mutationSppgUnit);
- if (!targetIng) return;
 
- recordStockMutation({
- sppgUnitId: mutationSppgUnit,
- sppgUnitName: targetUnit?.name || '',
- ingredientId: targetIng.id,
- ingredientName: targetIng.name,
- category: targetIng.category,
- type: mutationType,
- quantity: mutationQty,
- unit: targetIng.defaultUnit,
- referenceNumber: mutationRef,
- purpose: mutationPurpose,
- recordedBy: mutationOfficer,
- });
- setShowMutationModal(false);
- };
 
  const handleSaveCategory = (e: React.FormEvent) => {
  e.preventDefault();
@@ -317,14 +289,7 @@ export function KitchenInventoryCMS() {
 
  {userRole === 'SUPERADMIN' ? (
  <div className="flex items-center gap-2">
- <button
- type="button"
- onClick={() => setShowMutationModal(true)}
- className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition"
- >
- <ArrowDownLeft className="h-3.5 w-3.5 text-blue-600" />
- <span>Catat Mutasi Masuk/Keluar</span>
- </button>
+
 
  <button
  type="button"
@@ -906,119 +871,7 @@ export function KitchenInventoryCMS() {
  </div>
  )}
 
- {/* MODAL: RECORD STOCK MUTATION */}
- {showMutationModal && (
- <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
- <div className="w-full max-w-lg bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden">
- <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50">
- <h3 className="font-bold text-sm text-slate-900">
- Pencatatan Mutasi Keluar/Masuk Dapur SPPG
- </h3>
- <button onClick={() => setShowMutationModal(false)}><X className="h-4 w-4 text-slate-400" /></button>
- </div>
- <form onSubmit={handleRecordMutation} className="p-5 space-y-3 text-xs">
- <div className="grid grid-cols-2 gap-3">
- <div>
- <label className="font-semibold text-slate-700">Jenis Mutasi:</label>
- <select
- value={mutationType}
- onChange={(e) => setMutationType(e.target.value as StockMutationType)}
- className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 font-semibold"
- >
- <option value="KELUAR">KELUAR (Masak / Distribusi Menu Siswa)</option>
- <option value="MASUK">MASUK (Penerimaan Belanja Supplier)</option>
- </select>
- </div>
- <div>
- <label className="font-semibold text-slate-700">Dapur SPPG:</label>
- <select
- value={mutationSppgUnit}
- onChange={(e) => setMutationSppgUnit(e.target.value as SppgUnitId)}
- className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
- >
- {sppgUnits.map((u) => (
- <option key={u.id} value={u.id}>{u.name}</option>
- ))}
- </select>
- </div>
- </div>
- <div className="grid grid-cols-3 gap-3">
- <div className="col-span-2">
- <label className="font-semibold text-slate-700">Pilih Bahan Dapur:</label>
- <select
- value={mutationIngId}
- onChange={(e) => setMutationIngId(e.target.value)}
- className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5"
- >
- {ingredients.map((i) => (
- <option key={i.id} value={i.id}>
- {i.name} (Sisa Stok: {i.currentStock} {i.defaultUnit})
- </option>
- ))}
- </select>
- </div>
- <div>
- <label className="font-semibold text-slate-700">Kuantitas:</label>
- <input
- type="number"
- min={0.1}
- step="any"
- required
- value={mutationQty}
- onChange={(e) => setMutationQty(Number(e.target.value))}
- className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 font-mono"
- />
- </div>
- </div>
- <div>
- <label className="font-semibold text-slate-700">Nomor Referensi (Nota / Menu):</label>
- <input
- type="text"
- required
- value={mutationRef}
- onChange={(e) => setMutationRef(e.target.value)}
- className="mt-1 w-full rounded border border-slate-300 px-2.5 py-1.5 font-mono"
- />
- </div>
- <div>
- <label className="font-semibold text-slate-700">Keperluan Penggunaan:</label>
- <input
- type="text"
- required
- value={mutationPurpose}
- onChange={(e) => setMutationPurpose(e.target.value)}
- className="mt-1 w-full rounded border border-slate-300 px-2.5 py-1.5"
- />
- </div>
- <div>
- <label className="font-semibold text-slate-700">Petugas Dapur Pelaksana:</label>
- <input
- type="text"
- required
- value={mutationOfficer}
- onChange={(e) => setMutationOfficer(e.target.value)}
- className="mt-1 w-full rounded border border-slate-300 px-2.5 py-1.5"
- />
- </div>
- <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
- <button
- type="button"
- onClick={() => setShowMutationModal(false)}
- className="rounded px-3 py-1.5 border border-slate-300 text-slate-600"
- >
- Batal
- </button>
- <button
- type="submit"
- className="rounded bg-blue-600 text-white px-4 py-1.5 font-semibold"
- >
- Simpan Catatan Mutasi
- </button>
- </div>
- </form>
- </div>
- </div>
- )}
+
 
  {/* MODAL: ADD CATEGORY */}
  {showCategoryModal && (

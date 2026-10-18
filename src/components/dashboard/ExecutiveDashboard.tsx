@@ -543,21 +543,6 @@ export function ExecutiveDashboard({ onNavigateToProcurement, onNavigateToInvent
  </div>
  <ArrowRight className="h-3.5 w-3.5 text-blue-500" />
  </button>
-
- <button
- type="button"
- onClick={() => openModal('RECORD_MUTATION')}
- className="w-full flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800 hover:bg-slate-100 transition text-left"
- >
- <div className="flex items-center gap-2">
- <Layers className="h-4 w-4 text-emerald-600" />
- <div>
- <div className="font-semibold">Catat Mutasi Dapur</div>
- <div className="text-[10px] text-slate-500">Bahan Masuk/Keluar untuk menu</div>
- </div>
- </div>
- <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
- </button>
  </>
  ) : (
  <div className="rounded-md border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900">
