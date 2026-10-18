@@ -164,12 +164,32 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   try {
     const { id } = await params;
-    const existing = await prisma.procurementOrder.findUnique({ where: { id } });
+    const existing = await prisma.procurementOrder.findUnique({
+      where: { id },
+      include: { items: true },
+    });
     if (!existing) {
       return NextResponse.json({ success: false, error: 'Nota belanja tidak ditemukan.' }, { status: 404 });
     }
 
     await prisma.$transaction(async (tx) => {
+      // Kembalikan/kurangi stok bahan makanan yang tadinya masuk dari nota ini
+      for (const it of existing.items) {
+        const qty = Number(it.quantity) || 0;
+        if (qty <= 0) continue;
+        if (it.ingredientId) {
+          await tx.ingredient.updateMany({
+            where: { id: it.ingredientId },
+            data: { currentStock: { decrement: qty } },
+          });
+        } else if (it.name?.trim()) {
+          await tx.ingredient.updateMany({
+            where: { name: { equals: it.name.trim(), mode: 'insensitive' } },
+            data: { currentStock: { decrement: qty } },
+          });
+        }
+      }
+
       await applyOrderAggregates(tx, existing, -1);
       await tx.procurementOrder.delete({ where: { id } });
       // Hapus foto nota belanja dan bukti transfer sisa kas dari PostgreSQL agar tidak memenuhi database!

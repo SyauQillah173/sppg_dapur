@@ -111,6 +111,101 @@ export async function POST(req: NextRequest) {
       });
 
       await applyOrderAggregates(tx, order, 1);
+
+      // Otomatis tambahkan stok bahan makanan MBG & catat kartu stok masuk
+      for (const it of order.items) {
+        const qty = Number(it.quantity) || 0;
+        if (qty <= 0) continue;
+
+        let targetIngId = it.ingredientId;
+        if (!targetIngId) {
+          const found = await tx.ingredient.findFirst({
+            where: { name: { equals: it.name.trim(), mode: 'insensitive' } },
+          });
+          if (found) targetIngId = found.id;
+        }
+
+        if (targetIngId) {
+          const updatedIng = await tx.ingredient.update({
+            where: { id: targetIngId },
+            data: {
+              currentStock: { increment: qty },
+              lastPurchasePrice: Number(it.unitPrice) > 0 ? Number(it.unitPrice) : undefined,
+            },
+          });
+
+          if (!it.ingredientId) {
+            await tx.procurementItem.update({
+              where: { id: it.id },
+              data: { ingredientId: targetIngId },
+            });
+          }
+
+          const safeUnitId = order.sppgUnitId === 'ALL' ? 'SPPG-AA02' : order.sppgUnitId;
+          try {
+            await tx.stockMovement.create({
+              data: {
+                sppgUnitId: safeUnitId,
+                ingredientId: targetIngId,
+                type: 'MASUK',
+                quantity: qty,
+                unit: it.unit || updatedIng.defaultUnit,
+                referenceNumber: order.receiptNumber || 'NOTA-BELANJA',
+                purpose: `Belanja Pasokan Stok MBG (${order.receiptNumber || 'Nota'})`,
+                recordedBy: 'Superadmin Pengadaan',
+                remainingStockAfter: updatedIng.currentStock,
+              },
+            });
+          } catch (e) {
+            console.warn('Gagal catat stock movement:', e);
+          }
+        } else if (it.name?.trim()) {
+          // Buat otomatis bahan makanan baru di database jika belum pernah terdaftar
+          try {
+            let cat = await tx.ingredientCategory.findFirst({
+              where: { name: { equals: it.category?.trim() || 'Lainnya', mode: 'insensitive' } },
+            });
+            if (!cat) {
+              cat = await tx.ingredientCategory.findFirst();
+            }
+            if (cat) {
+              const codeSuffix = Date.now().toString().slice(-5);
+              const createdIng = await tx.ingredient.create({
+                data: {
+                  code: `ING-NEW-${codeSuffix}`,
+                  name: it.name.trim(),
+                  categoryId: cat.id,
+                  defaultUnit: it.unit || 'Kg',
+                  currentStock: qty,
+                  lastPurchasePrice: Number(it.unitPrice) || 0,
+                },
+              });
+              targetIngId = createdIng.id;
+              await tx.procurementItem.update({
+                where: { id: it.id },
+                data: { ingredientId: targetIngId },
+              });
+              const safeUnitId = order.sppgUnitId === 'ALL' ? 'SPPG-AA02' : order.sppgUnitId;
+              await tx.stockMovement.create({
+                data: {
+                  sppgUnitId: safeUnitId,
+                  ingredientId: targetIngId,
+                  type: 'MASUK',
+                  quantity: qty,
+                  unit: it.unit || createdIng.defaultUnit,
+                  referenceNumber: order.receiptNumber || 'NOTA-BELANJA',
+                  purpose: `Belanja Pasokan Stok MBG Bahan Baru (${order.receiptNumber || 'Nota'})`,
+                  recordedBy: 'Superadmin Pengadaan',
+                  remainingStockAfter: qty,
+                },
+              });
+            }
+          } catch (e) {
+            console.warn('Gagal tambah bahan baru otomatis ke master:', e);
+          }
+        }
+      }
+
       return order;
     });
 

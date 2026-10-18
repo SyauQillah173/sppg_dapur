@@ -21,7 +21,92 @@ import {
   Wallet,
   Camera,
   Coins,
+  ChevronDown,
 } from 'lucide-react';
+
+interface IngredientSuggestionsDropdownProps {
+  idx: number;
+  currentName: string;
+  isOpen: boolean;
+  onSelect: (ing: any) => void;
+  ingredients: any[];
+}
+
+function IngredientSuggestionsDropdown({
+  idx,
+  currentName,
+  isOpen,
+  onSelect,
+  ingredients,
+}: IngredientSuggestionsDropdownProps) {
+  if (!isOpen) return null;
+
+  const query = (currentName || '').trim().toLowerCase();
+  const filtered = query
+    ? ingredients.filter(
+        (ing) =>
+          ing.name.toLowerCase().includes(query) ||
+          ing.category.toLowerCase().includes(query) ||
+          (ing.code && ing.code.toLowerCase().includes(query))
+      )
+    : ingredients.slice(0, 35);
+
+  return (
+    <div
+      data-dropdown-id={`dropdown-${idx}`}
+      className="absolute left-0 right-0 top-full mt-1.5 max-h-60 overflow-y-auto bg-white rounded-xl shadow-2xl border border-slate-200/90 z-50 divide-y divide-slate-100"
+      style={{ minWidth: '260px' }}
+    >
+      <div className="px-3 py-1.5 bg-slate-50 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500 sticky top-0 border-b border-slate-100 z-10">
+        <span>Katalog Bahan MBG</span>
+        <span className="font-mono text-slate-400">{filtered.length} Bahan</span>
+      </div>
+
+      {filtered.length > 0 ? (
+        filtered.map((ing) => (
+          <button
+            key={ing.id}
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onSelect(ing);
+            }}
+            className="w-full text-left px-3 py-2 hover:bg-emerald-50/80 active:bg-emerald-100 transition flex items-center justify-between gap-2 text-xs group cursor-pointer"
+          >
+            <div className="min-w-0 pr-2">
+              <div className="font-bold text-slate-900 group-hover:text-emerald-900 flex items-center gap-1.5 truncate">
+                <span className="truncate">{ing.name}</span>
+                <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 group-hover:bg-emerald-100 text-slate-600 group-hover:text-emerald-800 border border-slate-200">
+                  {ing.category}
+                </span>
+              </div>
+              <div className="text-[10px] text-slate-400 flex items-center gap-1.5 mt-0.5">
+                <span>Satuan: <strong className="text-slate-600">{ing.defaultUnit}</strong></span>
+                <span>&bull;</span>
+                <span>Stok: <strong className="text-slate-700 font-mono">{Number(ing.currentStock || 0)} {ing.defaultUnit}</strong></span>
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="font-mono font-bold text-emerald-700 text-xs">
+                {formatRupiah(ing.lastPurchasePrice)}
+              </div>
+              <div className="text-[9px] text-slate-400">Patokan</div>
+            </div>
+          </button>
+        ))
+      ) : (
+        <div className="p-3 text-center text-xs text-slate-500 space-y-1">
+          <p>
+            Bahan <strong className="text-slate-800">"{currentName}"</strong> belum ada di CMS.
+          </p>
+          <p className="text-[10px] text-emerald-700 font-medium">
+            ✓ Otomatis didaftarkan dan stoknya ditambah saat nota disimpan.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface AddProcurementModalProps {
   onClose: () => void;
@@ -180,6 +265,92 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
     return false;
   };
 
+  const [activeDropdownIdx, setActiveDropdownIdx] = useState<number | null>(null);
+
+  // Close smart dropdown on click outside
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (!target.closest('[data-dropdown-container="true"]')) {
+        setActiveDropdownIdx(null);
+      }
+    };
+    document.addEventListener('mousedown', handleGlobalClick);
+    return () => document.removeEventListener('mousedown', handleGlobalClick);
+  }, []);
+
+  const handleKasbonChange = (raw: string) => {
+    const clean = raw.replace(/\D/g, '');
+    const num = clean === '' ? 0 : parseInt(clean, 10);
+    setAmountRequested(num);
+  };
+
+  const handleUnitPriceChange = (idx: number, raw: string) => {
+    const clean = raw.replace(/\D/g, '');
+    const num = clean === '' ? 0 : parseInt(clean, 10);
+    const updated = [...items];
+    const item = { ...updated[idx], unitPrice: num };
+    item.subtotal = Number(item.quantity || 0) * num;
+    updated[idx] = item;
+    setItems(updated);
+  };
+
+  const handleQtyChange = (idx: number, raw: string) => {
+    let sanitized = raw.replace(',', '.').replace(/[^0-9.]/g, '');
+    const dotParts = sanitized.split('.');
+    if (dotParts.length > 2) {
+      sanitized = dotParts[0] + '.' + dotParts.slice(1).join('');
+    }
+    // Remove leading zeros before digits (e.g. "028" -> "28")
+    if (/^0[0-9]/.test(sanitized)) {
+      sanitized = sanitized.replace(/^0+/, '');
+      if (sanitized === '') sanitized = '0';
+    }
+    const num = sanitized === '' || sanitized === '.' ? 0 : parseFloat(sanitized);
+    const updated = [...items];
+    const item = { ...updated[idx], quantity: isNaN(num) ? 0 : num };
+    item.subtotal = item.quantity * Number(item.unitPrice || 0);
+    updated[idx] = item;
+    setItems(updated);
+  };
+
+  const inferCategoryFromName = (name: string): string | null => {
+    const n = name.toLowerCase();
+    if (/melon|semangka|pisang|jeruk|apel|mangga|pepaya|nanas|stroberi|alpukat|jambu|pir|buah/i.test(n)) {
+      return 'Buah-buahan';
+    }
+    if (/ayam|daging|sapi|ikan|telur|udang|cumi|lele|tuna|sosis|kornet|bebek|hewani/i.test(n)) {
+      return 'Protein Hewani';
+    }
+    if (/tahu|tempe|edamame|kedelai|oncom/i.test(n)) {
+      return 'Protein Nabati';
+    }
+    if (/bayam|kangkung|sawi|wortel|kubis|kol|buncis|brokoli|labu|terong|jagung|tomat|selada|timun|kentang|sayur/i.test(n)) {
+      return 'Sayuran';
+    }
+    if (/bawang|cabai|cabe|jahe|kunyit|lengkuas|serai|lada|garam|gula|kecap|saus|bumbu|penyedap|ketumbar|minyak|royco|masako|knorr/i.test(n)) {
+      return 'Bumbu & Saus';
+    }
+    if (/beras|nasi|mie|bihun|tepung|roti|gandum|sembako/i.test(n)) {
+      return 'Sembako & Tepung';
+    }
+    return null;
+  };
+
+  const handleSelectIngredient = (idx: number, ing: any) => {
+    const updated = [...items];
+    const item = { ...updated[idx] };
+    item.name = ing.name;
+    item.category = ing.category;
+    item.unit = ing.defaultUnit;
+    item.unitPrice = Number(ing.lastPurchasePrice) > 0 ? Number(ing.lastPurchasePrice) : item.unitPrice;
+    item.subtotal = Number(item.quantity || 1) * Number(item.unitPrice || 0);
+    updated[idx] = item;
+    setItems(updated);
+    setActiveDropdownIdx(null);
+  };
+
   const handleAddItem = () => {
     const newItem: ProcurementItem = {
       id: Date.now().toString(),
@@ -198,6 +369,7 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
   const handleRemoveItem = (idx: number) => {
     if (items.length > 1) {
       setItems(items.filter((_, i) => i !== idx));
+      if (activeDropdownIdx === idx) setActiveDropdownIdx(null);
     }
   };
 
@@ -216,9 +388,14 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
       if (matchedIng.lastPurchasePrice > 0 && item.unitPrice === 0) {
         item.unitPrice = matchedIng.lastPurchasePrice;
       }
-      item.subtotal = Number(item.quantity) * Number(item.unitPrice);
+    } else {
+      const inferred = inferCategoryFromName(nameValue);
+      if (inferred) {
+        item.category = inferred;
+      }
     }
 
+    item.subtotal = Number(item.quantity || 0) * Number(item.unitPrice || 0);
     updated[idx] = item;
     setItems(updated);
   };
@@ -228,7 +405,7 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
     const item = { ...updated[idx], [field]: value };
 
     if (field === 'quantity' || field === 'unitPrice') {
-      item.subtotal = Number(item.quantity) * Number(item.unitPrice);
+      item.subtotal = Number(item.quantity || 0) * Number(item.unitPrice || 0);
     }
     updated[idx] = item;
     setItems(updated);
@@ -330,9 +507,17 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
     setSubmitError('');
 
     // Validasi item: harus ada nama bahan dan subtotal > 0
-    const validItems = items.filter(
-      (it) => it.name.trim() !== '' && it.subtotal > 0 && it.quantity > 0
-    );
+    const validItems = items
+      .filter((it) => it.name.trim() !== '' && it.subtotal > 0 && it.quantity > 0)
+      .map((it) => {
+        const matched = ingredients.find(
+          (ing) => ing.name.toLowerCase() === it.name.trim().toLowerCase()
+        );
+        return {
+          ...it,
+          ingredientId: matched ? matched.id : it.ingredientId,
+        };
+      });
 
     if (validItems.length === 0 || actualReceiptTotal <= 0) {
       setSubmitError('Mohon isi minimal 1 rincian bahan belanja dengan nama, jumlah (qty), dan harga satuan yang valid.');
@@ -449,7 +634,16 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
+        <form
+          onSubmit={handleSubmit}
+          autoComplete="off"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') {
+              e.preventDefault();
+            }
+          }}
+          className="flex-1 overflow-y-auto p-5 space-y-4"
+        >
           {/* AI Receipt Upload Banner & Photo Attachment */}
           <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -830,32 +1024,26 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
                   Rp
                 </span>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
                   required
-                  min={0}
-                  step="any"
-                  value={amountRequested}
-                  onChange={(e) => setAmountRequested(Number(e.target.value))}
+                  placeholder="0"
+                  value={amountRequested === 0 ? '' : amountRequested.toLocaleString('id-ID')}
+                  onChange={(e) => handleKasbonChange(e.target.value)}
+                  onFocus={(e) => e.target.select()}
+                  onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
                   className="w-full rounded-md border border-slate-300 bg-white pl-9 pr-2.5 py-2 font-mono font-bold text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
                 />
               </div>
               <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
-                {formatRupiah(amountRequested)}
+                Terbaca: {formatRupiah(amountRequested)}
               </span>
             </div>
           </div>
 
-          {/* Datalist for Quick Ingredient Auto-Suggest from CMS */}
-          <datalist id="cms-ingredients-datalist">
-            {ingredients.map((ing) => (
-              <option key={ing.id} value={ing.name}>
-                {ing.name} &bull; {ing.category} &bull; Standar {ing.defaultUnit} &bull; {formatRupiah(ing.lastPurchasePrice)}
-              </option>
-            ))}
-          </datalist>
-
           {/* Dynamic Itemized Table & Mobile Cards */}
-          <div className="rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+          <div className="rounded-xl border border-slate-200 overflow-visible shadow-xs">
             <div className="px-3 sm:px-4 py-2.5 bg-slate-100 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold">
               <div className="flex items-center gap-2">
                 <span className="text-slate-800 font-bold">Tabel Rincian Bahan Belanja</span>
@@ -875,15 +1063,15 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
             </div>
 
             {/* Desktop Table View (>= md) */}
-            <div className="hidden md:block max-h-64 overflow-y-auto overflow-x-auto p-2 bg-white">
+            <div className="hidden md:block min-h-[300px] max-h-96 overflow-y-auto overflow-x-visible p-2 bg-white">
               <table className="w-full text-xs min-w-[640px]">
                 <thead>
                   <tr className="text-slate-500 text-[10px] uppercase font-semibold border-b border-slate-200">
                     <th className="text-left py-1.5 px-2">Nama Bahan (Pilih CMS / Ketik Baru)</th>
                     <th className="text-left py-1.5 px-1 w-32">Kategori</th>
-                    <th className="text-right py-1.5 px-1 w-20">Banyaknya</th>
+                    <th className="text-right py-1.5 px-1 w-24">Banyaknya</th>
                     <th className="text-left py-1.5 px-1 w-20">Satuan</th>
-                    <th className="text-right py-1.5 px-1 w-28">Harga (Rp)</th>
+                    <th className="text-right py-1.5 px-1 w-32">Harga Satuan (Rp)</th>
                     <th className="text-right py-1.5 px-2 w-32">Subtotal</th>
                     <th className="w-8"></th>
                   </tr>
@@ -894,15 +1082,38 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
                     return (
                       <tr key={item.id || idx} className={isAnomaly ? 'bg-rose-50/50' : 'hover:bg-slate-50'}>
                         <td className="py-1 px-1">
-                          <input
-                            list="cms-ingredients-datalist"
-                            type="text"
-                            required
-                            value={item.name}
-                            onChange={(e) => handleItemNameChange(idx, e.target.value)}
-                            placeholder="Pilih atau ketik bahan..."
-                            className="w-full rounded border border-slate-300 px-2 py-1 text-xs focus:border-slate-800 focus:outline-none"
-                          />
+                          <div className="relative" data-dropdown-container="true">
+                            <input
+                              type="text"
+                              autoComplete="off"
+                              required
+                              value={item.name}
+                              onFocus={() => setActiveDropdownIdx(idx)}
+                              onClick={() => setActiveDropdownIdx(idx)}
+                              onChange={(e) => {
+                                handleItemNameChange(idx, e.target.value);
+                                setActiveDropdownIdx(idx);
+                              }}
+                              onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                              placeholder="Pilih atau ketik bahan..."
+                              className="w-full rounded border border-slate-300 pr-7 pl-2 py-1 text-xs focus:border-slate-800 focus:outline-none font-medium text-slate-900"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setActiveDropdownIdx(activeDropdownIdx === idx ? null : idx)}
+                              className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-700"
+                              title="Buka pilihan bahan CMS"
+                            >
+                              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${activeDropdownIdx === idx ? 'rotate-180 text-emerald-600' : ''}`} />
+                            </button>
+                            <IngredientSuggestionsDropdown
+                              idx={idx}
+                              currentName={item.name}
+                              isOpen={activeDropdownIdx === idx}
+                              onSelect={(ing) => handleSelectIngredient(idx, ing)}
+                              ingredients={ingredients}
+                            />
+                          </div>
                           {isAnomaly && (
                             <span className="text-[9px] text-rose-600 font-bold block mt-0.5">
                               ⚠ Peringatan: Harga naik &gt;20% dari patokan
@@ -913,7 +1124,7 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
                           <select
                             value={item.category}
                             onChange={(e) => handleItemChange(idx, 'category', e.target.value)}
-                            className="w-full rounded border border-slate-300 px-1 py-1 text-xs focus:border-slate-800 focus:outline-none"
+                            className="w-full rounded border border-slate-300 px-1 py-1 text-xs focus:border-slate-800 focus:outline-none bg-white font-medium"
                           >
                             {categories.map((c) => (
                               <option key={c.id} value={c.name}>
@@ -924,19 +1135,22 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
                         </td>
                         <td className="py-1 px-1">
                           <input
-                            type="number"
-                            min={0.1}
-                            step="any"
-                            value={item.quantity}
-                            onChange={(e) => handleItemChange(idx, 'quantity', Number(e.target.value))}
-                            className="w-full rounded border border-slate-300 px-1 py-1 text-xs text-right font-mono tabular-nums focus:border-slate-800 focus:outline-none"
+                            type="text"
+                            inputMode="decimal"
+                            autoComplete="off"
+                            placeholder="1"
+                            value={item.quantity === 0 ? '' : item.quantity}
+                            onChange={(e) => handleQtyChange(idx, e.target.value)}
+                            onFocus={(e) => e.target.select()}
+                            onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                            className="w-full rounded border border-slate-300 px-1.5 py-1 text-xs text-right font-mono font-bold tabular-nums focus:border-slate-800 focus:outline-none text-slate-900"
                           />
                         </td>
                         <td className="py-1 px-1">
                           <select
                             value={item.unit}
                             onChange={(e) => handleItemChange(idx, 'unit', e.target.value)}
-                            className="w-full rounded border border-slate-300 px-1 py-1 text-xs font-mono focus:border-slate-800 focus:outline-none"
+                            className="w-full rounded border border-slate-300 px-1 py-1 text-xs font-mono focus:border-slate-800 focus:outline-none bg-white"
                           >
                             {units.map((u) => (
                               <option key={u.id} value={u.symbol}>
@@ -947,12 +1161,15 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
                         </td>
                         <td className="py-1 px-1">
                           <input
-                            type="number"
-                            min={0}
-                            step="any"
-                            value={item.unitPrice}
-                            onChange={(e) => handleItemChange(idx, 'unitPrice', Number(e.target.value))}
-                            className="w-full rounded border border-slate-300 px-1 py-1 text-xs text-right font-mono font-bold tabular-nums focus:border-slate-800 focus:outline-none"
+                            type="text"
+                            inputMode="numeric"
+                            autoComplete="off"
+                            placeholder="0"
+                            value={item.unitPrice === 0 ? '' : item.unitPrice.toLocaleString('id-ID')}
+                            onChange={(e) => handleUnitPriceChange(idx, e.target.value)}
+                            onFocus={(e) => e.target.select()}
+                            onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                            className="w-full rounded border border-slate-300 px-1.5 py-1 text-xs text-right font-mono font-bold tabular-nums focus:border-slate-800 focus:outline-none text-emerald-800"
                           />
                         </td>
                         <td className="py-1 px-2 text-right font-mono font-bold tabular-nums text-slate-900">
@@ -978,7 +1195,7 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
             </div>
 
             {/* Mobile Card-Based List View (< md) */}
-            <div className="md:hidden max-h-80 overflow-y-auto p-2.5 space-y-3 bg-slate-50/60">
+            <div className="md:hidden max-h-96 overflow-y-auto p-2.5 space-y-3 bg-slate-50/60">
               {items.map((item, idx) => {
                 const isAnomaly = isItemAnomaly(item);
                 return (
@@ -1017,19 +1234,42 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
                     </div>
 
                     {/* Nama Bahan */}
-                    <div>
+                    <div className="relative" data-dropdown-container="true">
                       <label className="text-[11px] font-semibold text-slate-700 block mb-1">
                         Nama Bahan (Pilih CMS / Ketik Baru):
                       </label>
-                      <input
-                        list="cms-ingredients-datalist"
-                        type="text"
-                        required
-                        value={item.name}
-                        onChange={(e) => handleItemNameChange(idx, e.target.value)}
-                        placeholder="Pilih dari CMS atau ketik..."
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-slate-800 focus:outline-none"
-                      />
+                      <div className="relative">
+                        <input
+                          type="text"
+                          autoComplete="off"
+                          required
+                          value={item.name}
+                          onFocus={() => setActiveDropdownIdx(idx)}
+                          onClick={() => setActiveDropdownIdx(idx)}
+                          onChange={(e) => {
+                            handleItemNameChange(idx, e.target.value);
+                            setActiveDropdownIdx(idx);
+                          }}
+                          onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                          placeholder="Pilih dari CMS atau ketik..."
+                          className="w-full rounded-lg border border-slate-300 pr-9 pl-3 py-2 text-xs font-semibold text-slate-900 focus:border-slate-800 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setActiveDropdownIdx(activeDropdownIdx === idx ? null : idx)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700"
+                          title="Buka pilihan bahan CMS"
+                        >
+                          <ChevronDown className={`h-4 w-4 transition-transform ${activeDropdownIdx === idx ? 'rotate-180 text-emerald-600' : ''}`} />
+                        </button>
+                        <IngredientSuggestionsDropdown
+                          idx={idx}
+                          currentName={item.name}
+                          isOpen={activeDropdownIdx === idx}
+                          onSelect={(ing) => handleSelectIngredient(idx, ing)}
+                          ingredients={ingredients}
+                        />
+                      </div>
                     </div>
 
                     {/* Kategori & Satuan */}
@@ -1041,7 +1281,7 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
                         <select
                           value={item.category}
                           onChange={(e) => handleItemChange(idx, 'category', e.target.value)}
-                          className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs focus:border-slate-800 focus:outline-none"
+                          className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs font-medium focus:border-slate-800 focus:outline-none"
                         >
                           {categories.map((c) => (
                             <option key={c.id} value={c.name}>
@@ -1075,11 +1315,14 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
                           Banyaknya (Qty):
                         </label>
                         <input
-                          type="number"
-                          min={0.1}
-                          step="any"
-                          value={item.quantity}
-                          onChange={(e) => handleItemChange(idx, 'quantity', Number(e.target.value))}
+                          type="text"
+                          inputMode="decimal"
+                          autoComplete="off"
+                          placeholder="1"
+                          value={item.quantity === 0 ? '' : item.quantity}
+                          onChange={(e) => handleQtyChange(idx, e.target.value)}
+                          onFocus={(e) => e.target.select()}
+                          onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
                           className="w-full rounded-lg border border-slate-300 px-2.5 py-2 text-xs font-mono font-bold tabular-nums text-slate-900 focus:border-slate-800 focus:outline-none"
                         />
                       </div>
@@ -1088,12 +1331,15 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
                           Harga Satuan (Rp):
                         </label>
                         <input
-                          type="number"
-                          min={0}
-                          step="any"
-                          value={item.unitPrice}
-                          onChange={(e) => handleItemChange(idx, 'unitPrice', Number(e.target.value))}
-                          className="w-full rounded-lg border border-slate-300 px-2.5 py-2 text-xs font-mono font-bold tabular-nums text-slate-900 focus:border-slate-800 focus:outline-none"
+                          type="text"
+                          inputMode="numeric"
+                          autoComplete="off"
+                          placeholder="0"
+                          value={item.unitPrice === 0 ? '' : item.unitPrice.toLocaleString('id-ID')}
+                          onChange={(e) => handleUnitPriceChange(idx, e.target.value)}
+                          onFocus={(e) => e.target.select()}
+                          onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                          className="w-full rounded-lg border border-slate-300 px-2.5 py-2 text-xs font-mono font-bold tabular-nums text-emerald-800 focus:border-slate-800 focus:outline-none"
                         />
                       </div>
                     </div>

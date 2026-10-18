@@ -21,6 +21,7 @@ export type AuditStatus = 'VERIFIED' | 'PENDING_AUDIT' | 'FLAGGED_DISCREPANCY';
 
 export interface ProcurementItem {
   id: string;
+  ingredientId?: string;
   name: string;
   category: string;
   quantity: number;
@@ -29,6 +30,8 @@ export interface ProcurementItem {
   subtotal: number;
   isOcrMatched: boolean;
   isItemVerified: boolean;
+  hasPriceAnomaly?: boolean;
+  previousAvgPrice?: number;
 }
 
 export interface ProcurementTransaction {

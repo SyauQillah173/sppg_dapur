@@ -427,13 +427,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const addProcurement = async (proc: Omit<ProcurementTransaction, 'id' | 'createdAt'>) => {
     const result = await postJson('/api/procurement', proc);
-    if (result.ok) await refreshFromDb();
+    if (result.ok) await Promise.all([refreshFromDb(), refreshMasterFromDb()]);
     return result;
   };
 
   const deleteProcurement = async (id: string) => {
     const result = await postJson(`/api/procurement/${id}`, null, 'DELETE');
-    if (result.ok) await refreshFromDb();
+    if (result.ok) await Promise.all([refreshFromDb(), refreshMasterFromDb()]);
     return result;
   };
 
