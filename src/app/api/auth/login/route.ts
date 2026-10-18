@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const sessionUser = { id: user.id, username: user.username, name: user.name, role: user.role as 'SUPERADMIN' | 'EXECUTIVE_AUDITOR' };
+    const sessionUser = { id: user.id, username: user.username, name: user.name, role: user.role as any };
     const token = await createSessionToken(sessionUser);
 
     // Catat / Perbarui sesi perangkat login (Riwayat Device + Anti-Spam)

@@ -1,6 +1,6 @@
 // GiziFlow Enterprise Type Definitions
 
-export type UserRole = 'SUPERADMIN' | 'EXECUTIVE_AUDITOR';
+export type UserRole = 'SUPERADMIN' | 'EXECUTIVE_AUDITOR' | 'DISTRIBUTION_DRIVER';
 
 export type SppgUnitId = 'SPPG-AA02' | 'SPPG-BS02' | 'SPPG-DR01' | 'SPPG-SM01';
 

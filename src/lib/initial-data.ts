@@ -636,5 +636,12 @@ export const INITIAL_ADMIN_USERS: AdminUserItem[] = [
     role: 'EXECUTIVE_AUDITOR',
     createdAt: '2026-10-01T00:00:00Z',
   },
+  {
+    id: 'ADM-003',
+    username: 'driver',
+    name: 'Budi Santoso (Petugas Distribusi)',
+    role: 'DISTRIBUTION_DRIVER',
+    createdAt: '2026-10-01T00:00:00Z',
+  },
 ];
 

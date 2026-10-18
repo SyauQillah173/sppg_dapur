@@ -42,6 +42,26 @@ export function Navbar({ activeTab, setActiveTab }: NavbarProps) {
     { id: 'cms', icon: Settings2, label: 'Master Data', short: 'Data' },
   ];
 
+  // Jika role adalah DISTRIBUTION_DRIVER (Kurir / Petugas Pengantaran),
+  // sembunyikan semua menu pembukuan/admin dan tampilkan status pengantaran terfokus.
+  if (userRole === 'DISTRIBUTION_DRIVER') {
+    return (
+      <div className="border-b border-emerald-200 bg-emerald-50/70">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <nav className="flex items-center justify-between py-2" aria-label="Menu Kurir">
+            <div className="flex items-center gap-2 text-xs font-bold text-emerald-950">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Tugas Pengantaran Makanan MBG Hari Ini</span>
+            </div>
+            <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-300">
+              Layar Khusus Driver Armada
+            </span>
+          </nav>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="border-b border-slate-200 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

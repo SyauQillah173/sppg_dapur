@@ -53,15 +53,27 @@ export function Header({ onNavigateTab }: HeaderProps) {
     exportConsolidatedSPPGSummaryToExcel(sppgUnits, procurements, ingredients);
   };
 
-  const roleName = currentUser?.name || (userRole === 'SUPERADMIN' ? 'Abdullah Syauqillah, S.Kom' : 'Pemantau');
+  const roleName =
+    currentUser?.name ||
+    (userRole === 'SUPERADMIN'
+      ? 'Abdullah Syauqillah, S.Kom'
+      : userRole === 'DISTRIBUTION_DRIVER'
+      ? 'Petugas Pengantaran'
+      : 'Pemantau');
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white">
-      {/* Auditor banner */}
+      {/* Role banners */}
       {serverRole === 'EXECUTIVE_AUDITOR' && (
         <div className="bg-amber-50 border-b border-amber-200 px-4 py-1.5 text-[12px] text-amber-700 flex items-center gap-2">
           <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
           <span>Mode Pemantau — akses baca saja, perubahan data nonaktif</span>
+        </div>
+      )}
+      {serverRole === 'DISTRIBUTION_DRIVER' && (
+        <div className="bg-emerald-50 border-b border-emerald-200 px-4 py-1.5 text-[12px] text-emerald-800 flex items-center gap-2">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+          <span>Mode Petugas Pengantaran — tampilan khusus rute sekolah, layar tanda tangan HP & BAST resmi</span>
         </div>
       )}
 
@@ -98,22 +110,35 @@ export function Header({ onNavigateTab }: HeaderProps) {
 
           {/* Right: controls (desktop) */}
           <div className="hidden md:flex items-center gap-1.5">
-            {/* Role toggle — SUPERADMIN can switch to Pemantau view; AUDITOR cannot switch up */}
+            {/* Role toggle — SUPERADMIN can switch to Pemantau or Kurir view; AUDITOR cannot switch up */}
             {serverRole === 'SUPERADMIN' && (
               <div className="flex items-center rounded-md border border-slate-200 p-0.5 text-[12px]">
                 <button
                   type="button"
                   onClick={() => setUserRole('SUPERADMIN')}
-                  className={`px-2.5 py-1 rounded-[5px] font-medium transition bg-slate-900 text-white`}
+                  className={`px-2.5 py-1 rounded-[5px] font-medium transition ${
+                    userRole === 'SUPERADMIN' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-700'
+                  }`}
                 >
                   Admin
                 </button>
                 <button
                   type="button"
                   onClick={() => setUserRole('EXECUTIVE_AUDITOR')}
-                  className="px-2.5 py-1 rounded-[5px] font-medium transition text-slate-500 hover:text-slate-700"
+                  className={`px-2.5 py-1 rounded-[5px] font-medium transition ${
+                    userRole === 'EXECUTIVE_AUDITOR' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-700'
+                  }`}
                 >
                   Pemantau
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUserRole('DISTRIBUTION_DRIVER')}
+                  className={`px-2.5 py-1 rounded-[5px] font-medium transition ${
+                    userRole === 'DISTRIBUTION_DRIVER' ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  Kurir HP
                 </button>
               </div>
             )}
@@ -121,6 +146,12 @@ export function Header({ onNavigateTab }: HeaderProps) {
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-amber-200 bg-amber-50 text-[12px] text-amber-700 font-medium">
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                 Mode Pemantau
+              </div>
+            )}
+            {serverRole === 'DISTRIBUTION_DRIVER' && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-emerald-200 bg-emerald-50 text-[12px] text-emerald-800 font-medium">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                Mode Kurir HP
               </div>
             )}
 
@@ -211,16 +242,29 @@ export function Header({ onNavigateTab }: HeaderProps) {
                 <button
                   type="button"
                   onClick={() => { setUserRole('SUPERADMIN'); setMobileOpen(false); }}
-                  className={`flex-1 py-1.5 rounded-[5px] font-medium text-center transition bg-slate-900 text-white`}
+                  className={`flex-1 py-1.5 rounded-[5px] font-medium text-center transition ${
+                    userRole === 'SUPERADMIN' ? 'bg-slate-900 text-white' : 'text-slate-500'
+                  }`}
                 >
                   Admin
                 </button>
                 <button
                   type="button"
                   onClick={() => { setUserRole('EXECUTIVE_AUDITOR'); setMobileOpen(false); }}
-                  className="flex-1 py-1.5 rounded-[5px] font-medium text-center transition text-slate-500"
+                  className={`flex-1 py-1.5 rounded-[5px] font-medium text-center transition ${
+                    userRole === 'EXECUTIVE_AUDITOR' ? 'bg-slate-900 text-white' : 'text-slate-500'
+                  }`}
                 >
                   Pemantau
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setUserRole('DISTRIBUTION_DRIVER'); setMobileOpen(false); }}
+                  className={`flex-1 py-1.5 rounded-[5px] font-medium text-center transition ${
+                    userRole === 'DISTRIBUTION_DRIVER' ? 'bg-emerald-600 text-white' : 'text-slate-500'
+                  }`}
+                >
+                  Kurir HP
                 </button>
               </div>
             )}
@@ -228,6 +272,12 @@ export function Header({ onNavigateTab }: HeaderProps) {
               <div className="flex items-center justify-center gap-2 py-1.5 rounded-md border border-amber-200 bg-amber-50 text-[12px] text-amber-700 font-medium">
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                 Mode Pemantau — Read Only
+              </div>
+            )}
+            {serverRole === 'DISTRIBUTION_DRIVER' && (
+              <div className="flex items-center justify-center gap-2 py-1.5 rounded-md border border-emerald-200 bg-emerald-50 text-[12px] text-emerald-800 font-medium">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                Mode Kurir Pengantaran
               </div>
             )}
 

@@ -11,6 +11,7 @@ import { ProcurementModule } from '@/components/procurement/ProcurementModule';
 import { KitchenInventoryCMS } from '@/components/inventory/KitchenInventoryCMS';
 import { MasterDataCMS } from '@/components/cms/MasterDataCMS';
 import { MealDistributionConcept } from '@/components/distribution/MealDistributionConcept';
+import { DriverDeliveryView } from '@/components/distribution/DriverDeliveryView';
 import { SplitScreenReceiptModal } from '@/components/procurement/SplitScreenReceiptModal';
 import { AIScannerModal } from '@/components/procurement/AIScannerModal';
 import { AddProcurementModal } from '@/components/procurement/AddProcurementModal';
@@ -20,6 +21,7 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const { modal, closeModal, userRole } = useStore();
   const isAuditor = userRole === 'EXECUTIVE_AUDITOR';
+  const isDriver = userRole === 'DISTRIBUTION_DRIVER';
 
   // Jika role pemantau/auditor mencoba akses tab konsep, otomatis redirect ke dashboard
   useEffect(() => {
@@ -64,32 +66,39 @@ function AppContent() {
 
       {/* Main View Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Menu 1: Ringkasan Dashboard */}
-        {activeTab === 'dashboard' && (
-          isAuditor ? (
-            <AuditorDashboard />
-          ) : (
-            <ExecutiveDashboard
-              onNavigateToProcurement={() => setActiveTab('procurement')}
-              onNavigateToInventory={() => setActiveTab('inventory')}
-            />
-          )
+        {/* Tampilan Khusus Petugas Pengantaran (Driver) */}
+        {isDriver ? (
+          <DriverDeliveryView />
+        ) : (
+          <>
+            {/* Menu 1: Ringkasan Dashboard */}
+            {activeTab === 'dashboard' && (
+              isAuditor ? (
+                <AuditorDashboard />
+              ) : (
+                <ExecutiveDashboard
+                  onNavigateToProcurement={() => setActiveTab('procurement')}
+                  onNavigateToInventory={() => setActiveTab('inventory')}
+                />
+              )
+            )}
+
+            {/* Menu 2: Uang Masuk & Anggaran */}
+            {activeTab === 'budget' && <BudgetAllocationModule />}
+
+            {/* Menu 3: Catat Belanja & Nota */}
+            {activeTab === 'procurement' && <ProcurementModule />}
+
+            {/* Menu 4: Stok & Pemakaian Bahan */}
+            {activeTab === 'inventory' && <KitchenInventoryCMS />}
+
+            {/* Menu 5: Master Data / CMS */}
+            {activeTab === 'cms' && <MasterDataCMS />}
+
+            {/* Menu Konsep: Distribusi Makanan Siap Santap ke Siswa (Khusus Superadmin, Tersembunyi dari Auditor) */}
+            {activeTab === 'distribution_concept' && !isAuditor && <MealDistributionConcept />}
+          </>
         )}
-
-        {/* Menu 2: Uang Masuk & Anggaran */}
-        {activeTab === 'budget' && <BudgetAllocationModule />}
-
-        {/* Menu 3: Catat Belanja & Nota */}
-        {activeTab === 'procurement' && <ProcurementModule />}
-
-        {/* Menu 4: Stok & Pemakaian Bahan */}
-        {activeTab === 'inventory' && <KitchenInventoryCMS />}
-
-        {/* Menu 5: Master Data / CMS */}
-        {activeTab === 'cms' && <MasterDataCMS />}
-
-        {/* Menu Konsep: Distribusi Makanan Siap Santap ke Siswa (Khusus Superadmin, Tersembunyi dari Auditor) */}
-        {activeTab === 'distribution_concept' && !isAuditor && <MealDistributionConcept />}
       </main>
 
       {/* Modals Container */}

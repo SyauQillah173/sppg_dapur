@@ -80,7 +80,12 @@ export async function POST(req: NextRequest) {
         username: cleanUsername,
         password: hashPassword(String(password)),
         name: String(name).trim(),
-        role: (role === 'SUPERADMIN' ? UserRole.SUPERADMIN : UserRole.EXECUTIVE_AUDITOR),
+        role:
+          role === 'SUPERADMIN'
+            ? UserRole.SUPERADMIN
+            : role === 'DISTRIBUTION_DRIVER'
+            ? UserRole.DISTRIBUTION_DRIVER
+            : UserRole.EXECUTIVE_AUDITOR,
       },
       select: {
         id: true,

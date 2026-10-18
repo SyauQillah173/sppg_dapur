@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { useStore } from '@/lib/store';
 import { formatRupiah, formatNumber } from '@/lib/utils';
+import { UserRole } from '@/lib/types';
 import {
   Settings,
   Building2,
@@ -146,7 +147,7 @@ export function MasterDataCMS() {
     username: string;
     password: string;
     name: string;
-    role: 'SUPERADMIN' | 'EXECUTIVE_AUDITOR';
+    role: UserRole;
   }>({
     id: '',
     username: '',
@@ -1241,6 +1242,10 @@ export function MasterDataCMS() {
                           <span className="rounded-md bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800 border border-blue-200">
                             Superadmin
                           </span>
+                        ) : user.role === 'DISTRIBUTION_DRIVER' ? (
+                          <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800 border border-emerald-200">
+                            Kurir / Pengantaran
+                          </span>
                         ) : (
                           <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 border border-amber-200">
                             Admin 2 (Pemantau)
@@ -1251,6 +1256,10 @@ export function MasterDataCMS() {
                         {user.role === 'SUPERADMIN' ? (
                           <span className="text-[11px] text-emerald-700 font-medium">
                             Full Control (Input, Edit, Hapus, Kelola Akun & CMS)
+                          </span>
+                        ) : user.role === 'DISTRIBUTION_DRIVER' ? (
+                          <span className="text-[11px] text-emerald-700 font-medium">
+                            Distribusi Khusus (Rute Sekolah, Status OTW, Sahkan BAST HP & Tanda Tangan)
                           </span>
                         ) : (
                           <span className="text-[11px] text-amber-700 font-medium">
@@ -1827,7 +1836,7 @@ export function MasterDataCMS() {
                       onChange={(e) =>
                         setAdminForm({
                           ...adminForm,
-                          role: e.target.value as 'SUPERADMIN' | 'EXECUTIVE_AUDITOR',
+                          role: e.target.value as UserRole,
                         })
                       }
                       className="w-full rounded border border-slate-300 p-2 text-xs text-slate-800 font-medium"
@@ -1837,6 +1846,9 @@ export function MasterDataCMS() {
                       </option>
                       <option value="SUPERADMIN">
                         1. SUPERADMIN (Penanggung Jawab Utama - Full Input, Edit, & CMS)
+                      </option>
+                      <option value="DISTRIBUTION_DRIVER">
+                        3. PETUGAS PENGANTARAN / DRIVER (Tampilan Khusus Layar HP, Rute, TTD Digital & BAST)
                       </option>
                     </select>
                   </div>

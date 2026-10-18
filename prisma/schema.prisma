@@ -25,6 +25,7 @@ enum MovementType {
 enum UserRole {
   SUPERADMIN
   EXECUTIVE_AUDITOR
+  DISTRIBUTION_DRIVER
 }
 
 model AdminUser {

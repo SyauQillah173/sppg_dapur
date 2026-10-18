@@ -39,3 +39,8 @@ export async function requireAuth(
 export async function requireSuperadmin(req: NextRequest) {
   return requireAuth(req, ['SUPERADMIN']);
 }
+
+/** Convenience: SUPERADMIN or DISTRIBUTION_DRIVER allowed */
+export async function requireDistributionAccess(req: NextRequest) {
+  return requireAuth(req, ['SUPERADMIN', 'DISTRIBUTION_DRIVER']);
+}

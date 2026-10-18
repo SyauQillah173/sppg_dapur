@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { requireAuth, requireSuperadmin } from '@/lib/api-auth';
+import { requireAuth, requireSuperadmin, requireDistributionAccess } from '@/lib/api-auth';
 import { sanitizeObject } from '@/lib/sanitize';
 
 const db = prisma as any;
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
  * PATCH: Update status pengiriman (IN_TRANSIT, ARRIVED, COMPLETED), tanda tangan BAST, foto, dsb.
  */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireSuperadmin(req);
+  const auth = await requireDistributionAccess(req);
   if ('error' in auth) return auth.error;
 
   try {

@@ -49,7 +49,12 @@ export async function PATCH(
 
     // Peran hanya boleh diubah oleh superadmin — akun tidak bisa menaikkan haknya sendiri.
     if (body.role && isSuperadmin) {
-      updateData.role = body.role === 'SUPERADMIN' ? UserRole.SUPERADMIN : UserRole.EXECUTIVE_AUDITOR;
+      updateData.role =
+        body.role === 'SUPERADMIN'
+          ? UserRole.SUPERADMIN
+          : body.role === 'DISTRIBUTION_DRIVER'
+          ? UserRole.DISTRIBUTION_DRIVER
+          : UserRole.EXECUTIVE_AUDITOR;
     }
 
     if (body.password && String(body.password).trim().length > 0) {

@@ -51,6 +51,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '@/lib/store';
 import { MealDelivery, MasterIngredient } from '@/lib/types';
+import { OfficialBastDocument } from './OfficialBastDocument';
 
 const STORAGE_KEY = 'sppg_meal_distributions_v1';
 
@@ -2199,177 +2200,12 @@ export function MealDistributionConcept() {
         </div>
       )}
 
-      {/* MODAL 5: CETAK SURAT JALAN & BAST RESMI SIAP PRINT */}
+      {/* MODAL 5: CETAK SURAT JALAN & BAST RESMI STANDAR PEMERINTAH (BGN/SPPG) */}
       {isPrintModalOpen && printDelivery && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white print:fixed print:inset-0">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-8 shadow-2xl border border-slate-200 space-y-6 my-8 print:m-0 print:p-0 print:shadow-none print:border-none print:max-w-none print:w-full">
-            {/* Header Surat Jalan Resmi */}
-            <div className="border-b-2 border-slate-900 pb-4 text-center">
-              <h2 className="text-[11px] uppercase font-extrabold tracking-widest text-slate-600">
-                BADAN GIZI NASIONAL (BGN) REPUBLIK INDONESIA
-              </h2>
-              <h3 className="text-xs uppercase font-bold text-slate-500">
-                SATUAN PELAYANAN PEMENUHAN GIZI (SPPG) • KABUPATEN GRESIK
-              </h3>
-              <h1 className="text-base sm:text-lg font-black text-slate-950 mt-1">
-                BERITA ACARA SERAH TERIMA (BAST) & SURAT JALAN DISTRIBUSI MBG
-              </h1>
-              <p className="text-xs text-slate-600 font-medium mt-0.5">
-                No. BAST: <strong>{printDelivery.bastNumber}</strong> | No. Surat Jalan: <strong>{printDelivery.dispatchNumber}</strong>
-              </p>
-            </div>
-
-            {/* Detail Informasi Dua Pihak */}
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              <div className="space-y-1">
-                <span className="text-slate-400 text-[10px] uppercase font-bold">PIHAK PERTAMA (PENGIRIM):</span>
-                <p className="font-bold text-slate-900">{printDelivery.sppgUnitName}</p>
-                <p className="text-slate-600">Pengemudi: {printDelivery.driverName}</p>
-                <p className="text-slate-600">Armada / Nopol: {printDelivery.vehiclePlate}</p>
-                <p className="text-slate-600">Waktu Berangkat: {printDelivery.departureTime}</p>
-              </div>
-
-              <div className="space-y-1">
-                <span className="text-slate-400 text-[10px] uppercase font-bold">PIHAK KEDUA (PENERIMA):</span>
-                <p className="font-bold text-slate-900">{printDelivery.schoolName}</p>
-                <p className="text-slate-600">Alamat: {printDelivery.schoolAddress}</p>
-                <p className="text-slate-600">
-                  Petugas Penerima: {printDelivery.recipientName || printDelivery.contactPerson} ({printDelivery.contactPhone})
-                </p>
-                {printDelivery.recipientNip && (
-                  <p className="text-slate-600">NIP: {printDelivery.recipientNip}</p>
-                )}
-                <p className="text-slate-600">Waktu Tiba: {printDelivery.actualArrival || printDelivery.estimatedArrival}</p>
-              </div>
-            </div>
-
-            {/* Tabel Porsi */}
-            <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
-              <table className="w-full text-left">
-                <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
-                  <tr>
-                    <th className="p-2.5">Menu Makanan</th>
-                    <th className="p-2.5">Rincian Komponen 5 Pilar MBG</th>
-                    <th className="p-2.5 text-center">Target Porsi</th>
-                    <th className="p-2.5 text-center">Porsi Diterima</th>
-                    <th className="p-2.5 text-right">QC Suhu</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  <tr>
-                    <td className="p-2.5 font-bold text-slate-900 align-top">{printDelivery.menuTitle}</td>
-                    <td className="p-2.5 text-slate-600 text-[11px] align-top">
-                      • {printDelivery.menuDetails?.carb || 'Nasi Putih Pulen'}
-                      <br />• {printDelivery.menuDetails?.protein || 'Ayam Fillet Teriyaki'}
-                      <br />• {printDelivery.menuDetails?.veggie || 'Tumis Sayur Segar'}
-                      <br />• {printDelivery.menuDetails?.fruit || 'Melon Potong'}
-                      <br />• {printDelivery.menuDetails?.dairy || 'Susu UHT Segar'}
-                    </td>
-                    <td className="p-2.5 font-bold text-center align-top">{printDelivery.targetPortions}</td>
-                    <td className="p-2.5 font-bold text-emerald-700 text-center align-top">
-                      {printDelivery.deliveredPortions || printDelivery.targetPortions}
-                    </td>
-                    <td className="p-2.5 text-right align-top text-slate-800 font-semibold">
-                      {printDelivery.foodTemperature || '64.5°C'}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            {/* Formulir Catatan Fisik Lapangan & Retur Ompreng (Diisi Pena oleh Pihak Sekolah) */}
-            <div className="border border-slate-300 rounded-xl p-3.5 bg-slate-50/70 text-xs space-y-2">
-              <span className="font-bold text-slate-900 block text-[11px] uppercase tracking-wide">
-                CATATAN REALISASI LAPANGAN DI SEKOLAH (DIISI DENGAN PENA):
-              </span>
-              <div className="grid grid-cols-3 gap-2.5 text-slate-700">
-                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                  <span className="text-[10px] text-slate-400 block">1. Ompreng Dikirim Dapur:</span>
-                  <span className="font-extrabold text-slate-900 text-sm">{printDelivery.targetPortions} Ompreng</span>
-                </div>
-                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                  <span className="text-[10px] text-slate-400 block">2. Ompreng Balik / Retur:</span>
-                  <span className="font-bold text-rose-700 text-sm">
-                    {printDelivery.absentStudents ? `${printDelivery.absentStudents} Ompreng` : '........ Ompreng'}
-                  </span>
-                </div>
-                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                  <span className="text-[10px] text-slate-400 block">3. Bersih Dimakan Siswa:</span>
-                  <span className="font-bold text-emerald-700 text-sm">
-                    {printDelivery.deliveredPortions ? `${printDelivery.deliveredPortions} Ompreng` : '........ Ompreng'}
-                  </span>
-                </div>
-              </div>
-              <div className="pt-1 text-[11px] text-slate-600">
-                <span className="font-medium">Alasan Ompreng Balik (bila ada):</span>
-                <span className="ml-2 italic font-mono text-[10px]">
-                  [ &nbsp; ] Siswa Sakit/Absen &nbsp;&nbsp;&nbsp; [ &nbsp; ] Siswa Kenyang/Tidak Mau &nbsp;&nbsp;&nbsp; [ &nbsp; ] Porsi Lebih Dapur
-                </span>
-              </div>
-            </div>
-
-            {/* Catatan Verifikasi */}
-            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs space-y-1">
-              <span className="font-bold text-slate-700 block">Keterangan Khusus / Zero Waste & Keamanan Pangan:</span>
-              <p className="text-slate-600 italic">
-                {printDelivery.surplusHandling || 'Sesuai dengan SOP Zero Waste BGN dan disimpan di wadah steril.'}
-              </p>
-            </div>
-
-            {/* Lembar Tanda Tangan Dua Pihak (Dilengkapi Gambar Tanda Tangan Digital Guru) */}
-            <div className="grid grid-cols-2 gap-8 pt-6 border-t border-slate-200 text-center text-xs">
-              <div className="space-y-2 flex flex-col justify-between">
-                <span className="text-slate-500 font-medium">Yang Menyerahkan (Driver Logistik SPPG):</span>
-                <div className="h-14 border-b border-slate-300 flex items-center justify-center font-serif italic text-indigo-700 text-sm">
-                  ( {printDelivery.driverName} )
-                </div>
-                <p className="text-[11px] text-slate-400">Satuan Pelayanan Pemenuhan Gizi</p>
-              </div>
-
-              <div className="space-y-2 flex flex-col justify-between">
-                <span className="text-slate-500 font-medium">Yang Menerima (Pihak Sekolah Sasaran):</span>
-                <div className="h-14 border-b border-slate-300 flex items-center justify-center">
-                  {printDelivery.recipientSignature ? (
-                    <img
-                      src={printDelivery.recipientSignature}
-                      alt="Tanda Tangan Guru"
-                      className="max-h-12 max-w-[180px] object-contain"
-                    />
-                  ) : (
-                    <span className="font-serif italic text-emerald-700 text-sm">
-                      ( {printDelivery.recipientName || printDelivery.contactPerson} )
-                    </span>
-                  )}
-                </div>
-                <p className="text-[11px] text-slate-400">
-                  Kepala Sekolah / Guru Piket {printDelivery.recipientNip ? `(NIP: ${printDelivery.recipientNip})` : ''}
-                </p>
-              </div>
-            </div>
-
-            {/* Print Footer Controls */}
-            <div className="pt-4 border-t border-slate-100 flex items-center justify-between print:hidden">
-              <span className="text-xs text-slate-400">Gunakan tombol cetak untuk print fisik A4 atau simpan PDF.</span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsPrintModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
-                >
-                  Tutup
-                </button>
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 transition flex items-center gap-1.5 shadow-xs"
-                >
-                  <Printer className="w-4 h-4" />
-                  Cetak Lembar BAST Sekarang
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <OfficialBastDocument
+          delivery={printDelivery}
+          onClose={() => setIsPrintModalOpen(false)}
+        />
       )}
 
       {/* CUSTOM IN-APP MODAL: KONFIRMASI HAPUS SURAT JALAN & RESTORE STOK */}
