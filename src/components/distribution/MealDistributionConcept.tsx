@@ -298,6 +298,7 @@ export function MealDistributionConcept() {
   const [viewStockItemsModal, setViewStockItemsModal] = useState<any[] | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MealDelivery | null>(null);
   const [seedConfirmModal, setSeedConfirmModal] = useState(false);
+  const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // In-App Toast Notification
@@ -333,15 +334,16 @@ export function MealDistributionConcept() {
     deductStockNow: true, // Otomatis potong stok gudang
   });
 
-  // Form State untuk Sahkan BAST
+  // Form State untuk Sahkan BAST Kertas & Catat Ompreng Balik
   const [bastForm, setBastForm] = useState({
     recipientName: '',
     recipientNip: '',
     foodTemperature: '64.5°C (Optimal)',
-    deliveredPortions: 250,
-    absentStudents: 0,
-    surplusHandling: 'Porsi lebih dialihkan ke guru pendamping / staf piket dengan verifikasi',
-    notes: 'Kondisi makanan diterima lengkap, hangat, wadah tertutup rapi.',
+    returnedPortions: 0, // Jumlah ompreng balik / retur
+    returnReason: '100% Habis (Tidak Ada Balik)',
+    surplusHandling: 'Dibawa kembali ke dapur SPPG (Zero Waste)',
+    deliveryPhotoUrl: '',
+    notes: 'Kertas BAST fisik telah ditandatangani basah oleh pihak sekolah.',
   });
 
   // Kalkulator Costing State
@@ -516,19 +518,33 @@ export function MealDistributionConcept() {
     }
   };
 
-  // Buka Modal Pengesahan BAST
+  // Buka Modal Pengesahan BAST Fisik & Catat Ompreng Balik
   const handleOpenSigningModal = (delivery: MealDelivery) => {
     setSigningDelivery(delivery);
+    const returned = delivery.absentStudents || 0;
+    const parts = (delivery.surplusHandling || '').split(' - ');
     setBastForm({
       recipientName: delivery.recipientName || delivery.contactPerson || 'Kepala Sekolah / Guru Piket',
       recipientNip: delivery.recipientNip || '',
-      foodTemperature: delivery.foodTemperature || '64.5°C (Sangat Hangat)',
-      deliveredPortions: delivery.targetPortions,
-      absentStudents: delivery.absentStudents || 0,
-      surplusHandling: delivery.surplusHandling || 'Porsi lebih dialihkan ke guru pendamping / staf piket dengan verifikasi',
-      notes: delivery.notes || 'Kondisi makanan diterima lengkap, hangat, wadah tertutup rapi.',
+      foodTemperature: delivery.foodTemperature || '64.5°C (Optimal)',
+      returnedPortions: returned,
+      returnReason: returned > 0 ? (parts[0] || 'Siswa Sakit / Tidak Masuk') : '100% Habis (Tidak Ada Balik)',
+      surplusHandling: parts[1] || 'Dibawa kembali ke dapur SPPG (Zero Waste)',
+      deliveryPhotoUrl: delivery.deliveryPhotoUrl || '',
+      notes: delivery.notes || 'Kertas BAST fisik telah ditandatangani basah oleh pihak sekolah.',
     });
     setIsSigningModalOpen(true);
+  };
+
+  // Upload Foto Lembar Kertas Bertanda Tangan Basah
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setBastForm((prev) => ({ ...prev, deliveryPhotoUrl: reader.result as string }));
+    };
+    reader.readAsDataURL(file);
   };
 
   // Submit Pengesahan BAST
@@ -538,15 +554,25 @@ export function MealDistributionConcept() {
 
     setIsSubmitting(true);
     try {
+      const target = signingDelivery.targetPortions;
+      const returned = Math.max(0, Number(bastForm.returnedPortions) || 0);
+      const netEaten = Math.max(0, target - returned);
+
+      const surplusText =
+        returned > 0
+          ? `${bastForm.returnReason} - ${bastForm.surplusHandling}`
+          : 'Semua ompreng habis termakan siswa 100%';
+
       const updates = {
         status: 'COMPLETED' as const,
         isSigned: true,
-        recipientName: bastForm.recipientName.trim(),
+        recipientName: bastForm.recipientName.trim() || 'Pihak Sekolah',
         recipientNip: bastForm.recipientNip.trim() || undefined,
         foodTemperature: bastForm.foodTemperature.trim(),
-        deliveredPortions: Number(bastForm.deliveredPortions) || signingDelivery.targetPortions,
-        absentStudents: Number(bastForm.absentStudents) || 0,
-        surplusHandling: bastForm.surplusHandling.trim(),
+        deliveredPortions: netEaten,
+        absentStudents: returned,
+        surplusHandling: surplusText,
+        deliveryPhotoUrl: bastForm.deliveryPhotoUrl || undefined,
         notes: bastForm.notes.trim(),
         actualArrival:
           signingDelivery.actualArrival ||
@@ -559,7 +585,7 @@ export function MealDistributionConcept() {
         return;
       }
 
-      showToast(`BAST untuk ${signingDelivery.schoolName} resmi disahkan & selesai!`, 'success');
+      showToast(`BAST fisik ${signingDelivery.schoolName} resmi disahkan & selesai!`, 'success');
       setIsSigningModalOpen(false);
       setSigningDelivery(null);
       if (selectedDelivery && selectedDelivery.id === signingDelivery.id) {
@@ -922,10 +948,10 @@ export function MealDistributionConcept() {
                       {delivery.schoolAddress}
                     </p>
 
-                    {/* Progress Porsi */}
+                    {/* Progress Porsi & Info Ompreng Balik */}
                     <div className="mt-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
                       <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="text-slate-500 font-medium">Jumlah Porsi:</span>
+                        <span className="text-slate-500 font-medium">Realisasi Porsi:</span>
                         <span className="font-bold text-slate-800">
                           {delivery.deliveredPortions || (isCompleted ? delivery.targetPortions : 0)} / {delivery.targetPortions} Porsi
                         </span>
@@ -944,6 +970,24 @@ export function MealDistributionConcept() {
                           }}
                         />
                       </div>
+
+                      {/* Detail Ompreng Balik Bila Ada */}
+                      {delivery.absentStudents > 0 ? (
+                        <div className="mt-2 pt-1.5 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+                          <span className="inline-flex items-center gap-1 font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+                            ↩️ {delivery.absentStudents} Ompreng Balik
+                          </span>
+                          <span className="text-slate-500 text-[10px] truncate max-w-[150px]" title={delivery.surplusHandling}>
+                            {delivery.surplusHandling?.split(' - ')[0] || 'Siswa tidak makan'}
+                          </span>
+                        </div>
+                      ) : isCompleted ? (
+                        <div className="mt-2 pt-1.5 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+                          <span className="font-semibold text-emerald-700 text-[10px]">
+                            ✓ 100% Habis Termakan Siswa
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 
@@ -968,9 +1012,21 @@ export function MealDistributionConcept() {
                       <span className="font-medium text-slate-800">{delivery.recipientName || delivery.contactPerson}</span>
                     </div>
 
-                    {/* Badge Pemotongan Stok Bahan Gudang */}
-                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                      <span className="text-slate-400">Stok Bahan Gudang:</span>
+                    {/* Foto Bukti Kertas TTD & Badge Pemotongan Stok */}
+                    <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1.5">
+                      {delivery.deliveryPhotoUrl ? (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewPhotoUrl(delivery.deliveryPhotoUrl || null)}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md hover:bg-indigo-100 transition"
+                        >
+                          <Camera className="w-3.5 h-3.5 text-indigo-600" />
+                          Foto Kertas TTD
+                        </button>
+                      ) : (
+                        <span className="text-[11px] text-slate-400">Kertas TTD Fisik</span>
+                      )}
+
                       {delivery.isStockDeducted ? (
                         <button
                           type="button"
@@ -978,7 +1034,7 @@ export function MealDistributionConcept() {
                           className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md hover:bg-emerald-100 transition"
                         >
                           <PackageCheck className="w-3.5 h-3.5 text-emerald-600" />
-                          Terpotong Otomatis
+                          Stok Terpotong
                         </button>
                       ) : (
                         <span className="text-[11px] text-slate-400 italic">Belum Dipotong</span>
@@ -1685,17 +1741,17 @@ export function MealDistributionConcept() {
         </div>
       )}
 
-      {/* MODAL 2: SAHKAN BAST & SERAH TERIMA SEKOLAH */}
+      {/* MODAL 2: SAHKAN BAST KERTAS & CATAT OMPRENG BALIK (REALITAS LAPANGAN) */}
       {isSigningModalOpen && signingDelivery && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 my-8">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 my-8 max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between border-b border-slate-100 pb-3">
               <div>
                 <span className="text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
                   {signingDelivery.bastNumber}
                 </span>
-                <h3 className="text-base font-bold text-slate-900 mt-1">Sahkan Berita Acara Serah Terima (BAST)</h3>
-                <p className="text-xs text-slate-500">Konfirmasi penerimaan makanan di {signingDelivery.schoolName}</p>
+                <h3 className="text-base font-bold text-slate-900 mt-1">Catat Realisasi Serah Terima & Ompreng Balik</h3>
+                <p className="text-xs text-slate-500">Konfirmasi tanda tangan kertas BAST & sisa porsi di {signingDelivery.schoolName}</p>
               </div>
               <button
                 type="button"
@@ -1706,22 +1762,120 @@ export function MealDistributionConcept() {
               </button>
             </div>
 
-            <form onSubmit={handleConfirmBAST} className="space-y-3.5 text-xs">
+            <form onSubmit={handleConfirmBAST} className="space-y-4 text-xs">
+              {/* KALKULATOR OMPRENG BALIK OTOMATIS */}
+              <div className="grid grid-cols-3 gap-2.5 bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-center">
+                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                  <span className="text-[10px] font-semibold text-slate-400 block uppercase">1. Ompreng Dikirim</span>
+                  <span className="text-base font-extrabold text-indigo-700">{signingDelivery.targetPortions}</span>
+                  <span className="text-[10px] text-slate-500 block">Porsi</span>
+                </div>
+
+                <div className="bg-rose-50/70 p-2.5 rounded-lg border border-rose-200">
+                  <label htmlFor="returnedPortionsInput" className="text-[10px] font-bold text-rose-700 block uppercase cursor-pointer">
+                    2. Ompreng Balik
+                  </label>
+                  <input
+                    id="returnedPortionsInput"
+                    type="number"
+                    min="0"
+                    max={signingDelivery.targetPortions}
+                    value={bastForm.returnedPortions}
+                    onChange={(e) => setBastForm({ ...bastForm, returnedPortions: Number(e.target.value) || 0 })}
+                    className="w-full text-center text-base font-black text-rose-700 bg-white border border-rose-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-rose-500 mt-0.5"
+                  />
+                  <span className="text-[10px] text-rose-600 block">Tidak Termakan</span>
+                </div>
+
+                <div className="bg-emerald-50/70 p-2.5 rounded-lg border border-emerald-200">
+                  <span className="text-[10px] font-bold text-emerald-800 block uppercase">3. Dimakan Siswa</span>
+                  <span className="text-base font-black text-emerald-700">
+                    {Math.max(0, signingDelivery.targetPortions - bastForm.returnedPortions)}
+                  </span>
+                  <span className="text-[10px] text-emerald-600 block">Realisasi Bersih</span>
+                </div>
+              </div>
+
+              {/* PILIHAN CEPAT ALASAN OMPRENG BALIK */}
+              <div className="space-y-1.5">
+                <label className="block font-semibold text-slate-700">Alasan Ompreng Balik / Kondisi di Lapangan:</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    '100% Habis (Tidak Ada Balik)',
+                    'Siswa Sakit / Tidak Masuk',
+                    'Siswa Kenyang / Tidak Mau Makan',
+                    'Kelebihan Kirim dari Dapur',
+                  ].map((reason) => {
+                    const isSelected = bastForm.returnReason === reason;
+                    return (
+                      <button
+                        key={reason}
+                        type="button"
+                        onClick={() => {
+                          setBastForm({
+                            ...bastForm,
+                            returnReason: reason,
+                            returnedPortions: reason === '100% Habis (Tidak Ada Balik)' ? 0 : bastForm.returnedPortions || 5,
+                          });
+                        }}
+                        className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition ${
+                          isSelected
+                            ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {reason}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* PENANGANAN OMPRENG BALIK (BILA ADA BALIK > 0) */}
+              {bastForm.returnedPortions > 0 && (
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-2">
+                  <span className="font-bold text-amber-950 block text-[11px]">
+                    Penanganan {bastForm.returnedPortions} Ompreng Balik (Zero Waste):
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      'Dibawa kembali ke dapur SPPG (Zero Waste)',
+                      'Dialihkan ke Guru Piket / Warga Sekitar',
+                      'Disalurkan ke Panti Asuhan / Yayasan',
+                    ].map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setBastForm({ ...bastForm, surplusHandling: opt })}
+                        className={`px-2.5 py-1 rounded-md text-[10px] font-medium border transition ${
+                          bastForm.surplusHandling === opt
+                            ? 'bg-amber-700 text-white border-amber-700'
+                            : 'bg-white text-amber-900 border-amber-200 hover:bg-amber-100'
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* DATA GURU PENERIMA YANG TTD DI KERTAS */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Nama Pihak Penerima Sekolah:</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Nama Guru / Kepala Sekolah (Yang TTD Kertas):</label>
                   <input
                     type="text"
                     required
                     value={bastForm.recipientName}
                     onChange={(e) => setBastForm({ ...bastForm, recipientName: e.target.value })}
-                    placeholder="Contoh: Ibu Ratna, S.Pd (Kepala Sekolah)"
+                    placeholder="Contoh: Ibu Ratna, S.Pd"
                     className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">NIP Penerima (Opsional):</label>
+                  <label className="block font-semibold text-slate-700 mb-1">NIP Guru (Opsional):</label>
                   <input
                     type="text"
                     value={bastForm.recipientNip}
@@ -1732,58 +1886,46 @@ export function MealDistributionConcept() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Jumlah Porsi Diterima:</label>
-                  <input
-                    type="number"
-                    required
-                    value={bastForm.deliveredPortions}
-                    onChange={(e) => setBastForm({ ...bastForm, deliveredPortions: Number(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900 font-bold text-emerald-700"
-                  />
+              {/* UPLOAD FOTO LEMBAR KERTAS BERTANDA TANGAN BASAH (OPSIONAL) */}
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-dashed border-slate-300 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Camera className="w-4 h-4 text-slate-600" />
+                    <span className="font-semibold text-slate-800">Foto Kertas BAST Yang Sudah Di-TTD & Cap (Opsional)</span>
+                  </div>
+                  {bastForm.deliveryPhotoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setBastForm({ ...bastForm, deliveryPhotoUrl: '' })}
+                      className="text-[10px] text-rose-600 font-bold hover:underline"
+                    >
+                      Hapus Foto
+                    </button>
+                  )}
                 </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Siswa Absen/Sakit:</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={bastForm.absentStudents}
-                    onChange={(e) => setBastForm({ ...bastForm, absentStudents: Number(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900 font-bold"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Suhu Saat Diterima:</label>
-                  <input
-                    type="text"
-                    value={bastForm.foodTemperature}
-                    onChange={(e) => setBastForm({ ...bastForm, foodTemperature: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Penanganan Porsi Lebih (Zero Waste):</label>
-                <input
-                  type="text"
-                  value={bastForm.surplusHandling}
-                  onChange={(e) => setBastForm({ ...bastForm, surplusHandling: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Catatan Tambahan:</label>
-                <textarea
-                  rows={2}
-                  value={bastForm.notes}
-                  onChange={(e) => setBastForm({ ...bastForm, notes: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                />
+                {bastForm.deliveryPhotoUrl ? (
+                  <div className="relative w-full h-32 rounded-lg overflow-hidden border border-slate-200">
+                    <img
+                      src={bastForm.deliveryPhotoUrl}
+                      alt="Foto Lembar BAST Kertas"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center p-3 bg-white rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition">
+                    <Camera className="w-5 h-5 text-slate-400 mb-1" />
+                    <span className="text-slate-600 font-medium text-[11px]">Ambil Foto / Pilih File Kertas BAST</span>
+                    <span className="text-[10px] text-slate-400">Jepret langsung dari kamera HP atau file gambar</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handlePhotoUpload}
+                      className="hidden"
+                    />
+                  </label>
+                )}
               </div>
 
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
@@ -1801,7 +1943,7 @@ export function MealDistributionConcept() {
                 >
                   {isSubmitting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                   <CheckCircle2 className="w-4 h-4" />
-                  Sahkan BAST Resmi & Selesaikan
+                  Simpan Realisasi & Sahkan BAST
                 </button>
               </div>
             </form>
@@ -2059,6 +2201,37 @@ export function MealDistributionConcept() {
               </table>
             </div>
 
+            {/* Formulir Catatan Fisik Lapangan & Retur Ompreng (Diisi Pena oleh Pihak Sekolah) */}
+            <div className="border border-slate-300 rounded-xl p-3.5 bg-slate-50/70 text-xs space-y-2">
+              <span className="font-bold text-slate-900 block text-[11px] uppercase tracking-wide">
+                CATATAN REALISASI LAPANGAN DI SEKOLAH (DIISI DENGAN PENA):
+              </span>
+              <div className="grid grid-cols-3 gap-2.5 text-slate-700">
+                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                  <span className="text-[10px] text-slate-400 block">1. Ompreng Dikirim Dapur:</span>
+                  <span className="font-extrabold text-slate-900 text-sm">{printDelivery.targetPortions} Ompreng</span>
+                </div>
+                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                  <span className="text-[10px] text-slate-400 block">2. Ompreng Balik / Retur:</span>
+                  <span className="font-bold text-rose-700 text-sm">
+                    {printDelivery.absentStudents ? `${printDelivery.absentStudents} Ompreng` : '........ Ompreng'}
+                  </span>
+                </div>
+                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                  <span className="text-[10px] text-slate-400 block">3. Bersih Dimakan Siswa:</span>
+                  <span className="font-bold text-emerald-700 text-sm">
+                    {printDelivery.deliveredPortions ? `${printDelivery.deliveredPortions} Ompreng` : '........ Ompreng'}
+                  </span>
+                </div>
+              </div>
+              <div className="pt-1 text-[11px] text-slate-600">
+                <span className="font-medium">Alasan Ompreng Balik (bila ada):</span>
+                <span className="ml-2 italic font-mono text-[10px]">
+                  [ &nbsp; ] Siswa Sakit/Absen &nbsp;&nbsp;&nbsp; [ &nbsp; ] Siswa Kenyang/Tidak Mau &nbsp;&nbsp;&nbsp; [ &nbsp; ] Porsi Lebih Dapur
+                </span>
+              </div>
+            </div>
+
             {/* Catatan Verifikasi */}
             <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs space-y-1">
               <span className="font-bold text-slate-700 block">Keterangan Khusus / Zero Waste & Keamanan Pangan:</span>
@@ -2232,6 +2405,39 @@ export function MealDistributionConcept() {
               >
                 {isSubmitting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                 Ya, Simpan ke Database
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOM IN-APP MODAL: PREVIEW FOTO KERTAS BAST BERTANDA TANGAN */}
+      {previewPhotoUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-4 shadow-2xl space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                <Camera className="w-4 h-4 text-indigo-600" />
+                Bukti Foto Lembar Kertas BAST Bertanda Tangan Basah
+              </span>
+              <button
+                type="button"
+                onClick={() => setPreviewPhotoUrl(null)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="rounded-xl overflow-hidden border border-slate-200 max-h-[70vh] flex items-center justify-center bg-black/5">
+              <img src={previewPhotoUrl} alt="Foto Kertas BAST" className="max-h-[70vh] w-auto object-contain" />
+            </div>
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setPreviewPhotoUrl(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white"
+              >
+                Tutup Preview
               </button>
             </div>
           </div>
