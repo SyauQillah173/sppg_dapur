@@ -328,6 +328,7 @@ model MealDistribution {
   recipientNip       String?
   bastNumber         String?  // e.g. BAST/SPPG/20261019/001
   isSigned           Boolean  @default(false)
+  recipientSignature String?  // Base64 PNG data URL tanda tangan layar sentuh HP
   deliveryPhotoUrl   String?
   notes              String?
   isStockDeducted    Boolean  @default(false)

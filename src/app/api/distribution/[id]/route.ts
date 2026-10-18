@@ -52,6 +52,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (body.recipientName !== undefined) data.recipientName = body.recipientName;
       if (body.recipientNip !== undefined) data.recipientNip = body.recipientNip;
       if (body.isSigned !== undefined) data.isSigned = Boolean(body.isSigned);
+      if (body.recipientSignature !== undefined) data.recipientSignature = body.recipientSignature;
       if (body.deliveryPhotoUrl !== undefined) data.deliveryPhotoUrl = body.deliveryPhotoUrl;
       if (body.notes !== undefined) data.notes = body.notes;
       if (body.absentStudents !== undefined) data.absentStudents = Number(body.absentStudents);

@@ -231,6 +231,7 @@ export interface MealDelivery {
   recipientNip?: string;
   bastNumber?: string;
   isSigned: boolean;
+  recipientSignature?: string;
   deliveryPhotoUrl?: string;
   notes?: string;
   isStockDeducted?: boolean;

@@ -45,6 +45,9 @@ import {
   ArrowUpRight,
   FileBadge,
   CheckSquare,
+  PenTool,
+  RotateCcw,
+  Eraser,
 } from 'lucide-react';
 import { useStore } from '@/lib/store';
 import { MealDelivery, MasterIngredient } from '@/lib/types';
@@ -268,6 +271,174 @@ function computeMBGDeductionList(targetPortions: number, allIngredients: MasterI
   });
 }
 
+// Komponen Canvas Tanda Tangan Digital Layar Sentuh HP
+interface TouchSignaturePadProps {
+  value?: string;
+  onChange: (dataUrl: string) => void;
+  signerName: string;
+}
+
+function TouchSignaturePad({ value, onChange, signerName }: TouchSignaturePadProps) {
+  const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  const [isDrawing, setIsDrawing] = React.useState(false);
+  const [hasSignature, setHasSignature] = React.useState(Boolean(value));
+
+  // Inisialisasi canvas saat load
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    if (value) {
+      const img = new Image();
+      img.onload = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      };
+      img.src = value;
+      setHasSignature(true);
+    } else {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      setHasSignature(false);
+    }
+  }, [value]);
+
+  const getCoordinates = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    let clientX = 0;
+    let clientY = 0;
+    if ('touches' in e && e.touches.length > 0) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else if ('clientX' in e) {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+
+    return {
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY,
+    };
+  };
+
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if ('cancelable' in e && e.cancelable) e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const { x, y } = getCoordinates(e);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#1e1b4b'; // warna tinta hitam pekat kebiruan
+    setIsDrawing(true);
+  };
+
+  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return;
+    if ('cancelable' in e && e.cancelable) e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const { x, y } = getCoordinates(e);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    setHasSignature(true);
+  };
+
+  const stopDrawing = () => {
+    if (!isDrawing) return;
+    setIsDrawing(false);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dataUrl = canvas.toDataURL('image/png');
+    onChange(dataUrl);
+  };
+
+  const handleClear = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setHasSignature(false);
+    onChange('');
+  };
+
+  return (
+    <div className="space-y-1.5 p-3.5 bg-indigo-50/50 rounded-xl border border-indigo-200">
+      <div className="flex items-center justify-between">
+        <label className="block font-bold text-indigo-950 flex items-center gap-1.5 text-xs">
+          <PenTool className="w-3.5 h-3.5 text-indigo-600" />
+          <span>Tanda Tangan Guru di Layar HP (Tunjukkan ke Guru):</span>
+        </label>
+        {hasSignature && (
+          <button
+            type="button"
+            onClick={handleClear}
+            className="text-[11px] font-bold text-rose-600 hover:text-rose-700 bg-white border border-rose-200 px-2.5 py-0.5 rounded-md transition flex items-center gap-1 shadow-2xs"
+          >
+            <RotateCcw className="w-3 h-3" />
+            Hapus / Ulangi TTD
+          </button>
+        )}
+      </div>
+
+      <div className="relative rounded-xl border-2 border-dashed border-indigo-300 bg-white overflow-hidden shadow-2xs touch-none">
+        <canvas
+          ref={canvasRef}
+          width={450}
+          height={150}
+          onMouseDown={startDrawing}
+          onMouseMove={draw}
+          onMouseUp={stopDrawing}
+          onMouseLeave={stopDrawing}
+          onTouchStart={startDrawing}
+          onTouchMove={draw}
+          onTouchEnd={stopDrawing}
+          className="w-full h-36 cursor-crosshair bg-slate-50/30"
+        />
+
+        {/* Garis Dasar Tanda Tangan */}
+        <div className="absolute bottom-5 left-5 right-5 border-b border-dashed border-slate-300 pointer-events-none" />
+
+        {/* Helper Watermark Text */}
+        {!hasSignature && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-slate-400 select-none">
+            <span className="text-xs font-semibold text-slate-500">
+              ✍️ Silakan Bapak/Ibu Guru tanda tangan di sini pakai jari
+            </span>
+            <span className="text-[10px] text-slate-400 mt-0.5">
+              (Otomatis tersimpan & tertera di Lembar BAST resmi SPPG)
+            </span>
+          </div>
+        )}
+
+        {hasSignature && (
+          <div className="absolute bottom-1 right-2 text-[10px] font-semibold text-emerald-700 pointer-events-none bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 shadow-2xs">
+            ✓ Tanda Tangan Guru Terekam
+          </div>
+        )}
+      </div>
+      <p className="text-[10px] text-indigo-800/80">
+        💡 Driver cukup memperlihatkan HP ini ke guru penerima di sekolah untuk membubuhkan tanda tangan langsung di layar.
+      </p>
+    </div>
+  );
+}
+
 export function MealDistributionConcept() {
   const {
     userRole,
@@ -342,8 +513,9 @@ export function MealDistributionConcept() {
     returnedPortions: 0, // Jumlah ompreng balik / retur
     returnReason: '100% Habis (Tidak Ada Balik)',
     surplusHandling: 'Dibawa kembali ke dapur SPPG (Zero Waste)',
+    recipientSignature: '', // Base64 tanda tangan layar sentuh HP
     deliveryPhotoUrl: '',
-    notes: 'Kertas BAST fisik telah ditandatangani basah oleh pihak sekolah.',
+    notes: 'Tanda tangan digital telah disahkan oleh pihak sekolah melalui HP driver.',
   });
 
   // Kalkulator Costing State
@@ -530,8 +702,9 @@ export function MealDistributionConcept() {
       returnedPortions: returned,
       returnReason: returned > 0 ? (parts[0] || 'Siswa Sakit / Tidak Masuk') : '100% Habis (Tidak Ada Balik)',
       surplusHandling: parts[1] || 'Dibawa kembali ke dapur SPPG (Zero Waste)',
+      recipientSignature: delivery.recipientSignature || '',
       deliveryPhotoUrl: delivery.deliveryPhotoUrl || '',
-      notes: delivery.notes || 'Kertas BAST fisik telah ditandatangani basah oleh pihak sekolah.',
+      notes: delivery.notes || 'Tanda tangan digital telah disahkan oleh pihak sekolah melalui HP driver.',
     });
     setIsSigningModalOpen(true);
   };
@@ -572,6 +745,7 @@ export function MealDistributionConcept() {
         deliveredPortions: netEaten,
         absentStudents: returned,
         surplusHandling: surplusText,
+        recipientSignature: bastForm.recipientSignature || undefined,
         deliveryPhotoUrl: bastForm.deliveryPhotoUrl || undefined,
         notes: bastForm.notes.trim(),
         actualArrival:
@@ -585,7 +759,7 @@ export function MealDistributionConcept() {
         return;
       }
 
-      showToast(`BAST fisik ${signingDelivery.schoolName} resmi disahkan & selesai!`, 'success');
+      showToast(`BAST ${signingDelivery.schoolName} resmi disahkan & tanda tangan tersimpan!`, 'success');
       setIsSigningModalOpen(false);
       setSigningDelivery(null);
       if (selectedDelivery && selectedDelivery.id === signingDelivery.id) {
@@ -1012,19 +1186,30 @@ export function MealDistributionConcept() {
                       <span className="font-medium text-slate-800">{delivery.recipientName || delivery.contactPerson}</span>
                     </div>
 
-                    {/* Foto Bukti Kertas TTD & Badge Pemotongan Stok */}
+                    {/* Foto Bukti Kertas TTD & Tanda Tangan Digital & Badge Pemotongan Stok */}
                     <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1.5">
-                      {delivery.deliveryPhotoUrl ? (
+                      {delivery.recipientSignature ? (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewPhotoUrl(delivery.recipientSignature || null)}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md hover:bg-emerald-100 transition"
+                          title="Lihat Tanda Tangan Digital Layar HP"
+                        >
+                          <CheckSquare className="w-3.5 h-3.5 text-emerald-600" />
+                          TTD HP Sah
+                        </button>
+                      ) : delivery.deliveryPhotoUrl ? (
                         <button
                           type="button"
                           onClick={() => setPreviewPhotoUrl(delivery.deliveryPhotoUrl || null)}
                           className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md hover:bg-indigo-100 transition"
+                          title="Lihat Foto Kertas TTD Fisik"
                         >
                           <Camera className="w-3.5 h-3.5 text-indigo-600" />
                           Foto Kertas TTD
                         </button>
                       ) : (
-                        <span className="text-[11px] text-slate-400">Kertas TTD Fisik</span>
+                        <span className="text-[11px] text-slate-400">Belum Ada TTD</span>
                       )}
 
                       {delivery.isStockDeducted ? (
@@ -1860,10 +2045,10 @@ export function MealDistributionConcept() {
                 </div>
               )}
 
-              {/* DATA GURU PENERIMA YANG TTD DI KERTAS */}
+              {/* DATA GURU PENERIMA YANG TTD */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Nama Guru / Kepala Sekolah (Yang TTD Kertas):</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Nama Guru / Kepala Sekolah (Penerima):</label>
                   <input
                     type="text"
                     required
@@ -1886,12 +2071,19 @@ export function MealDistributionConcept() {
                 </div>
               </div>
 
-              {/* UPLOAD FOTO LEMBAR KERTAS BERTANDA TANGAN BASAH (OPSIONAL) */}
-              <div className="p-3.5 bg-slate-50 rounded-xl border border-dashed border-slate-300 space-y-2">
+              {/* TANDA TANGAN DIGITAL GURU LEWAT LAYAR HP DENGAN JARI */}
+              <TouchSignaturePad
+                value={bastForm.recipientSignature}
+                onChange={(sig) => setBastForm({ ...bastForm, recipientSignature: sig })}
+                signerName={bastForm.recipientName || 'Bapak/Ibu Guru'}
+              />
+
+              {/* UPLOAD FOTO DOKUMENTASI FISIK (OPSIONAL TAMBAHAN) */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-dashed border-slate-300 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Camera className="w-4 h-4 text-slate-600" />
-                    <span className="font-semibold text-slate-800">Foto Kertas BAST Yang Sudah Di-TTD & Cap (Opsional)</span>
+                    <Camera className="w-4 h-4 text-slate-500" />
+                    <span className="font-semibold text-slate-700 text-[11px]">Foto Dokumentasi / Kertas BAST (Opsional Tambahan)</span>
                   </div>
                   {bastForm.deliveryPhotoUrl && (
                     <button
@@ -1905,18 +2097,17 @@ export function MealDistributionConcept() {
                 </div>
 
                 {bastForm.deliveryPhotoUrl ? (
-                  <div className="relative w-full h-32 rounded-lg overflow-hidden border border-slate-200">
+                  <div className="relative w-full h-28 rounded-lg overflow-hidden border border-slate-200">
                     <img
                       src={bastForm.deliveryPhotoUrl}
-                      alt="Foto Lembar BAST Kertas"
+                      alt="Foto Lembar BAST"
                       className="w-full h-full object-cover"
                     />
                   </div>
                 ) : (
-                  <label className="flex flex-col items-center justify-center p-3 bg-white rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition">
-                    <Camera className="w-5 h-5 text-slate-400 mb-1" />
-                    <span className="text-slate-600 font-medium text-[11px]">Ambil Foto / Pilih File Kertas BAST</span>
-                    <span className="text-[10px] text-slate-400">Jepret langsung dari kamera HP atau file gambar</span>
+                  <label className="flex items-center justify-center gap-2 p-2.5 bg-white rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition">
+                    <Camera className="w-4 h-4 text-slate-400" />
+                    <span className="text-slate-600 font-medium text-[11px]">Ambil Foto Penyerahan Makanan</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -2028,6 +2219,28 @@ export function MealDistributionConcept() {
               <strong className="block text-amber-950">Catatan Zero Waste / Porsi Lebih:</strong>
               <p>{selectedDelivery.surplusHandling || 'Sesuai kesepakatan'}</p>
             </div>
+
+            {/* Tanda Tangan Guru yang Tersimpan */}
+            {selectedDelivery.recipientSignature && (
+              <div className="p-3.5 bg-white rounded-xl border border-slate-200 text-xs space-y-1.5 shadow-2xs">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block">
+                  Tanda Tangan Digital Pihak Sekolah (Layar HP):
+                </span>
+                <div className="flex items-center justify-between">
+                  <div className="h-14 w-44 rounded-lg bg-slate-50 border border-slate-200 p-1 flex items-center justify-center">
+                    <img
+                      src={selectedDelivery.recipientSignature}
+                      alt="Tanda Tangan Guru"
+                      className="max-h-12 max-w-full object-contain"
+                    />
+                  </div>
+                  <div className="text-right text-[11px]">
+                    <span className="font-bold text-slate-900 block">{selectedDelivery.recipientName}</span>
+                    <span className="text-emerald-700 font-medium text-[10px]">✓ Terverifikasi via Layar HP Driver</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Actions */}
             <div className="pt-2 flex items-center justify-between gap-2 border-t border-slate-100">
@@ -2240,20 +2453,30 @@ export function MealDistributionConcept() {
               </p>
             </div>
 
-            {/* Lembar Tanda Tangan */}
+            {/* Lembar Tanda Tangan Dua Pihak (Dilengkapi Gambar Tanda Tangan Digital Guru) */}
             <div className="grid grid-cols-2 gap-8 pt-6 border-t border-slate-200 text-center text-xs">
-              <div className="space-y-12">
+              <div className="space-y-2 flex flex-col justify-between">
                 <span className="text-slate-500 font-medium">Yang Menyerahkan (Driver Logistik SPPG):</span>
-                <div className="h-10 border-b border-slate-300 font-serif italic text-indigo-700 text-sm">
+                <div className="h-14 border-b border-slate-300 flex items-center justify-center font-serif italic text-indigo-700 text-sm">
                   ( {printDelivery.driverName} )
                 </div>
                 <p className="text-[11px] text-slate-400">Satuan Pelayanan Pemenuhan Gizi</p>
               </div>
 
-              <div className="space-y-12">
+              <div className="space-y-2 flex flex-col justify-between">
                 <span className="text-slate-500 font-medium">Yang Menerima (Pihak Sekolah Sasaran):</span>
-                <div className="h-10 border-b border-slate-300 font-serif italic text-emerald-700 text-sm">
-                  ( {printDelivery.recipientName || printDelivery.contactPerson} )
+                <div className="h-14 border-b border-slate-300 flex items-center justify-center">
+                  {printDelivery.recipientSignature ? (
+                    <img
+                      src={printDelivery.recipientSignature}
+                      alt="Tanda Tangan Guru"
+                      className="max-h-12 max-w-[180px] object-contain"
+                    />
+                  ) : (
+                    <span className="font-serif italic text-emerald-700 text-sm">
+                      ( {printDelivery.recipientName || printDelivery.contactPerson} )
+                    </span>
+                  )}
                 </div>
                 <p className="text-[11px] text-slate-400">
                   Kepala Sekolah / Guru Piket {printDelivery.recipientNip ? `(NIP: ${printDelivery.recipientNip})` : ''}

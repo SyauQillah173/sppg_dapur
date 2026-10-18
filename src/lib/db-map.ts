@@ -179,6 +179,7 @@ export function toDistribution(row: any): MealDelivery {
     recipientNip: row.recipientNip || undefined,
     bastNumber: row.bastNumber || undefined,
     isSigned: Boolean(row.isSigned),
+    recipientSignature: row.recipientSignature || undefined,
     deliveryPhotoUrl: row.deliveryPhotoUrl || undefined,
     notes: row.notes || undefined,
     isStockDeducted: Boolean(row.isStockDeducted),
