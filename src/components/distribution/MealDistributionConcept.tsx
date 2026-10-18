@@ -350,7 +350,7 @@ export function MealDistributionConcept() {
     schoolType: 'SD' as 'SD' | 'SMP' | 'MI' | 'SMA',
     contactPerson: '',
     contactPhone: '',
-    targetPortions: 250,
+    targetPortions: 250 as number | '',
     menuTitle: 'Paket Sehat Ceria (Ayam Teriyaki & Melon Segar)',
     carb: 'Nasi Putih Pulen (150g)',
     protein: 'Ayam Fillet Teriyaki (60g)',
@@ -371,7 +371,7 @@ export function MealDistributionConcept() {
     recipientName: '',
     recipientNip: '',
     foodTemperature: '64.5°C (Optimal)',
-    returnedPortions: 0, // Jumlah ompreng balik / retur
+    returnedPortions: 0 as number | '', // Jumlah ompreng balik / retur
     returnReason: '100% Habis (Tidak Ada Balik)',
     surplusHandling: 'Dibawa kembali ke dapur SPPG (Zero Waste)',
     recipientSignature: '', // Base64 tanda tangan layar sentuh HP
@@ -394,7 +394,7 @@ export function MealDistributionConcept() {
 
   // Hitung estimasi bahan yang akan dipotong untuk form penambahan
   const estimatedDeductions = useMemo(() => {
-    return computeMBGDeductionList(newForm.targetPortions, ingredients);
+    return computeMBGDeductionList(Number(newForm.targetPortions) || 0, ingredients);
   }, [newForm.targetPortions, ingredients]);
 
   // Proteksi Role Superadmin
@@ -444,6 +444,11 @@ export function MealDistributionConcept() {
     e.preventDefault();
     if (!newForm.schoolName.trim()) {
       showToast('Nama sekolah penerima wajib diisi', 'error');
+      return;
+    }
+
+    if (!newForm.targetPortions || Number(newForm.targetPortions) <= 0) {
+      showToast('Jumlah porsi yang dikirim minimal 1 porsi', 'error');
       return;
     }
 
@@ -1191,8 +1196,13 @@ export function MealDistributionConcept() {
                 <input
                   type="number"
                   step="500000"
-                  value={costingBudget}
-                  onChange={(e) => setCostingBudget(Number(e.target.value) || 0)}
+                  placeholder="18000000"
+                  value={costingBudget === 0 ? '' : costingBudget}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/^0+(?=\d)/, '');
+                    setCostingBudget(raw === '' ? 0 : Number(raw));
+                  }}
                   className="w-full pl-9 pr-3 py-2.5 text-sm font-bold text-slate-800 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white"
                 />
               </div>
@@ -1209,8 +1219,13 @@ export function MealDistributionConcept() {
                 <input
                   type="number"
                   step="50"
-                  value={costingPortions}
-                  onChange={(e) => setCostingPortions(Number(e.target.value) || 1)}
+                  placeholder="1000"
+                  value={costingPortions === 0 ? '' : costingPortions}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/^0+(?=\d)/, '');
+                    setCostingPortions(raw === '' ? 1 : Math.max(1, Number(raw)));
+                  }}
                   className="w-full px-3 py-2.5 text-sm font-bold text-slate-800 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-slate-400">Porsi</span>
@@ -1581,8 +1596,16 @@ export function MealDistributionConcept() {
                     type="number"
                     required
                     min="1"
+                    placeholder="Contoh: 250"
                     value={newForm.targetPortions}
-                    onChange={(e) => setNewForm({ ...newForm, targetPortions: Number(e.target.value) || 0 })}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/^0+(?=\d)/, '');
+                      setNewForm({
+                        ...newForm,
+                        targetPortions: raw === '' ? '' : Math.max(0, parseInt(raw, 10)),
+                      });
+                    }}
                     className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900 font-bold"
                   />
                 </div>
@@ -1829,8 +1852,16 @@ export function MealDistributionConcept() {
                     type="number"
                     min="0"
                     max={signingDelivery.targetPortions}
+                    placeholder="0"
                     value={bastForm.returnedPortions}
-                    onChange={(e) => setBastForm({ ...bastForm, returnedPortions: Number(e.target.value) || 0 })}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/^0+(?=\d)/, '');
+                      setBastForm({
+                        ...bastForm,
+                        returnedPortions: raw === '' ? '' : Math.max(0, parseInt(raw, 10)),
+                      });
+                    }}
                     className="w-full text-center text-base font-black text-rose-700 bg-white border border-rose-300 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-rose-500 mt-0.5"
                   />
                   <span className="text-[10px] text-rose-600 block">Tidak Termakan</span>
@@ -1839,7 +1870,7 @@ export function MealDistributionConcept() {
                 <div className="bg-emerald-50/70 p-2.5 rounded-lg border border-emerald-200">
                   <span className="text-[10px] font-bold text-emerald-800 block uppercase">3. Dimakan Siswa</span>
                   <span className="text-base font-black text-emerald-700">
-                    {Math.max(0, signingDelivery.targetPortions - bastForm.returnedPortions)}
+                    {Math.max(0, signingDelivery.targetPortions - (Number(bastForm.returnedPortions) || 0))}
                   </span>
                   <span className="text-[10px] text-emerald-600 block">Realisasi Bersih</span>
                 </div>
@@ -1864,7 +1895,7 @@ export function MealDistributionConcept() {
                           setBastForm({
                             ...bastForm,
                             returnReason: reason,
-                            returnedPortions: reason === '100% Habis (Tidak Ada Balik)' ? 0 : bastForm.returnedPortions || 5,
+                            returnedPortions: reason === '100% Habis (Tidak Ada Balik)' ? 0 : Number(bastForm.returnedPortions) || 5,
                           });
                         }}
                         className={`px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition ${
@@ -1881,10 +1912,10 @@ export function MealDistributionConcept() {
               </div>
 
               {/* PENANGANAN OMPRENG BALIK (BILA ADA BALIK > 0) */}
-              {bastForm.returnedPortions > 0 && (
+              {Number(bastForm.returnedPortions) > 0 && (
                 <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-2">
                   <span className="font-bold text-amber-950 block text-[11px]">
-                    Penanganan {bastForm.returnedPortions} Ompreng Balik (Zero Waste):
+                    Penanganan {Number(bastForm.returnedPortions) || 0} Ompreng Balik (Zero Waste):
                   </span>
                   <div className="flex flex-wrap gap-1.5">
                     {[

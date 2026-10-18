@@ -527,9 +527,12 @@ export function DriverDeliveryView() {
                       type="number"
                       min="0"
                       max={signingDelivery.targetPortions}
-                      value={bastForm.absentStudents}
+                      placeholder="0"
+                      value={bastForm.absentStudents === 0 ? '' : bastForm.absentStudents}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => {
-                        const retur = Math.max(0, Number(e.target.value) || 0);
+                        const raw = e.target.value.replace(/^0+(?=\d)/, '');
+                        const retur = raw === '' ? 0 : Math.max(0, parseInt(raw, 10));
                         const net = Math.max(0, signingDelivery.targetPortions - retur);
                         setBastForm({
                           ...bastForm,
