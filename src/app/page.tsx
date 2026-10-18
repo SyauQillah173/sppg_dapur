@@ -10,6 +10,7 @@ import { BudgetAllocationModule } from '@/components/budget/BudgetAllocationModu
 import { ProcurementModule } from '@/components/procurement/ProcurementModule';
 import { KitchenInventoryCMS } from '@/components/inventory/KitchenInventoryCMS';
 import { MasterDataCMS } from '@/components/cms/MasterDataCMS';
+import { MealDistributionConcept } from '@/components/distribution/MealDistributionConcept';
 import { SplitScreenReceiptModal } from '@/components/procurement/SplitScreenReceiptModal';
 import { AIScannerModal } from '@/components/procurement/AIScannerModal';
 import { AddProcurementModal } from '@/components/procurement/AddProcurementModal';
@@ -19,6 +20,13 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const { modal, closeModal, userRole } = useStore();
   const isAuditor = userRole === 'EXECUTIVE_AUDITOR';
+
+  // Jika role pemantau/auditor mencoba akses tab konsep, otomatis redirect ke dashboard
+  useEffect(() => {
+    if (isAuditor && activeTab === 'distribution_concept') {
+      setActiveTab('dashboard');
+    }
+  }, [isAuditor, activeTab]);
 
   // Global listener untuk menggantikan semua alert bawaan browser
   const [globalAlert, setGlobalAlert] = useState<{
@@ -79,6 +87,9 @@ function AppContent() {
 
         {/* Menu 5: Master Data / CMS */}
         {activeTab === 'cms' && <MasterDataCMS />}
+
+        {/* Menu Konsep: Distribusi Makanan Siap Santap ke Siswa (Khusus Superadmin, Tersembunyi dari Auditor) */}
+        {activeTab === 'distribution_concept' && !isAuditor && <MealDistributionConcept />}
       </main>
 
       {/* Modals Container */}

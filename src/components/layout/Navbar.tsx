@@ -8,32 +8,45 @@ import {
   ShoppingCart,
   Boxes,
   Settings2,
+  UtensilsCrossed,
 } from 'lucide-react';
 
-export type ActiveTab = 'dashboard' | 'budget' | 'procurement' | 'inventory' | 'cms';
+export type ActiveTab = 'dashboard' | 'budget' | 'procurement' | 'inventory' | 'distribution_concept' | 'cms';
 
 interface NavbarProps {
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
 }
 
-const tabs: { id: ActiveTab; icon: typeof LayoutDashboard; label: string; short: string }[] = [
-  { id: 'dashboard', icon: LayoutDashboard, label: 'Ringkasan', short: 'Home' },
-  { id: 'budget', icon: WalletCards, label: 'Anggaran', short: 'Kas' },
-  { id: 'procurement', icon: ShoppingCart, label: 'Belanja', short: 'Belanja' },
-  { id: 'inventory', icon: Boxes, label: 'Stok Bahan', short: 'Stok' },
-  { id: 'cms', icon: Settings2, label: 'Master Data', short: 'Data' },
-];
-
 export function Navbar({ activeTab, setActiveTab }: NavbarProps) {
   const { procurements, userRole } = useStore();
   const pendingCount = procurements.filter((p) => p.status === 'PENDING_AUDIT' || p.status === 'FLAGGED_DISCREPANCY').length;
+
+  const tabs: { id: ActiveTab; icon: typeof LayoutDashboard; label: string; short: string; isConcept?: boolean }[] = [
+    { id: 'dashboard', icon: LayoutDashboard, label: 'Ringkasan', short: 'Home' },
+    { id: 'budget', icon: WalletCards, label: 'Anggaran', short: 'Kas' },
+    { id: 'procurement', icon: ShoppingCart, label: 'Belanja', short: 'Belanja' },
+    { id: 'inventory', icon: Boxes, label: 'Stok Bahan', short: 'Stok' },
+    // Menu Konsep Distribusi Porsi Makanan HANYA muncul untuk SUPERADMIN, tersembunyi dari AUDITOR
+    ...(userRole === 'SUPERADMIN'
+      ? [
+          {
+            id: 'distribution_concept' as ActiveTab,
+            icon: UtensilsCrossed,
+            label: 'Distribusi Siswa',
+            short: 'Distribusi',
+            isConcept: true,
+          },
+        ]
+      : []),
+    { id: 'cms', icon: Settings2, label: 'Master Data', short: 'Data' },
+  ];
 
   return (
     <div className="border-b border-slate-200 bg-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <nav className="flex items-center gap-1 overflow-x-auto py-1.5 scrollbar-none justify-between sm:justify-start" aria-label="Menu Utama">
-          {tabs.map(({ id, icon: Icon, label, short }) => {
+          {tabs.map(({ id, icon: Icon, label, short, isConcept }) => {
             const active = activeTab === id;
             const hasBadge = id === 'procurement' && pendingCount > 0;
             return (
@@ -50,6 +63,13 @@ export function Navbar({ activeTab, setActiveTab }: NavbarProps) {
                 <Icon className="h-4 w-4 shrink-0" />
                 <span className="hidden sm:inline">{label}</span>
                 <span className="sm:hidden">{short}</span>
+                {isConcept && (
+                  <span className={`hidden md:inline-flex items-center ml-0.5 px-1.5 py-0.2 text-[9px] font-bold rounded-md uppercase tracking-wider ${
+                    active ? 'bg-indigo-500/30 text-indigo-200' : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                  }`}>
+                    Konsep
+                  </span>
+                )}
                 {hasBadge && (
                   <span className={`ml-0.5 h-4 min-w-[16px] flex items-center justify-center rounded-full text-[10px] font-semibold px-1 ${
                     active ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'

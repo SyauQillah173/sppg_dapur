@@ -20,9 +20,10 @@ import { AccountSettingsModal } from './AccountSettingsModal';
 import { DeviceSessionsModal } from './DeviceSessionsModal';
 import { PwaInstallButton } from '@/components/pwa/PwaInstallButton';
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
+import { ActiveTab } from '@/components/layout/Navbar';
 
 interface HeaderProps {
-  onNavigateTab?: (tab: 'dashboard' | 'budget' | 'procurement' | 'inventory' | 'cms') => void;
+  onNavigateTab?: (tab: ActiveTab) => void;
 }
 
 export function Header({ onNavigateTab }: HeaderProps) {
