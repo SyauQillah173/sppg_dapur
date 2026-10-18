@@ -48,10 +48,19 @@ import {
   PenTool,
   RotateCcw,
   Eraser,
+  Settings,
+  Upload,
+  QrCode,
+  Edit3,
 } from 'lucide-react';
 import { useStore } from '@/lib/store';
 import { MealDelivery, MasterIngredient } from '@/lib/types';
-import { OfficialBastDocument } from './OfficialBastDocument';
+import {
+  OfficialBastDocument,
+  HeadSignerConfig,
+  DEFAULT_HEAD_SIGNER,
+  STORAGE_KEY_HEAD_SIGNER,
+} from './OfficialBastDocument';
 
 const STORAGE_KEY = 'sppg_meal_distributions_v1';
 
@@ -315,7 +324,64 @@ export function MealDistributionConcept() {
     ingredients,
   } = useStore();
 
-  const [activeSubTab, setActiveSubTab] = useState<'monitoring' | 'food_costing' | 'pipeline' | 'bast_preview' | 'sop'>('monitoring');
+  const [activeSubTab, setActiveSubTab] = useState<
+    'monitoring' | 'food_costing' | 'bast_preview' | 'bast_settings' | 'pipeline' | 'sop'
+  >('monitoring');
+
+  // State untuk CMS Pengaturan Pejabat & Tanda Tangan BAST
+  const [headSignerConfig, setHeadSignerConfig] = useState<HeadSignerConfig>(DEFAULT_HEAD_SIGNER);
+  const signerFileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_HEAD_SIGNER);
+      if (saved) {
+        setHeadSignerConfig(JSON.parse(saved));
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleSaveHeadSigner = (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      localStorage.setItem(STORAGE_KEY_HEAD_SIGNER, JSON.stringify(headSignerConfig));
+      showToast('Pengaturan Pejabat & Tanda Tangan BAST berhasil disimpan!', 'success');
+    } catch {
+      showToast('Gagal menyimpan pengaturan ke memori lokal.', 'error');
+    }
+  };
+
+  const handleResetHeadSigner = () => {
+    setHeadSignerConfig(DEFAULT_HEAD_SIGNER);
+    try {
+      localStorage.removeItem(STORAGE_KEY_HEAD_SIGNER);
+      showToast('Pengaturan Pejabat BAST dikembalikan ke default BGN.', 'info');
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleSignerImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('Mohon pilih file gambar (PNG / JPG).', 'error');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      setHeadSignerConfig((prev) => ({
+        ...prev,
+        signatureType: 'image',
+        signatureImage: base64,
+      }));
+      showToast('Foto tanda tangan / stempel digital berhasil dimuat!', 'success');
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Filter & Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -769,6 +835,19 @@ export function MealDistributionConcept() {
 
         <button
           type="button"
+          onClick={() => setActiveSubTab('bast_settings')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+            activeSubTab === 'bast_settings'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <Settings className="w-4 h-4 text-indigo-400" />
+          4. CMS Pejabat & TTD BAST
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveSubTab('pipeline')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
             activeSubTab === 'pipeline'
@@ -777,7 +856,7 @@ export function MealDistributionConcept() {
           }`}
         >
           <Layers className="w-4 h-4" />
-          4. Peta Alur Rantai Pasok MBG
+          5. Peta Alur Rantai Pasok MBG
         </button>
 
         <button
@@ -790,7 +869,7 @@ export function MealDistributionConcept() {
           }`}
         >
           <ClipboardList className="w-4 h-4" />
-          5. Standar Operasional (SOP)
+          6. Standar Operasional (SOP)
         </button>
       </div>
 
@@ -1328,6 +1407,14 @@ export function MealDistributionConcept() {
                 Pilih surat jalan / BAST untuk dicetak atau diekspor ke PDF dengan format kop resmi BGN SPPG
               </p>
             </div>
+            <button
+              type="button"
+              onClick={() => setActiveSubTab('bast_settings')}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition shadow-2xs self-start sm:self-auto cursor-pointer"
+            >
+              <Settings className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Kelola Pejabat & TTD BAST (CMS)</span>
+            </button>
           </div>
 
           {activeDeliveriesList.length === 0 ? (
@@ -1382,7 +1469,331 @@ export function MealDistributionConcept() {
       </div>
       )}
 
-      {/* 6. TAB 4: PETA ALUR RANTAI PASOK MBG */}
+      {/* TAB 4: CMS PENGATURAN PEJABAT & TANDA TANGAN BAST */}
+      {activeSubTab === 'bast_settings' && (
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                    CMS Tata Naskah Dinas BGN RI
+                  </span>
+                  <span className="text-[10px] font-semibold text-emerald-600 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Sinkron Otomatis ke Lembar BAST
+                  </span>
+                </div>
+                <h2 className="text-lg font-bold text-slate-900">
+                  Pengaturan Pejabat Pengesah & Tanda Tangan BAST
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Kelola data Kepala Satuan Pelayanan Pemenuhan Gizi (SPPG), nomor identitas NIP, jabatan, dan tentukan opsi tanda tangan (QR Code Verifikasi, Tempel Foto TTD / Stempel, atau Kosongan untuk TTD basah manual) yang otomatis tercetak di lembar BAST.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setActiveSubTab('bast_preview')}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition self-start sm:self-auto cursor-pointer"
+              >
+                <FileCheck2 className="w-3.5 h-3.5 text-slate-600" />
+                <span>Lihat Dokumen BAST Siap Cetak</span>
+              </button>
+            </div>
+
+            {/* Grid 2 Kolom: Form Input Kiri & Live Preview Kanan */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+              {/* Form Input (7 Kolom) */}
+              <form onSubmit={handleSaveHeadSigner} className="lg:col-span-7 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Nama Lengkap & Gelar Pejabat Pengesah:
+                  </label>
+                  <input
+                    type="text"
+                    value={headSignerConfig.name}
+                    onChange={(e) => setHeadSignerConfig({ ...headSignerConfig, name: e.target.value })}
+                    placeholder="Contoh: ABDULLAH SYAUQILLAH, S.Kom"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold text-slate-900 text-sm"
+                    required
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">Nama ini akan tercantum di bawah kolom tanda tangan pihak pengesah.</p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">
+                      NIP / No. Registrasi Pegawai:
+                    </label>
+                    <input
+                      type="text"
+                      value={headSignerConfig.nip}
+                      onChange={(e) => setHeadSignerConfig({ ...headSignerConfig, nip: e.target.value })}
+                      placeholder="Contoh: 19960717 202601 1 002"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-xs text-slate-900"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-0.5">Bisa dikosongkan jika pejabat berstatus non-PNS.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1">
+                      Jabatan Struktural Kedinasan:
+                    </label>
+                    <input
+                      type="text"
+                      value={headSignerConfig.title}
+                      onChange={(e) => setHeadSignerConfig({ ...headSignerConfig, title: e.target.value })}
+                      placeholder="Contoh: KEPALA SATUAN PELAYANAN PEMENUHAN GIZI (SPPG)"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs text-slate-900"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1">
+                    Nama Satuan Pelaksana / Unit Dapur:
+                  </label>
+                  <input
+                    type="text"
+                    value={headSignerConfig.unitName}
+                    onChange={(e) => setHeadSignerConfig({ ...headSignerConfig, unitName: e.target.value })}
+                    placeholder="Contoh: SPPG ABAR ABIR 02"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs text-slate-900 font-medium"
+                  />
+                </div>
+
+                {/* Pilihan Format Tanda Tangan */}
+                <div className="pt-2">
+                  <label className="block text-xs font-bold text-slate-900 mb-2">
+                    Format Tanda Tangan Resmi di Lembar BAST:
+                  </label>
+
+                  <div className="space-y-2.5">
+                    {/* Opsi 1: QR Code */}
+                    <label
+                      onClick={() => setHeadSignerConfig({ ...headSignerConfig, signatureType: 'qr' })}
+                      className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                        headSignerConfig.signatureType === 'qr'
+                          ? 'border-indigo-600 bg-indigo-50/60 ring-1 ring-indigo-600'
+                          : 'border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="signerType"
+                        checked={headSignerConfig.signatureType === 'qr'}
+                        onChange={() => setHeadSignerConfig({ ...headSignerConfig, signatureType: 'qr' })}
+                        className="mt-1 text-indigo-600"
+                      />
+                      <div className="flex-1">
+                        <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                          <QrCode className="w-4 h-4 text-indigo-600" />
+                          <span>QR Code Verifikasi Resmi GiziFlow BGN (Rekomendasi Digital)</span>
+                        </span>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Dokumen terekam secara elektronik dan memiliki barcode validasi digital real-time sesuai UU ITE.
+                        </p>
+                      </div>
+                    </label>
+
+                    {/* Opsi 2: Tempel TTD / Upload Gambar */}
+                    <label
+                      onClick={() => setHeadSignerConfig({ ...headSignerConfig, signatureType: 'image' })}
+                      className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                        headSignerConfig.signatureType === 'image'
+                          ? 'border-indigo-600 bg-indigo-50/60 ring-1 ring-indigo-600'
+                          : 'border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="signerType"
+                        checked={headSignerConfig.signatureType === 'image'}
+                        onChange={() => setHeadSignerConfig({ ...headSignerConfig, signatureType: 'image' })}
+                        className="mt-1 text-indigo-600"
+                      />
+                      <div className="flex-1">
+                        <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                          <Upload className="w-4 h-4 text-indigo-600" />
+                          <span>Tempel Foto Tanda Tangan / Stempel Digital Asli</span>
+                        </span>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Unggah file gambar tanda tangan atau stempel basah (PNG transparan / JPG). Gambar akan otomatis terpasang presisi di atas nama pejabat.
+                        </p>
+
+                        {/* File Upload Controls */}
+                        {headSignerConfig.signatureType === 'image' && (
+                          <div className="mt-3 pt-3 border-t border-indigo-100 flex flex-wrap items-center gap-3">
+                            <input
+                              type="file"
+                              ref={signerFileInputRef}
+                              accept="image/*"
+                              onChange={handleSignerImageUpload}
+                              className="hidden"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => signerFileInputRef.current?.click()}
+                              className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                            >
+                              <Upload className="w-3.5 h-3.5" />
+                              <span>{headSignerConfig.signatureImage ? 'Ganti Foto TTD' : 'Pilih File Foto TTD'}</span>
+                            </button>
+
+                            {headSignerConfig.signatureImage && (
+                              <button
+                                type="button"
+                                onClick={() => setHeadSignerConfig({ ...headSignerConfig, signatureImage: '' })}
+                                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-rose-200 transition cursor-pointer"
+                              >
+                                Hapus Foto
+                              </button>
+                            )}
+
+                            {headSignerConfig.signatureImage && (
+                              <span className="text-xs text-emerald-700 font-semibold flex items-center gap-1">
+                                <Check className="w-3.5 h-3.5" />
+                                Foto TTD Siap
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </label>
+
+                    {/* Opsi 3: Kosongan untuk TTD Basah Manual */}
+                    <label
+                      onClick={() => setHeadSignerConfig({ ...headSignerConfig, signatureType: 'blank' })}
+                      className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition ${
+                        headSignerConfig.signatureType === 'blank'
+                          ? 'border-indigo-600 bg-indigo-50/60 ring-1 ring-indigo-600'
+                          : 'border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="signerType"
+                        checked={headSignerConfig.signatureType === 'blank'}
+                        onChange={() => setHeadSignerConfig({ ...headSignerConfig, signatureType: 'blank' })}
+                        className="mt-1 text-indigo-600"
+                      />
+                      <div className="flex-1">
+                        <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                          <PenTool className="w-4 h-4 text-slate-600" />
+                          <span>Kosongan (Untuk Tanda Tangan Basah Manual Menggunakan Pulpen)</span>
+                        </span>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Menyediakan area garis tanda tangan kosong sehingga kepala unit bisa membubuhkan tanda tangan fisik langsung dengan bolpoin di atas lembar kertas hasil print.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="pt-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={handleResetHeadSigner}
+                    className="px-3.5 py-2.5 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Reset ke Default BGN</span>
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition flex items-center gap-2 shadow-md active:scale-95 cursor-pointer"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Simpan Pengaturan Pejabat BAST</span>
+                  </button>
+                </div>
+              </form>
+
+              {/* Live Preview Panel (5 Kolom) */}
+              <div className="lg:col-span-5 bg-slate-50 rounded-2xl border border-slate-200 p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      Live Preview Lembar Pengesahan
+                    </h3>
+                    <p className="text-[11px] text-slate-500">Tampilan persis kolom 2 di lembar A4 BAST</p>
+                  </div>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                    WYSIWYG A4
+                  </span>
+                </div>
+
+                {/* Simulasi Kertas Putih A4 Asli */}
+                <div className="bg-white rounded-xl p-5 border border-slate-300 shadow-sm text-center font-sans space-y-3">
+                  <span className="text-[9px] uppercase text-slate-500 font-bold block">
+                    MENGETAHUI / MENYETUJUI:
+                  </span>
+                  <p className="font-bold text-slate-950 text-xs">
+                    {headSignerConfig.title || 'KEPALA SATUAN PELAYANAN PEMENUHAN GIZI (SPPG)'}
+                  </p>
+
+                  {/* Simulasi TTD */}
+                  <div className="h-16 flex items-center justify-center py-1">
+                    {headSignerConfig.signatureType === 'qr' && (
+                      <div className="border border-slate-900 rounded p-1.5 bg-white flex items-center gap-2 text-[8px] text-slate-800 font-mono text-left shadow-2xs">
+                        <QrCode className="w-8 h-8 text-slate-950 shrink-0" />
+                        <span className="leading-tight">
+                          VERIFIKASI RESMI<br />
+                          GIZIFLOW-BGN RI<br />
+                          VALID & TEREKAM
+                        </span>
+                      </div>
+                    )}
+
+                    {headSignerConfig.signatureType === 'image' && (
+                      headSignerConfig.signatureImage ? (
+                        <img
+                          src={headSignerConfig.signatureImage}
+                          alt="Preview Tanda Tangan"
+                          className="max-h-14 max-w-[160px] object-contain"
+                        />
+                      ) : (
+                        <div className="border border-dashed border-indigo-300 rounded px-4 py-2 text-[10px] text-indigo-700 italic">
+                          (Unggah foto tanda tangan di formulir)
+                        </div>
+                      )
+                    )}
+
+                    {headSignerConfig.signatureType === 'blank' && (
+                      <div className="w-36 border-b border-dashed border-slate-400 mt-6" />
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="font-bold underline text-slate-950 text-xs">
+                      ( {headSignerConfig.name || 'ABDULLAH SYAUQILLAH, S.Kom'} )
+                    </p>
+                    <p className="text-[10px] text-slate-600 mt-0.5">
+                      {headSignerConfig.nip ? `NIP. ${headSignerConfig.nip}` : 'Kepala Satuan Pelayanan'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-100 text-[11px] text-indigo-900 space-y-1 leading-snug">
+                  <div className="font-bold flex items-center gap-1.5">
+                    <Info className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                    <span>Otomatis Terintegrasi:</span>
+                  </div>
+                  <p className="text-slate-600">
+                    Setiap kali Anda atau staf pengantaran mencetak dokumen BAST di menu Distribusi, data pejabat dan format tanda tangan ini akan langsung terisi rapi dan terpusat di lembar A4 resmi.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. TAB 5: PETA ALUR RANTAI PASOK MBG */}
       {activeSubTab === 'pipeline' && (
         <div className="space-y-6">
           <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-6">
