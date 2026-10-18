@@ -4,7 +4,7 @@ import { requireAuth, requireSuperadmin } from '@/lib/api-auth';
 import { sanitizeObject } from '@/lib/sanitize';
 
 /**
- * GET: Ambil daftar seluruh pengiriman distribusi porsi makanan MBG ke sekolah.
+ * GET: Ambil daftar seluruh pengiriman distribusi porsi makanan MBG resmi ke sekolah.
  */
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req);

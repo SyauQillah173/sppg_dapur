@@ -4,7 +4,7 @@ import { requireAuth, requireSuperadmin } from '@/lib/api-auth';
 import { sanitizeObject } from '@/lib/sanitize';
 
 /**
- * GET: Ambil detail 1 pengiriman distribusi beserta rincian BAST.
+ * GET: Ambil detail 1 data pengiriman distribusi makanan beserta rincian BAST resmi.
  */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAuth(req);
