@@ -453,12 +453,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateDistribution = async (id: string, updates: any) => {
+    setDistributions((prev) => prev.map((d) => (d.id === id ? { ...d, ...updates } : d)));
     const result = await postJson(`/api/distribution/${id}`, updates, 'PATCH');
     if (result.ok) await Promise.all([refreshFromDb(), refreshMasterFromDb()]);
     return failNotify(result);
   };
 
   const deleteDistribution = async (id: string) => {
+    setDistributions((prev) => prev.filter((d) => d.id !== id));
     const result = await postJson(`/api/distribution/${id}`, null, 'DELETE');
     if (result.ok) await Promise.all([refreshFromDb(), refreshMasterFromDb()]);
     return failNotify(result);

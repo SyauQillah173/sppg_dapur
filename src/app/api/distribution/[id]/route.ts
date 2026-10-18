@@ -152,7 +152,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const { id } = await params;
     const existing = await db.mealDistribution.findUnique({ where: { id } });
     if (!existing) {
-      return NextResponse.json({ success: false, error: 'Data pengiriman tidak ditemukan.' }, { status: 404 });
+      // Idempotent: jika ID tidak ditemukan atau sudah terhapus, anggap sukses agar UI tidak memunculkan popup error palsu
+      return NextResponse.json({ success: true, message: 'Data pengiriman telah dihapus.' });
     }
 
     await prisma.$transaction(async (tx: any) => {

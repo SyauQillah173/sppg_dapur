@@ -521,14 +521,20 @@ export function MealDistributionConcept() {
   // Kalkulator Costing State
   const [costingPortions, setCostingPortions] = useState(1200);
   const [costingBudget, setCostingBudget] = useState(18000000); // Rp 18.000.000 (Rp 15.000 / porsi)
+  const [isDbLoaded, setIsDbLoaded] = useState(false);
 
-  // Gabungkan list data: gunakan live database `distributions` dari store jika ada, fallback ke `INITIAL_DELIVERIES`
+  // Ambil data pengiriman riil dari database PostgreSQL saat load
+  useEffect(() => {
+    refreshDistributions().finally(() => setIsDbLoaded(true));
+  }, [refreshDistributions]);
+
+  // Gabungkan list data: gunakan data database riil saat sudah ter-load
   const activeDeliveriesList: MealDelivery[] = useMemo(() => {
-    if (distributions && distributions.length > 0) {
+    if (isDbLoaded) {
       return distributions;
     }
-    return INITIAL_DELIVERIES;
-  }, [distributions]);
+    return distributions && distributions.length > 0 ? distributions : INITIAL_DELIVERIES;
+  }, [distributions, isDbLoaded]);
 
   // Hitung estimasi bahan yang akan dipotong untuk form penambahan
   const estimatedDeductions = useMemo(() => {
