@@ -1,9 +1,14 @@
 import { PrismaClient } from '@prisma/client';
 
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
+export type ExtendedPrismaClient = PrismaClient & {
+  mealDistribution: any;
+  [key: string]: any;
+};
 
-export const prisma =
-  globalForPrisma.prisma ??
+const globalForPrisma = globalThis as unknown as { prisma: ExtendedPrismaClient | undefined };
+
+export const prisma: ExtendedPrismaClient =
+  (globalForPrisma.prisma ??
   new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
     // Neon: transaksi interaktif default 5 detik sering kehabisan waktu.
@@ -11,7 +16,8 @@ export const prisma =
       maxWait: 10_000,
       timeout: 20_000,
     },
-  });
+  })) as unknown as ExtendedPrismaClient;
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 export default prisma;
+

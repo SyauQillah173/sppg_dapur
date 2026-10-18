@@ -3,6 +3,8 @@ import prisma from '@/lib/prisma';
 import { requireAuth, requireSuperadmin } from '@/lib/api-auth';
 import { sanitizeObject } from '@/lib/sanitize';
 
+const db = prisma as any;
+
 /**
  * GET: Ambil detail 1 data pengiriman distribusi makanan beserta rincian BAST resmi.
  */
@@ -12,7 +14,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   try {
     const { id } = await params;
-    const distribution = await prisma.mealDistribution.findUnique({
+    const distribution = await db.mealDistribution.findUnique({
       where: { id },
     });
 
@@ -38,12 +40,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const rawBody = await req.json();
     const body = sanitizeObject(rawBody) as any;
 
-    const existing = await prisma.mealDistribution.findUnique({ where: { id } });
+    const existing = await db.mealDistribution.findUnique({ where: { id } });
     if (!existing) {
       return NextResponse.json({ success: false, error: 'Data pengiriman tidak ditemukan.' }, { status: 404 });
     }
 
-    const updated = await prisma.$transaction(async (tx) => {
+    const updated = await prisma.$transaction(async (tx: any) => {
       const data: any = {};
 
       if (body.status !== undefined) data.status = body.status;
@@ -148,12 +150,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   try {
     const { id } = await params;
-    const existing = await prisma.mealDistribution.findUnique({ where: { id } });
+    const existing = await db.mealDistribution.findUnique({ where: { id } });
     if (!existing) {
       return NextResponse.json({ success: false, error: 'Data pengiriman tidak ditemukan.' }, { status: 404 });
     }
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: any) => {
       // Jika stok pernah dipotong dari pengiriman ini, kembalikan stok bahan
       if (existing.isStockDeducted && Array.isArray(existing.deductedItems)) {
         for (const it of existing.deductedItems as any[]) {

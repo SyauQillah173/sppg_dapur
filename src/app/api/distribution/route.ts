@@ -3,6 +3,8 @@ import prisma from '@/lib/prisma';
 import { requireAuth, requireSuperadmin } from '@/lib/api-auth';
 import { sanitizeObject } from '@/lib/sanitize';
 
+const db = prisma as any;
+
 /**
  * GET: Ambil daftar seluruh pengiriman distribusi porsi makanan MBG resmi ke sekolah.
  */
@@ -23,7 +25,7 @@ export async function GET(req: NextRequest) {
       where.status = status;
     }
 
-    const distributions = await prisma.mealDistribution.findMany({
+    const distributions = await db.mealDistribution.findMany({
       where,
       orderBy: { createdAt: 'desc' },
     });
@@ -96,7 +98,7 @@ export async function POST(req: NextRequest) {
     const uniqueBastNumber =
       bastNumber || `BAST/MBG/${Date.now().toString().slice(-6)}`;
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       let isStockDeducted = false;
       const recordedDeductedItems: any[] = [];
 
