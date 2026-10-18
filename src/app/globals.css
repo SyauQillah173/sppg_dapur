@@ -63,7 +63,7 @@ body {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 8mm 12mm 8mm 12mm;
+    margin: 6mm 10mm 6mm 10mm;
   }
 
   html, body {
@@ -72,29 +72,66 @@ body {
     margin: 0 !important;
     padding: 0 !important;
     width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
   }
 
   header, nav, footer, button, .no-print {
     display: none !important;
   }
 
-  /* Isolasi cetak dokumen resmi BAST BGN */
+  /* Isolasi cetak dokumen resmi BAST BGN agar pas 1 halaman A4 */
+  .official-bast-modal-overlay {
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+  }
+
+  .official-bast-canvas-wrapper {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    transform: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
   #official-government-bast {
     display: block !important;
     position: static !important;
     width: 100% !important;
     max-width: 100% !important;
-    margin: 0 !important;
+    height: auto !important;
+    max-height: 284mm !important;
+    margin: 0 auto !important;
     padding: 0 !important;
     box-shadow: none !important;
     border: none !important;
     background: #ffffff !important;
     overflow: visible !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    transform: none !important;
   }
 
   #official-government-bast * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+  }
+
+  table, tr, td, th {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 }
 
