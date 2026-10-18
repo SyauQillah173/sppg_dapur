@@ -2,7 +2,7 @@
  * Pemetaan baris tabel → bentuk yang dipakai aplikasi.
  * Angka Decimal dari Prisma datang sebagai string di JSON, jadi selalu di-Number().
  */
-import { SppgUnit, SupplierDirectory, EmployeeDirectory, MasterIngredient, IngredientCategory, MasterUnit, BudgetAllocationItem, StockLedgerEntry } from './types';
+import { SppgUnit, SupplierDirectory, EmployeeDirectory, MasterIngredient, IngredientCategory, MasterUnit, BudgetAllocationItem, StockLedgerEntry, MealDelivery } from './types';
 
 const num = (v: unknown) => Number(v) || 0;
 export const SEMUA_SPPG_NAME = 'Semua SPPG (Gabungan 4 Unit)';
@@ -145,5 +145,44 @@ export function toBudget(row: any, units: SppgUnit[]): BudgetAllocationItem {
     withdrawnSpender: row.withdrawnSpender || meta.withdrawnSpender || '',
     withdrawnProofUrl: row.withdrawnProofUrl || meta.withdrawnProofUrl || '',
     withdrawnNote: row.withdrawnNote || meta.withdrawnNote || '',
+  };
+}
+
+export function toDistribution(row: any): MealDelivery {
+  return {
+    id: row.id,
+    dispatchNumber: row.dispatchNumber || '-',
+    sppgUnitId: row.sppgUnitId || 'SPPG-AA02',
+    sppgUnitName: row.sppgUnitName || 'SPPG ABAR ABIR 02',
+    schoolName: row.schoolName,
+    schoolAddress: row.schoolAddress || '-',
+    schoolType: row.schoolType || 'SD',
+    contactPerson: row.contactPerson || '-',
+    contactPhone: row.contactPhone || '-',
+    menuCode: row.menuCode || 'MENU-HARIAN',
+    menuTitle: row.menuTitle || 'Paket Menu MBG',
+    menuDetails: typeof row.menuDetails === 'object' && row.menuDetails ? row.menuDetails : {},
+    targetPortions: num(row.targetPortions),
+    deliveredPortions: num(row.deliveredPortions),
+    absentStudents: num(row.absentStudents),
+    surplusHandling: row.surplusHandling || undefined,
+    status: row.status || 'PREPARING',
+    departureTime: row.departureTime || undefined,
+    estimatedArrival: row.estimatedArrival || undefined,
+    actualArrival: row.actualArrival || undefined,
+    driverName: row.driverName || '-',
+    driverPhone: row.driverPhone || '-',
+    vehiclePlate: row.vehiclePlate || '-',
+    foodTemperature: row.foodTemperature || undefined,
+    foodSafetyWindow: row.foodSafetyWindow || undefined,
+    recipientName: row.recipientName || undefined,
+    recipientNip: row.recipientNip || undefined,
+    bastNumber: row.bastNumber || undefined,
+    isSigned: Boolean(row.isSigned),
+    deliveryPhotoUrl: row.deliveryPhotoUrl || undefined,
+    notes: row.notes || undefined,
+    isStockDeducted: Boolean(row.isStockDeducted),
+    deductedItems: Array.isArray(row.deductedItems) ? row.deductedItems : [],
+    createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : new Date().toISOString(),
   };
 }

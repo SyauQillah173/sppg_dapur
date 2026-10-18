@@ -16,6 +16,7 @@ import {
   AuditStatus,
   BudgetAllocationItem,
   AdminUserItem,
+  MealDelivery,
 } from './types';
 import {
   INITIAL_SPPG_UNITS,
@@ -29,7 +30,7 @@ import {
   INITIAL_BUDGET_ALLOCATIONS,
   INITIAL_ADMIN_USERS,
 } from './initial-data';
-import { toSppgUnit, toSupplier, toEmployee, toIngredient, toCategory, toMasterUnit, toStockLedger, toBudget, SEMUA_SPPG_NAME } from './db-map';
+import { toSppgUnit, toSupplier, toEmployee, toIngredient, toCategory, toMasterUnit, toStockLedger, toBudget, toDistribution, SEMUA_SPPG_NAME } from './db-map';
 
 interface ModalState {
   type:
@@ -72,6 +73,7 @@ interface StoreContextType {
   employees: EmployeeDirectory[];
   stockLedgers: StockLedgerEntry[];
   adminUsers: AdminUserItem[];
+  distributions: MealDelivery[];
   modal: ModalState;
   openModal: (type: ModalState['type'], data?: any) => void;
   closeModal: () => void;
@@ -80,6 +82,10 @@ interface StoreContextType {
   addProcurement: (proc: Omit<ProcurementTransaction, 'id' | 'createdAt'>) => Promise<{ ok: boolean; error?: string }>;
   deleteProcurement: (id: string) => Promise<{ ok: boolean; error?: string }>;
   updateAuditStatus: (id: string, status: AuditStatus, auditorNotes: string, auditorName: string) => Promise<{ ok: boolean; error?: string }>;
+  addDistribution: (dist: any) => Promise<{ ok: boolean; error?: string }>;
+  updateDistribution: (id: string, updates: any) => Promise<{ ok: boolean; error?: string }>;
+  deleteDistribution: (id: string) => Promise<{ ok: boolean; error?: string }>;
+  refreshDistributions: () => Promise<void>;
   addIngredient: (ing: Omit<MasterIngredient, 'id' | 'code' | 'updatedAt'>) => Promise<{ ok: boolean; error?: string }>;
   updateIngredient: (id: string, ing: Partial<MasterIngredient>) => Promise<{ ok: boolean; error?: string }>;
   deleteIngredient: (id: string) => Promise<{ ok: boolean; error?: string }>;
@@ -151,6 +157,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [employees, setEmployees] = useState<EmployeeDirectory[]>(INITIAL_EMPLOYEES);
   const [stockLedgers, setStockLedgers] = useState<StockLedgerEntry[]>(INITIAL_STOCK_LEDGERS);
   const [adminUsers, setAdminUsers] = useState<AdminUserItem[]>(INITIAL_ADMIN_USERS);
+  const [distributions, setDistributions] = useState<MealDelivery[]>([]);
   const [modal, setModal] = useState<ModalState>({ type: null });
   // Jangan push ke server sebelum state awal selesai dimuat (hindari seed menimpa data server)
   const hydratedRef = useRef(false);
@@ -283,14 +290,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const refreshFromDb = async () => {
     try {
       const t = Date.now();
-      const [pRes, bRes, uRes, sRes] = await Promise.all([
+      const [pRes, bRes, uRes, sRes, dRes] = await Promise.all([
         fetch(`/api/procurement?_t=${t}`, { cache: 'no-store' }),
         fetch(`/api/budgets?_t=${t}`, { cache: 'no-store' }),
         fetch(`/api/sppg-units?_t=${t}`, { cache: 'no-store' }),
         fetch(`/api/suppliers?_t=${t}`, { cache: 'no-store' }),
+        fetch(`/api/distribution?_t=${t}`, { cache: 'no-store' }),
       ]);
-      const [pJson, bJson, uJson, sJson] = await Promise.all([
-        pRes.json(), bRes.json(), uRes.json(), sRes.json(),
+      const [pJson, bJson, uJson, sJson, dJson] = await Promise.all([
+        pRes.json(), bRes.json(), uRes.json(), sRes.json(), dRes.json(),
       ]);
 
       const units = uJson?.success && Array.isArray(uJson.data) ? uJson.data.map(toSppgUnit) : sppgUnits;
@@ -300,6 +308,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         setBudgetAllocations(bJson.data.map((row: any) => toBudget(row, units || [])));
       }
       if (sJson?.success && Array.isArray(sJson.data)) setSuppliers(sJson.data.map(toSupplier));
+      if (dJson?.success && Array.isArray(dJson.data)) setDistributions(dJson.data.map(toDistribution));
     } catch {
       // offline — biarkan data yang sudah tampil
     }
@@ -435,6 +444,36 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const result = await postJson(`/api/procurement/${id}`, null, 'DELETE');
     if (result.ok) await Promise.all([refreshFromDb(), refreshMasterFromDb()]);
     return result;
+  };
+
+  const addDistribution = async (dist: any) => {
+    const result = await postJson('/api/distribution', dist);
+    if (result.ok) await Promise.all([refreshFromDb(), refreshMasterFromDb()]);
+    return failNotify(result);
+  };
+
+  const updateDistribution = async (id: string, updates: any) => {
+    const result = await postJson(`/api/distribution/${id}`, updates, 'PATCH');
+    if (result.ok) await Promise.all([refreshFromDb(), refreshMasterFromDb()]);
+    return failNotify(result);
+  };
+
+  const deleteDistribution = async (id: string) => {
+    const result = await postJson(`/api/distribution/${id}`, null, 'DELETE');
+    if (result.ok) await Promise.all([refreshFromDb(), refreshMasterFromDb()]);
+    return failNotify(result);
+  };
+
+  const refreshDistributions = async () => {
+    try {
+      const res = await fetch(`/api/distribution?_t=${Date.now()}`, { cache: 'no-store' });
+      const json = await res.json();
+      if (json?.success && Array.isArray(json.data)) {
+        setDistributions(json.data.map(toDistribution));
+      }
+    } catch {
+      // offline
+    }
   };
 
   const updateAuditStatus = async (id: string, status: AuditStatus, auditNotes: string, auditorName: string) => {
@@ -822,12 +861,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         employees,
         stockLedgers,
         adminUsers,
+        distributions,
         modal,
         openModal,
         closeModal,
         addProcurement,
         deleteProcurement,
         updateAuditStatus,
+        addDistribution,
+        updateDistribution,
+        deleteDistribution,
+        refreshDistributions,
         addIngredient,
         updateIngredient,
         deleteIngredient,

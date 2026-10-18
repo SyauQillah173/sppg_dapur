@@ -195,3 +195,47 @@ export interface AdminUserItem {
   updatedAt?: string;
 }
 
+export interface MealDelivery {
+  id: string;
+  dispatchNumber: string;
+  sppgUnitId: string;
+  sppgUnitName: string;
+  schoolName: string;
+  schoolAddress: string;
+  schoolType: 'SD' | 'SMP' | 'MI' | 'SMA' | string;
+  contactPerson: string;
+  contactPhone: string;
+  menuCode: string;
+  menuTitle: string;
+  menuDetails: {
+    carb: string;
+    protein: string;
+    veggie: string;
+    fruit: string;
+    dairy: string;
+  };
+  targetPortions: number;
+  deliveredPortions: number;
+  absentStudents: number;
+  surplusHandling?: string;
+  status: 'PREPARING' | 'IN_TRANSIT' | 'ARRIVED' | 'COMPLETED';
+  departureTime?: string;
+  estimatedArrival?: string;
+  actualArrival?: string;
+  driverName: string;
+  driverPhone: string;
+  vehiclePlate: string;
+  foodTemperature?: string;
+  foodSafetyWindow?: string;
+  recipientName?: string;
+  recipientNip?: string;
+  bastNumber?: string;
+  isSigned: boolean;
+  deliveryPhotoUrl?: string;
+  notes?: string;
+  isStockDeducted?: boolean;
+  deductedItems?: any[];
+  createdAt: string;
+}
+
+

@@ -297,3 +297,47 @@ model SystemNotification {
   @@index([createdAt])
   @@map("system_notifications")
 }
+
+model MealDistribution {
+  id                 String   @id @default(cuid())
+  dispatchNumber     String   @unique // e.g. SJ-SPPG-20261019-01
+  sppgUnitId         String
+  sppgUnitName       String
+  schoolName         String
+  schoolAddress      String
+  schoolType         String   @default("SD") // SD, SMP, MI, SMA
+  contactPerson      String
+  contactPhone       String
+  menuCode           String   @default("MENU-HARIAN")
+  menuTitle          String
+  menuDetails        Json     // { carb, protein, veggie, fruit, dairy }
+  targetPortions     Int
+  deliveredPortions  Int
+  absentStudents     Int      @default(0)
+  surplusHandling    String?  @default("Diberikan ke guru/staf pendamping")
+  status             String   @default("PREPARING") // PREPARING, IN_TRANSIT, ARRIVED, COMPLETED
+  departureTime      String?
+  estimatedArrival   String?
+  actualArrival      String?
+  driverName         String
+  driverPhone        String
+  vehiclePlate       String
+  foodTemperature    String?  @default("65°C")
+  foodSafetyWindow   String?  @default("Aman s.d 4 jam setelah masak")
+  recipientName      String?
+  recipientNip       String?
+  bastNumber         String?  // e.g. BAST/SPPG/20261019/001
+  isSigned           Boolean  @default(false)
+  deliveryPhotoUrl   String?
+  notes              String?
+  isStockDeducted    Boolean  @default(false)
+  deductedItems      Json?    // Snapshot rincian bahan yang dipotong dari stok
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([sppgUnitId])
+  @@index([createdAt])
+  @@index([status])
+  @@map("meal_distributions")
+}
+

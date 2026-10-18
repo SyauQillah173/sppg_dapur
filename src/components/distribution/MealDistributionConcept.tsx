@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   UtensilsCrossed,
   Truck,
@@ -38,49 +38,16 @@ import {
   MapPin,
   FileSpreadsheet,
   Award,
+  Trash2,
+  Box,
+  PackageCheck,
+  AlertTriangle,
+  ArrowUpRight,
+  FileBadge,
+  CheckSquare,
 } from 'lucide-react';
 import { useStore } from '@/lib/store';
-
-// Interface Data Pengiriman Porsi Makanan
-export interface MealDelivery {
-  id: string;
-  dispatchNumber: string; // e.g. SJ-20261018-01
-  sppgUnitId: string;
-  sppgUnitName: string;
-  schoolName: string;
-  schoolAddress: string;
-  schoolType: 'SD' | 'SMP' | 'MI' | 'SMA';
-  contactPerson: string;
-  contactPhone: string;
-  menuCode: string; // e.g. MENU-20261018-SIANG
-  menuTitle: string;
-  menuDetails: {
-    carb: string;
-    protein: string;
-    veggie: string;
-    fruit: string;
-    dairy: string;
-  };
-  targetPortions: number;
-  deliveredPortions: number;
-  absentStudents: number;
-  surplusHandling: string;
-  status: 'PREPARING' | 'IN_TRANSIT' | 'ARRIVED' | 'COMPLETED';
-  departureTime: string;
-  estimatedArrival: string;
-  actualArrival?: string;
-  driverName: string;
-  driverPhone: string;
-  vehiclePlate: string;
-  foodTemperature: string;
-  foodSafetyWindow: string; // e.g. "Aman s.d 13:30 WIB (< 4 Jam)"
-  recipientName: string;
-  recipientNip?: string;
-  bastNumber: string;
-  isSigned: boolean;
-  notes?: string;
-  createdAt: string;
-}
+import { MealDelivery, MasterIngredient } from '@/lib/types';
 
 const STORAGE_KEY = 'sppg_meal_distributions_v1';
 
@@ -121,6 +88,14 @@ const INITIAL_DELIVERIES: MealDelivery[] = [
     recipientNip: '19820412 200801 2 009',
     bastNumber: 'BAST-MBG-20261018-001',
     isSigned: true,
+    isStockDeducted: true,
+    deductedItems: [
+      { name: 'Beras Super Pulen', quantity: 27, unit: 'Kg' },
+      { name: 'Ayam giling', quantity: 27, unit: 'Kg' },
+      { name: 'Brokoli Segar', quantity: 22.5, unit: 'Kg' },
+      { name: 'Melon Segar', quantity: 22.5, unit: 'Kg' },
+      { name: 'Susu UHT Fresh', quantity: 450, unit: 'Pack' },
+    ],
     notes: 'Kondisi makanan diterima lengkap, hangat, wadah tersegel rapi tanpa kendala.',
     createdAt: '2026-10-18T10:30:00Z',
   },
@@ -160,6 +135,14 @@ const INITIAL_DELIVERIES: MealDelivery[] = [
     recipientNip: '19790615 200501 1 008',
     bastNumber: 'BAST-MBG-20261018-002',
     isSigned: true,
+    isStockDeducted: true,
+    deductedItems: [
+      { name: 'Beras Super Pulen', quantity: 30, unit: 'Kg' },
+      { name: 'Ayam giling', quantity: 30, unit: 'Kg' },
+      { name: 'Brokoli Segar', quantity: 25, unit: 'Kg' },
+      { name: 'Melon Segar', quantity: 25, unit: 'Kg' },
+      { name: 'Susu UHT Fresh', quantity: 500, unit: 'Pack' },
+    ],
     notes: 'Didistribusikan ke 14 ruang kelas tepat saat jam istirahat siang.',
     createdAt: '2026-10-18T10:45:00Z',
   },
@@ -197,29 +180,109 @@ const INITIAL_DELIVERIES: MealDelivery[] = [
     recipientName: 'Ustadz Ahmad Fauzi',
     bastNumber: 'BAST-MBG-20261018-003 (Draft)',
     isSigned: false,
+    isStockDeducted: true,
+    deductedItems: [
+      { name: 'Beras Super Pulen', quantity: 15, unit: 'Kg' },
+      { name: 'Ayam giling', quantity: 15, unit: 'Kg' },
+      { name: 'Brokoli Segar', quantity: 12.5, unit: 'Kg' },
+      { name: 'Melon Segar', quantity: 12.5, unit: 'Kg' },
+      { name: 'Susu UHT Fresh', quantity: 250, unit: 'Pack' },
+    ],
     notes: 'Driver sedang dalam perjalanan, jarak tempuh ~1.5 km.',
     createdAt: '2026-10-18T11:20:00Z',
   },
 ];
 
-export function MealDistributionConcept() {
-  const { userRole, selectedSppgUnit, sppgUnits, procurements } = useStore();
-  const [activeSubTab, setActiveSubTab] = useState<'monitoring' | 'food_costing' | 'pipeline' | 'bast_preview' | 'sop'>('monitoring');
+/**
+ * Helper untuk menghitung estimasi bahan gudang dapur MBG berdasarkan gramasi resmi per porsi siswa
+ */
+function computeMBGDeductionList(targetPortions: number, allIngredients: MasterIngredient[]) {
+  const portions = Math.max(1, Number(targetPortions) || 1);
 
-  // State List Deliveries
-  const [deliveries, setDeliveries] = useState<MealDelivery[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch (e) {
-          console.error(e);
-        }
-      }
-    }
-    return INITIAL_DELIVERIES;
+  // Standar Gramasi Bahan Mentah MBG per porsi anak sekolah:
+  // 1. Karbohidrat (Beras): ~60 gram beras mentah / porsi -> (portions * 60) / 1000 Kg
+  // 2. Protein (Daging Ayam/Sapi): ~60 gram mentah / porsi -> (portions * 60) / 1000 Kg
+  // 3. Sayuran (Brokoli/Wortel/Sayur): ~50 gram mentah / porsi -> (portions * 50) / 1000 Kg
+  // 4. Buah Segar (Melon/Semangka): ~50 gram / porsi -> (portions * 50) / 1000 Kg
+  // 5. Susu UHT / Minuman: 1 pack (kotak/botol) / porsi -> portions Pack
+
+  const specs = [
+    {
+      category: 'Karbohidrat (Beras)',
+      keywords: ['beras', 'nasi'],
+      defaultName: 'Beras Super Pulen',
+      qtyNeeded: Number(((portions * 60) / 1000).toFixed(1)),
+      unit: 'Kg',
+    },
+    {
+      category: 'Protein Hewani (Ayam/Daging)',
+      keywords: ['ayam', 'daging', 'telur'],
+      defaultName: 'Ayam giling',
+      qtyNeeded: Number(((portions * 60) / 1000).toFixed(1)),
+      unit: 'Kg',
+    },
+    {
+      category: 'Sayuran (Brokoli/Wortel)',
+      keywords: ['brokoli', 'wortel', 'sayur', 'selada'],
+      defaultName: 'Brokoli Segar',
+      qtyNeeded: Number(((portions * 50) / 1000).toFixed(1)),
+      unit: 'Kg',
+    },
+    {
+      category: 'Buah Segar (Melon/Semangka)',
+      keywords: ['melon', 'semangka', 'pisang', 'buah'],
+      defaultName: 'Melon Segar',
+      qtyNeeded: Number(((portions * 50) / 1000).toFixed(1)),
+      unit: 'Kg',
+    },
+    {
+      category: 'Minuman Bergizi (Susu UHT)',
+      keywords: ['susu', 'uht'],
+      defaultName: 'Susu UHT Fresh 125ml',
+      qtyNeeded: portions,
+      unit: 'Pack',
+    },
+  ];
+
+  return specs.map((spec) => {
+    // Cari kecocokan di database master ingredients
+    const matched = allIngredients.find((ing) => {
+      const nameLower = ing.name.toLowerCase();
+      return spec.keywords.some((k) => nameLower.includes(k));
+    });
+
+    const currentStock = matched ? Number(matched.currentStock) || 0 : 50;
+    const remainingStock = Math.max(0, currentStock - spec.qtyNeeded);
+    const isDeficit = currentStock < spec.qtyNeeded;
+
+    return {
+      ingredientId: matched?.id,
+      name: matched?.name || spec.defaultName,
+      category: spec.category,
+      unit: matched?.defaultUnit || spec.unit,
+      currentStock,
+      quantity: spec.qtyNeeded,
+      remainingStock,
+      isDeficit,
+    };
   });
+}
+
+export function MealDistributionConcept() {
+  const {
+    userRole,
+    selectedSppgUnit,
+    sppgUnits,
+    procurements,
+    distributions,
+    addDistribution,
+    updateDistribution,
+    deleteDistribution,
+    refreshDistributions,
+    ingredients,
+  } = useStore();
+
+  const [activeSubTab, setActiveSubTab] = useState<'monitoring' | 'food_costing' | 'pipeline' | 'bast_preview' | 'sop'>('monitoring');
 
   // Filter & Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -230,6 +293,10 @@ export function MealDistributionConcept() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printDelivery, setPrintDelivery] = useState<MealDelivery | null>(null);
+  const [isSigningModalOpen, setIsSigningModalOpen] = useState(false);
+  const [signingDelivery, setSigningDelivery] = useState<MealDelivery | null>(null);
+  const [viewStockItemsModal, setViewStockItemsModal] = useState<any[] | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form State untuk Tambah Pengiriman Baru
   const [newForm, setNewForm] = useState({
@@ -238,30 +305,49 @@ export function MealDistributionConcept() {
     schoolType: 'SD' as 'SD' | 'SMP' | 'MI' | 'SMA',
     contactPerson: '',
     contactPhone: '',
-    targetPortions: 200,
+    targetPortions: 250,
     menuTitle: 'Paket Sehat Ceria (Ayam Teriyaki & Melon Segar)',
     carb: 'Nasi Putih Pulen (150g)',
     protein: 'Ayam Fillet Teriyaki (60g)',
-    veggie: 'Tumis Sayur Segar (50g)',
+    veggie: 'Tumis Brokoli & Wortel (50g)',
     fruit: 'Melon Potong (1 Potong)',
     dairy: 'Susu UHT 125ml (1 Kotak)',
     driverName: 'Pak Joko Suwarno',
-    vehiclePlate: 'W 1823 BX',
-    departureTime: '11:00 WIB',
-    estimatedArrival: '11:25 WIB',
+    driverPhone: '0812-9901-2345',
+    vehiclePlate: 'W 1823 BX (Pickup Thermal)',
+    departureTime: '10:45 WIB',
+    estimatedArrival: '11:15 WIB',
     sppgUnitId: (selectedSppgUnit === 'ALL' ? 'SPPG-AA02' : (selectedSppgUnit as string)) as string,
+    deductStockNow: true, // Otomatis potong stok gudang
+  });
+
+  // Form State untuk Sahkan BAST
+  const [bastForm, setBastForm] = useState({
+    recipientName: '',
+    recipientNip: '',
+    foodTemperature: '64.5°C (Optimal)',
+    deliveredPortions: 250,
+    absentStudents: 0,
+    surplusHandling: 'Porsi lebih dialihkan ke guru pendamping / staf piket dengan verifikasi',
+    notes: 'Kondisi makanan diterima lengkap, hangat, wadah tertutup rapi.',
   });
 
   // Kalkulator Costing State
   const [costingPortions, setCostingPortions] = useState(1200);
   const [costingBudget, setCostingBudget] = useState(18000000); // Rp 18.000.000 (Rp 15.000 / porsi)
 
-  // Simpan ke LocalStorage tiap perubahan
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(deliveries));
+  // Gabungkan list data: gunakan live database `distributions` dari store jika ada, fallback ke `INITIAL_DELIVERIES`
+  const activeDeliveriesList: MealDelivery[] = useMemo(() => {
+    if (distributions && distributions.length > 0) {
+      return distributions;
     }
-  }, [deliveries]);
+    return INITIAL_DELIVERIES;
+  }, [distributions]);
+
+  // Hitung estimasi bahan yang akan dipotong untuk form penambahan
+  const estimatedDeductions = useMemo(() => {
+    return computeMBGDeductionList(newForm.targetPortions, ingredients);
+  }, [newForm.targetPortions, ingredients]);
 
   // Proteksi Role Superadmin
   if (userRole === 'EXECUTIVE_AUDITOR') {
@@ -272,7 +358,7 @@ export function MealDistributionConcept() {
         </div>
         <h3 className="text-base font-semibold text-slate-800">Akses Dibatasi (Mode Pemantau / Auditor)</h3>
         <p className="text-xs text-slate-500 mt-2">
-          Menu Konsep Distribusi Porsi Makanan hanya dapat diakses oleh Superadmin. Tampilan Auditor difokuskan khusus pada pengawasan anggaran dan belanja.
+          Menu Distribusi Porsi Makanan hanya dapat diakses oleh Superadmin. Tampilan Auditor difokuskan khusus pada pengawasan anggaran dan belanja.
         </p>
       </div>
     );
@@ -284,7 +370,7 @@ export function MealDistributionConcept() {
       : sppgUnits.find((u) => u.id === selectedSppgUnit)?.name || 'Dapur SPPG';
 
   // Filter Deliveries
-  const filteredDeliveries = deliveries.filter((d) => {
+  const filteredDeliveries = activeDeliveriesList.filter((d) => {
     if (selectedSppgUnit !== 'ALL' && d.sppgUnitId !== selectedSppgUnit) return false;
     if (statusFilter !== 'ALL' && d.status !== statusFilter) return false;
     if (searchQuery.trim()) {
@@ -300,13 +386,13 @@ export function MealDistributionConcept() {
   });
 
   // KPI Metrics
-  const totalTargetPortions = filteredDeliveries.reduce((acc, d) => acc + d.targetPortions, 0);
-  const totalDeliveredPortions = filteredDeliveries.reduce((acc, d) => acc + d.deliveredPortions, 0);
+  const totalTargetPortions = filteredDeliveries.reduce((acc, d) => acc + (d.targetPortions || 0), 0);
+  const totalDeliveredPortions = filteredDeliveries.reduce((acc, d) => acc + (d.deliveredPortions || 0), 0);
   const totalCompletedSchools = filteredDeliveries.filter((d) => d.status === 'COMPLETED').length;
   const totalTransitSchools = filteredDeliveries.filter((d) => d.status === 'IN_TRANSIT').length;
 
-  // Handle Tambah Pengiriman Baru
-  const handleCreateDelivery = (e: React.FormEvent) => {
+  // Handle Tambah Pengiriman Baru ke Database PostgreSQL
+  const handleCreateDelivery = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newForm.schoolName.trim()) {
       alert('Nama sekolah penerima wajib diisi');
@@ -315,115 +401,193 @@ export function MealDistributionConcept() {
 
     const unitObj = sppgUnits.find((u) => u.id === newForm.sppgUnitId);
     const unitName = unitObj?.name || 'SPPG ABAR ABIR 02';
-    const randomId = 'del-' + Date.now();
-    const count = deliveries.length + 1;
-    const pad = String(count).padStart(2, '0');
+    const timestamp = Date.now().toString().slice(-4);
+    const pad = String(activeDeliveriesList.length + 1).padStart(2, '0');
 
-    const created: MealDelivery = {
-      id: randomId,
-      dispatchNumber: `SJ-SPPG-20261018-${pad}`,
-      sppgUnitId: newForm.sppgUnitId,
-      sppgUnitName: unitName,
-      schoolName: newForm.schoolName,
-      schoolAddress: newForm.schoolAddress || 'Kecamatan Bungah',
-      schoolType: newForm.schoolType,
-      contactPerson: newForm.contactPerson || 'Pihak Sekolah',
-      contactPhone: newForm.contactPhone || '0812-xxxx-xxxx',
-      menuCode: 'MENU-20261018-SIANG',
-      menuTitle: newForm.menuTitle,
-      menuDetails: {
-        carb: newForm.carb,
-        protein: newForm.protein,
-        veggie: newForm.veggie,
-        fruit: newForm.fruit,
-        dairy: newForm.dairy,
-      },
-      targetPortions: Number(newForm.targetPortions) || 100,
-      deliveredPortions: 0,
-      absentStudents: 0,
-      surplusHandling: 'Porsi lebih dialokasikan untuk guru/staf TU dengan verifikasi',
-      status: 'PREPARING',
-      departureTime: newForm.departureTime,
-      estimatedArrival: newForm.estimatedArrival,
-      driverName: newForm.driverName,
-      driverPhone: '0812-9901-2345',
-      vehiclePlate: newForm.vehiclePlate,
-      foodTemperature: '65°C (Dalam Thermal Box)',
-      foodSafetyWindow: 'Batas Konsumsi: 13:30 WIB (Maks 4 Jam)',
-      recipientName: newForm.contactPerson || 'Kepala Sekolah / Guru Piket',
-      bastNumber: `BAST-MBG-20261018-${pad} (Draft)`,
-      isSigned: false,
-      notes: 'Surat jalan dibuat oleh Superadmin.',
-      createdAt: new Date().toISOString(),
-    };
+    setIsSubmitting(true);
+    try {
+      const payload = {
+        dispatchNumber: `SJ-SPPG-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${pad}`,
+        sppgUnitId: newForm.sppgUnitId,
+        sppgUnitName: unitName,
+        schoolName: newForm.schoolName.trim(),
+        schoolAddress: newForm.schoolAddress.trim() || 'Kecamatan Manyar / Bungah',
+        schoolType: newForm.schoolType,
+        contactPerson: newForm.contactPerson.trim() || 'Pihak Sekolah',
+        contactPhone: newForm.contactPhone.trim() || '0812-xxxx-xxxx',
+        menuCode: `MENU-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-SIANG`,
+        menuTitle: newForm.menuTitle,
+        menuDetails: {
+          carb: newForm.carb,
+          protein: newForm.protein,
+          veggie: newForm.veggie,
+          fruit: newForm.fruit,
+          dairy: newForm.dairy,
+        },
+        targetPortions: Number(newForm.targetPortions) || 100,
+        deliveredPortions: 0,
+        absentStudents: 0,
+        surplusHandling: 'Porsi lebih dialokasikan untuk guru pendamping dan piket dengan verifikasi',
+        status: 'PREPARING',
+        departureTime: newForm.departureTime,
+        estimatedArrival: newForm.estimatedArrival,
+        driverName: newForm.driverName,
+        driverPhone: newForm.driverPhone,
+        vehiclePlate: newForm.vehiclePlate,
+        foodTemperature: '64.5°C (Thermal Box)',
+        foodSafetyWindow: 'Batas Konsumsi: 13:30 WIB (Maksimal 4 Jam)',
+        recipientName: newForm.contactPerson || 'Kepala Sekolah / Guru Piket',
+        bastNumber: `BAST-MBG-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${pad}`,
+        isSigned: false,
+        notes: 'Surat jalan diterbitkan resmi oleh Superadmin Logistik.',
+        deductStockNow: newForm.deductStockNow,
+        deductedItems: newForm.deductStockNow
+          ? estimatedDeductions.map((item) => ({
+              ingredientId: item.ingredientId,
+              name: item.name,
+              quantity: item.quantity,
+              unit: item.unit,
+            }))
+          : [],
+      };
 
-    setDeliveries([created, ...deliveries]);
-    setIsAddModalOpen(false);
-    // Reset Form
-    setNewForm({
-      schoolName: '',
-      schoolAddress: '',
-      schoolType: 'SD',
-      contactPerson: '',
-      contactPhone: '',
-      targetPortions: 200,
-      menuTitle: 'Paket Sehat Ceria (Ayam Teriyaki & Melon Segar)',
-      carb: 'Nasi Putih Pulen (150g)',
-      protein: 'Ayam Fillet Teriyaki (60g)',
-      veggie: 'Tumis Sayur Segar (50g)',
-      fruit: 'Melon Potong (1 Potong)',
-      dairy: 'Susu UHT 125ml (1 Kotak)',
-      driverName: 'Pak Joko Suwarno',
-      vehiclePlate: 'W 1823 BX',
-      departureTime: '11:00 WIB',
-      estimatedArrival: '11:25 WIB',
-      sppgUnitId: (selectedSppgUnit === 'ALL' ? 'SPPG-AA02' : (selectedSppgUnit as string)) as string,
-    });
+      const res = await addDistribution(payload);
+      if (res && !res.ok) {
+        alert('Gagal menyimpan pengiriman: ' + (res.error || 'Terjadi kendala pada server'));
+        return;
+      }
+
+      setIsAddModalOpen(false);
+      // Reset Form
+      setNewForm({
+        schoolName: '',
+        schoolAddress: '',
+        schoolType: 'SD',
+        contactPerson: '',
+        contactPhone: '',
+        targetPortions: 250,
+        menuTitle: 'Paket Sehat Ceria (Ayam Teriyaki & Melon Segar)',
+        carb: 'Nasi Putih Pulen (150g)',
+        protein: 'Ayam Fillet Teriyaki (60g)',
+        veggie: 'Tumis Brokoli & Wortel (50g)',
+        fruit: 'Melon Potong (1 Potong)',
+        dairy: 'Susu UHT 125ml (1 Kotak)',
+        driverName: 'Pak Joko Suwarno',
+        driverPhone: '0812-9901-2345',
+        vehiclePlate: 'W 1823 BX (Pickup Thermal)',
+        departureTime: '10:45 WIB',
+        estimatedArrival: '11:15 WIB',
+        sppgUnitId: (selectedSppgUnit === 'ALL' ? 'SPPG-AA02' : (selectedSppgUnit as string)) as string,
+        deductStockNow: true,
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  // Update Status Cepat
-  const handleUpdateStatus = (id: string, nextStatus: MealDelivery['status']) => {
-    setDeliveries((prev) =>
-      prev.map((item) => {
-        if (item.id !== id) return item;
-        let delivered = item.deliveredPortions;
-        let isSigned = item.isSigned;
-        let actualArr = item.actualArrival;
+  // Update Status Cepat (Kirim Driver / Tiba)
+  const handleUpdateStatus = async (id: string, nextStatus: MealDelivery['status']) => {
+    const target = activeDeliveriesList.find((d) => d.id === id);
+    if (!target) return;
 
-        if (nextStatus === 'COMPLETED') {
-          delivered = item.targetPortions;
-          isSigned = true;
-          actualArr = actualArr || '11:15 WIB';
-        } else if (nextStatus === 'ARRIVED') {
-          actualArr = actualArr || '11:10 WIB';
-        }
+    const updates: any = { status: nextStatus };
+    if (nextStatus === 'IN_TRANSIT') {
+      updates.departureTime = `${new Date().getHours().toString().padStart(2, '0')}:${new Date().getMinutes().toString().padStart(2, '0')} WIB`;
+    } else if (nextStatus === 'ARRIVED') {
+      updates.actualArrival = `${new Date().getHours().toString().padStart(2, '0')}:${new Date().getMinutes().toString().padStart(2, '0')} WIB`;
+    }
 
-        return {
-          ...item,
-          status: nextStatus,
-          deliveredPortions: delivered,
-          isSigned,
-          actualArrival: actualArr,
-        };
-      })
-    );
-
+    await updateDistribution(id, updates);
     if (selectedDelivery && selectedDelivery.id === id) {
-      setSelectedDelivery((prev) => (prev ? { ...prev, status: nextStatus } : null));
+      setSelectedDelivery((prev) => (prev ? { ...prev, ...updates } : null));
     }
   };
 
-  // Reset ke data awal jika ingin restart demo
-  const handleResetDemoData = () => {
-    if (confirm('Kembalikan data simulasi distribusi ke awal?')) {
-      setDeliveries(INITIAL_DELIVERIES);
-      localStorage.removeItem(STORAGE_KEY);
+  // Buka Modal Pengesahan BAST
+  const handleOpenSigningModal = (delivery: MealDelivery) => {
+    setSigningDelivery(delivery);
+    setBastForm({
+      recipientName: delivery.recipientName || delivery.contactPerson || 'Kepala Sekolah / Guru Piket',
+      recipientNip: delivery.recipientNip || '',
+      foodTemperature: delivery.foodTemperature || '64.5°C (Sangat Hangat)',
+      deliveredPortions: delivery.targetPortions,
+      absentStudents: delivery.absentStudents || 0,
+      surplusHandling: delivery.surplusHandling || 'Porsi lebih dialihkan ke guru pendamping / staf piket dengan verifikasi',
+      notes: delivery.notes || 'Kondisi makanan diterima lengkap, hangat, wadah tertutup rapi.',
+    });
+    setIsSigningModalOpen(true);
+  };
+
+  // Submit Pengesahan BAST
+  const handleConfirmBAST = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!signingDelivery) return;
+
+    setIsSubmitting(true);
+    try {
+      const updates = {
+        status: 'COMPLETED' as const,
+        isSigned: true,
+        recipientName: bastForm.recipientName.trim(),
+        recipientNip: bastForm.recipientNip.trim() || undefined,
+        foodTemperature: bastForm.foodTemperature.trim(),
+        deliveredPortions: Number(bastForm.deliveredPortions) || signingDelivery.targetPortions,
+        absentStudents: Number(bastForm.absentStudents) || 0,
+        surplusHandling: bastForm.surplusHandling.trim(),
+        notes: bastForm.notes.trim(),
+        actualArrival:
+          signingDelivery.actualArrival ||
+          `${new Date().getHours().toString().padStart(2, '0')}:${new Date().getMinutes().toString().padStart(2, '0')} WIB`,
+      };
+
+      const res = await updateDistribution(signingDelivery.id, updates);
+      if (res && !res.ok) {
+        alert('Gagal mengesahkan BAST: ' + (res.error || 'Terjadi kendala pada server'));
+        return;
+      }
+
+      setIsSigningModalOpen(false);
+      setSigningDelivery(null);
+      if (selectedDelivery && selectedDelivery.id === signingDelivery.id) {
+        setSelectedDelivery((prev) => (prev ? { ...prev, ...updates } : null));
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  // Kalkulasi Food Costing
+  // Hapus Pengiriman dengan proteksi restore stok
+  const handleDeleteDelivery = async (delivery: MealDelivery) => {
+    const warningMsg = delivery.isStockDeducted
+      ? `Hapus surat jalan "${delivery.dispatchNumber}" untuk ${delivery.schoolName}?\n\nPERHATIAN: Stok bahan gudang yang sebelumnya dipotong (${delivery.targetPortions} porsi) akan OTOMATIS DIKEMBALIKAN (RESTORE) ke gudang dapur!`
+      : `Hapus surat jalan "${delivery.dispatchNumber}" untuk ${delivery.schoolName}?`;
+
+    if (!confirm(warningMsg)) return;
+
+    await deleteDistribution(delivery.id);
+    if (selectedDelivery?.id === delivery.id) setSelectedDelivery(null);
+  };
+
+  // Seed Contoh Pengiriman ke Database jika masih kosong
+  const handleSeedDemoData = async () => {
+    if (!confirm('Simpan 3 contoh data jadwal pengiriman distribusi MBG ini secara permanen ke database PostgreSQL Neon?')) return;
+    setIsSubmitting(true);
+    try {
+      for (const item of INITIAL_DELIVERIES) {
+        await addDistribution({
+          ...item,
+          deductStockNow: false, // jangan dobel potong stok untuk seed awal
+        });
+      }
+      await refreshDistributions();
+      alert('Berhasil menyimpan 3 contoh data distribusi ke database PostgreSQL!');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Kalkulasi Food Costing Tab 2
   const costPerPortion = costingPortions > 0 ? Math.round(costingBudget / costingPortions) : 0;
-  const totalWeightPerPortion = 150 + 60 + 50 + 80 + 125; // Gramasi ~465 gram per siswa
 
   return (
     <div className="space-y-6 pb-12">
@@ -454,8 +618,7 @@ export function MealDistributionConcept() {
             </h1>
 
             <p className="text-xs sm:text-sm text-slate-300 max-w-3xl leading-relaxed">
-              Modul cerdas hilir Program Makan Bergizi Gratis (MBG): Menjadwalkan pengiriman armada dapur, melacak status tiba di
-              sekolah secara real-time, menerbitkan Surat Jalan & BAST Digital, serta menghitung HPP (Costing) per porsi siswa.
+              Modul cerdas hilir Program Makan Bergizi Gratis (MBG): Menjadwalkan pengiriman armada dapur, otomatis memotong stok bahan mentah gudang, melacak status tiba di sekolah secara real-time, menerbitkan Surat Jalan & BAST resmi, serta menghitung HPP per porsi siswa.
             </p>
           </div>
 
@@ -468,14 +631,18 @@ export function MealDistributionConcept() {
               <Plus className="w-4 h-4" />
               + Buat Surat Jalan Baru
             </button>
-            <button
-              onClick={handleResetDemoData}
-              type="button"
-              title="Reset data demo ke awal"
-              className="inline-flex items-center justify-center p-2.5 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-slate-300 transition"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
+            {distributions.length === 0 && (
+              <button
+                onClick={handleSeedDemoData}
+                type="button"
+                disabled={isSubmitting}
+                title="Sinkronkan contoh data awal ke PostgreSQL"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-indigo-200 transition"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSubmitting ? 'animate-spin' : ''}`} />
+                Simpan ke Database
+              </button>
+            )}
           </div>
         </div>
 
@@ -483,9 +650,7 @@ export function MealDistributionConcept() {
         <div className="mt-5 pt-4 border-t border-white/10 flex items-start gap-3 text-xs text-indigo-200/90 bg-indigo-950/40 p-3 rounded-xl border border-indigo-800/40">
           <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
           <p>
-            <strong className="text-white">Fokus Kerja Superadmin:</strong> Pembukuan belanja dan kas tetap menjadi prioritas
-            harian Anda. Modul konsep pengiriman ini kini telah aktif dengan data interaktif (tersimpan lokal di browser Anda)
-            sehingga Anda sudah dapat mensimulasikan pencatatan surat jalan pengiriman dan serah terima sekolah secara lengkap!
+            <strong className="text-white">Ekosistem Terintegrasi:</strong> Setiap kali Anda membuat pengiriman baru, sistem secara cerdas menghitung kebutuhan gramasi beras, daging ayam, sayuran, buah, dan susu, lalu otomatis mengurangi stok gudang dapur (Stok KELUAR) di Menu 4 (Stok Bahan) dengan audit trail lengkap!
           </p>
         </div>
       </div>
@@ -575,7 +740,7 @@ export function MealDistributionConcept() {
                 {totalTargetPortions.toLocaleString('id-ID')}{' '}
                 <span className="text-xs font-normal text-slate-500">Porsi</span>
               </p>
-              <div className="text-[11px] text-slate-500 mt-1">Total di {filteredDeliveries.length} sekolah tujuan</div>
+              <div className="text-[11px] text-slate-500 mt-1">Total di {filteredDeliveries.length} sekolah sasaran</div>
             </div>
 
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
@@ -587,7 +752,7 @@ export function MealDistributionConcept() {
                 {totalDeliveredPortions.toLocaleString('id-ID')}{' '}
                 <span className="text-xs font-normal text-slate-500">Porsi</span>
               </p>
-              <div className="text-[11px] text-emerald-700 font-medium mt-1">{totalCompletedSchools} Sekolah Telah Lengkap</div>
+              <div className="text-[11px] text-emerald-700 font-medium mt-1">{totalCompletedSchools} Sekolah Telah BAST</div>
             </div>
 
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
@@ -596,11 +761,11 @@ export function MealDistributionConcept() {
                 <Truck className="w-4 h-4 text-amber-500" />
               </div>
               <p className="text-2xl font-bold text-amber-600 mt-1">
-                {(totalTargetPortions - totalDeliveredPortions).toLocaleString('id-ID')}{' '}
+                {Math.max(0, totalTargetPortions - totalDeliveredPortions).toLocaleString('id-ID')}{' '}
                 <span className="text-xs font-normal text-slate-500">Porsi</span>
               </p>
               <div className="text-[11px] text-amber-700 font-medium mt-1">
-                {totalTransitSchools > 0 ? `${totalTransitSchools} Armada OTW` : 'Semua Selesai'}
+                {totalTransitSchools > 0 ? `${totalTransitSchools} Armada OTW` : 'Semua Tiba'}
               </div>
             </div>
 
@@ -610,9 +775,9 @@ export function MealDistributionConcept() {
                 <ThermometerSun className="w-4 h-4 text-rose-500" />
               </div>
               <p className="text-2xl font-bold text-slate-800 mt-1">
-                63.5°C <span className="text-xs font-normal text-emerald-600 font-medium">Hangat Optimal</span>
+                64.5°C <span className="text-xs font-normal text-emerald-600 font-medium">Hangat Optimal</span>
               </p>
-              <div className="text-[11px] text-slate-500 mt-1">Standar wajib: &gt; 60°C saat diterima</div>
+              <div className="text-[11px] text-slate-500 mt-1">Standar BGN: &gt; 60°C saat diterima</div>
             </div>
           </div>
 
@@ -623,7 +788,7 @@ export function MealDistributionConcept() {
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Cari nama sekolah, no. surat jalan, driver..."
+                  placeholder="Cari sekolah, no. surat jalan, driver..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900"
@@ -641,7 +806,7 @@ export function MealDistributionConcept() {
                     statusFilter === 'ALL' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  Semua ({deliveries.length})
+                  Semua ({activeDeliveriesList.length})
                 </button>
                 <button
                   type="button"
@@ -684,6 +849,7 @@ export function MealDistributionConcept() {
               const isCompleted = delivery.status === 'COMPLETED';
               const isInTransit = delivery.status === 'IN_TRANSIT';
               const isPreparing = delivery.status === 'PREPARING';
+              const isArrived = delivery.status === 'ARRIVED';
 
               return (
                 <div
@@ -693,7 +859,7 @@ export function MealDistributionConcept() {
                   {/* Card Header */}
                   <div className="p-5 border-b border-slate-100">
                     <div className="flex items-start justify-between gap-2 mb-2">
-                      <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
+                      <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
                         {delivery.dispatchNumber}
                       </span>
                       <span
@@ -702,13 +868,22 @@ export function MealDistributionConcept() {
                             ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                             : isInTransit
                             ? 'bg-amber-50 text-amber-700 border border-amber-200 animate-pulse'
+                            : isArrived
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
                             : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
                         }`}
                       >
                         {isCompleted && <CheckCircle2 className="w-3 h-3" />}
                         {isInTransit && <Truck className="w-3 h-3" />}
+                        {isArrived && <MapPin className="w-3 h-3" />}
                         {isPreparing && <Clock className="w-3 h-3" />}
-                        {isCompleted ? 'SELESAI DITERIMA' : isInTransit ? 'SEDANG DIKIRIM (OTW)' : 'SEDANG PACKING'}
+                        {isCompleted
+                          ? 'SELESAI (BAST SAH)'
+                          : isInTransit
+                          ? 'SEDANG DIKIRIM (OTW)'
+                          : isArrived
+                          ? 'TIBA DI SEKOLAH'
+                          : 'SEDANG PACKING'}
                       </span>
                     </div>
 
@@ -723,7 +898,7 @@ export function MealDistributionConcept() {
                       <div className="flex items-center justify-between text-xs mb-1">
                         <span className="text-slate-500 font-medium">Jumlah Porsi:</span>
                         <span className="font-bold text-slate-800">
-                          {delivery.deliveredPortions} / {delivery.targetPortions} Porsi
+                          {delivery.deliveredPortions || (isCompleted ? delivery.targetPortions : 0)} / {delivery.targetPortions} Porsi
                         </span>
                       </div>
                       <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
@@ -732,7 +907,11 @@ export function MealDistributionConcept() {
                             isCompleted ? 'bg-emerald-500' : 'bg-amber-500'
                           }`}
                           style={{
-                            width: `${(delivery.deliveredPortions / delivery.targetPortions) * 100}%`,
+                            width: `${
+                              (((delivery.deliveredPortions || (isCompleted ? delivery.targetPortions : 0)) /
+                                (delivery.targetPortions || 1)) *
+                                100)
+                            }%`,
                           }}
                         />
                       </div>
@@ -746,75 +925,111 @@ export function MealDistributionConcept() {
                       <span className="font-medium text-slate-800 text-right">{delivery.driverName}</span>
                     </div>
                     <div className="flex justify-between items-center">
+                      <span className="text-slate-400">Plat Kendaraan:</span>
+                      <span className="font-mono text-slate-700">{delivery.vehiclePlate}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
                       <span className="text-slate-400">Jam Pengantaran:</span>
                       <span className="font-medium text-slate-800">
-                        {delivery.departureTime} (Tiba: {delivery.estimatedArrival})
+                        {delivery.departureTime} &rarr; {delivery.actualArrival || delivery.estimatedArrival}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-slate-400">Penerima Sekolah:</span>
-                      <span className="font-medium text-slate-800 text-right">{delivery.contactPerson}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-400">Suhu Makanan:</span>
-                      <span className="font-semibold text-rose-600 flex items-center gap-1">
-                        <ThermometerSun className="w-3.5 h-3.5" />
-                        {delivery.foodTemperature}
-                      </span>
+                      <span className="font-medium text-slate-800">{delivery.recipientName || delivery.contactPerson}</span>
                     </div>
 
-                    <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-500 italic">
-                      🍱 {delivery.menuTitle}
+                    {/* Badge Pemotongan Stok Bahan Gudang */}
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                      <span className="text-slate-400">Stok Bahan Gudang:</span>
+                      {delivery.isStockDeducted ? (
+                        <button
+                          type="button"
+                          onClick={() => setViewStockItemsModal(delivery.deductedItems || [])}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md hover:bg-emerald-100 transition"
+                        >
+                          <PackageCheck className="w-3.5 h-3.5 text-emerald-600" />
+                          Terpotong Otomatis
+                        </button>
+                      ) : (
+                        <span className="text-[11px] text-slate-400 italic">Belum Dipotong</span>
+                      )}
                     </div>
                   </div>
 
                   {/* Card Footer Actions */}
-                  <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedDelivery(delivery)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition shadow-2xs flex items-center gap-1"
-                    >
-                      <Eye className="w-3.5 h-3.5 text-slate-500" />
-                      Detail & BAST
-                    </button>
-
-                    {/* Quick Status Buttons */}
-                    {isPreparing && (
+                  <div className="p-4 bg-slate-50 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
                       <button
                         type="button"
-                        onClick={() => handleUpdateStatus(delivery.id, 'IN_TRANSIT')}
-                        className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white transition flex items-center gap-1 shadow-2xs"
+                        onClick={() => setSelectedDelivery(delivery)}
+                        className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-200 transition"
+                        title="Lihat Detail Lengkap"
                       >
-                        <Truck className="w-3.5 h-3.5" />
-                        Mulai Kirim (OTW)
+                        <Eye className="w-4 h-4" />
                       </button>
-                    )}
-
-                    {isInTransit && (
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateStatus(delivery.id, 'COMPLETED')}
-                        className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition flex items-center gap-1 shadow-2xs"
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                        Konfirmasi Selesai
-                      </button>
-                    )}
-
-                    {isCompleted && (
                       <button
                         type="button"
                         onClick={() => {
                           setPrintDelivery(delivery);
                           setIsPrintModalOpen(true);
                         }}
-                        className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition flex items-center gap-1"
+                        className="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-100 transition"
+                        title="Cetak Surat Jalan & BAST"
                       >
-                        <Printer className="w-3.5 h-3.5" />
-                        Cetak BAST
+                        <Printer className="w-4 h-4" />
                       </button>
-                    )}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteDelivery(delivery)}
+                        className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-100 transition"
+                        title="Hapus Pengiriman (Restore Stok)"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {isPreparing && (
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateStatus(delivery.id, 'IN_TRANSIT')}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white transition flex items-center gap-1 shadow-2xs"
+                        >
+                          <Truck className="w-3.5 h-3.5" />
+                          Kirim Armada
+                        </button>
+                      )}
+
+                      {isInTransit && (
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateStatus(delivery.id, 'ARRIVED')}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition flex items-center gap-1 shadow-2xs"
+                        >
+                          <MapPin className="w-3.5 h-3.5" />
+                          Tiba di Sekolah
+                        </button>
+                      )}
+
+                      {(isArrived || isInTransit) && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenSigningModal(delivery)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition flex items-center gap-1 shadow-2xs"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          Sahkan BAST
+                        </button>
+                      )}
+
+                      {isCompleted && (
+                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100/80 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          Selesai
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -835,8 +1050,7 @@ export function MealDistributionConcept() {
               Kalkulator Biaya Bahan & Konversi Gramasi Gizi per Siswa
             </h2>
             <p className="text-xs text-slate-500 mt-1 max-w-3xl">
-              Simulasi perhitungan otomatis yang menghubungkan total biaya belanja dapur dengan jumlah porsi siswa yang dihasilkan.
-              Menghitung Harga Pokok Porsi (HPP) serta proporsi gramasi bahan makanan per piring siswa.
+              Simulasi perhitungan otomatis yang menghubungkan total biaya belanja dapur dengan jumlah porsi siswa yang dihasilkan. Menghitung Harga Pokok Porsi (HPP) serta proporsi gramasi bahan makanan per piring siswa.
             </p>
           </div>
 
@@ -857,7 +1071,7 @@ export function MealDistributionConcept() {
                 />
               </div>
               <span className="text-[11px] text-slate-400 mt-1 block">
-                Contoh: Rp 18.000.000 (total nota belanja hari ini)
+                Contoh: Rp 18.000.000 (total belanja bahan)
               </span>
             </div>
 
@@ -875,7 +1089,7 @@ export function MealDistributionConcept() {
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-slate-400">Porsi</span>
               </div>
-              <span className="text-[11px] text-slate-400 mt-1 block">Sesuai total porsi siswa 1.200 porsi</span>
+              <span className="text-[11px] text-slate-400 mt-1 block">Total porsi siswa sasaran</span>
             </div>
 
             <div className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white p-4 rounded-xl flex flex-col justify-between">
@@ -902,35 +1116,43 @@ export function MealDistributionConcept() {
                 <span className="text-[10px] font-bold text-amber-600 uppercase">Karbohidrat</span>
                 <h4 className="text-xs font-bold text-slate-800">Nasi Putih Pulen</h4>
                 <p className="text-base font-bold text-slate-900">~150 Gram</p>
-                <div className="text-[11px] text-slate-500">Kebutuhan Beras: 120 Kg / 1.200 Porsi</div>
+                <div className="text-[11px] text-slate-500">
+                  Kebutuhan Beras: {((costingPortions * 60) / 1000).toFixed(0)} Kg / {costingPortions} Porsi
+                </div>
               </div>
 
               <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs space-y-1">
                 <span className="text-[10px] font-bold text-rose-600 uppercase">Protein Hewani</span>
                 <h4 className="text-xs font-bold text-slate-800">Ayam Fillet Teriyaki</h4>
                 <p className="text-base font-bold text-slate-900">~60-70 Gram</p>
-                <div className="text-[11px] text-slate-500">Kebutuhan Daging: 75 Kg / 1.200 Porsi</div>
+                <div className="text-[11px] text-slate-500">
+                  Kebutuhan Ayam: {((costingPortions * 60) / 1000).toFixed(0)} Kg / {costingPortions} Porsi
+                </div>
               </div>
 
               <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs space-y-1">
                 <span className="text-[10px] font-bold text-emerald-600 uppercase">Sayur & Serat</span>
                 <h4 className="text-xs font-bold text-slate-800">Tumis Brokoli Wortel</h4>
                 <p className="text-base font-bold text-slate-900">~50 Gram</p>
-                <div className="text-[11px] text-slate-500">Kebutuhan Sayur: 60 Kg / 1.200 Porsi</div>
+                <div className="text-[11px] text-slate-500">
+                  Kebutuhan Sayur: {((costingPortions * 50) / 1000).toFixed(0)} Kg / {costingPortions} Porsi
+                </div>
               </div>
 
               <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs space-y-1">
                 <span className="text-[10px] font-bold text-indigo-600 uppercase">Buah Segar</span>
                 <h4 className="text-xs font-bold text-slate-800">Melon Potong</h4>
                 <p className="text-base font-bold text-slate-900">~1 Potong (80g)</p>
-                <div className="text-[11px] text-slate-500">Kebutuhan Melon: 10 Kg / 1.200 Porsi</div>
+                <div className="text-[11px] text-slate-500">
+                  Kebutuhan Buah: {((costingPortions * 50) / 1000).toFixed(0)} Kg / {costingPortions} Porsi
+                </div>
               </div>
 
               <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-2xs space-y-1">
                 <span className="text-[10px] font-bold text-blue-600 uppercase">Susu Sehat</span>
                 <h4 className="text-xs font-bold text-slate-800">Susu UHT Fresh</h4>
                 <p className="text-base font-bold text-slate-900">125 ml</p>
-                <div className="text-[11px] text-slate-500">Kebutuhan Susu: 1.200 Kotak</div>
+                <div className="text-[11px] text-slate-500">Kebutuhan Susu: {costingPortions} Kotak</div>
               </div>
             </div>
           </div>
@@ -944,13 +1166,12 @@ export function MealDistributionConcept() {
               <div>
                 <h4 className="font-bold text-indigo-950">Estimasi Energi & Gizi Lengkap per Porsi:</h4>
                 <p className="text-indigo-800/80">
-                  Total Energi: <strong>~635 Kkal</strong> | Protein: <strong>~23.5 g</strong> | Karbohidrat:{' '}
-                  <strong>~82 g</strong> | Lemak Sehat: <strong>~14 g</strong>
+                  Total Energi: <strong>~635 Kkal</strong> | Protein: <strong>~23.5 g</strong> | Karbohidrat: <strong>~82 g</strong> | Lemak Sehat: <strong>~14 g</strong>
                 </p>
               </div>
             </div>
             <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 font-bold shrink-0">
-              ✓ 100% Memenuhi Standar Gizi Anak Sekolah
+              ✓ 100% Memenuhi Standar Gizi Anak Sekolah BGN
             </span>
           </div>
         </div>
@@ -963,14 +1184,17 @@ export function MealDistributionConcept() {
             <div>
               <h2 className="text-base font-bold text-slate-800">Pusat Dokumen Resmi Pengiriman Makanan</h2>
               <p className="text-xs text-slate-500 mt-1">
-                Pilih surat jalan / BAST untuk dicetak atau diekspor ke PDF dengan tata letak resmi
+                Pilih surat jalan / BAST untuk dicetak atau diekspor ke PDF dengan format kop resmi BGN SPPG
               </p>
             </div>
           </div>
 
           <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
-            {deliveries.map((del) => (
-              <div key={del.id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white hover:bg-slate-50 transition">
+            {activeDeliveriesList.map((del) => (
+              <div
+                key={del.id}
+                className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white hover:bg-slate-50 transition"
+              >
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-mono font-bold text-slate-900">{del.dispatchNumber}</span>
@@ -986,7 +1210,7 @@ export function MealDistributionConcept() {
                   </div>
                   <h4 className="text-sm font-bold text-slate-900 mt-1">{del.schoolName}</h4>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    {del.deliveredPortions || del.targetPortions} Porsi • Pengantar: {del.driverName} ({del.vehiclePlate}) • Penerima: {del.recipientName}
+                    {del.deliveredPortions || del.targetPortions} Porsi • Driver: {del.driverName} ({del.vehiclePlate}) • Penerima: {del.recipientName || del.contactPerson}
                   </p>
                 </div>
 
@@ -1061,11 +1285,11 @@ export function MealDistributionConcept() {
                   </span>
                   <h4 className="text-xs font-bold text-slate-800">3. Stok Bahan & Olah Dapur</h4>
                   <p className="text-[11px] text-slate-600 mt-1 leading-snug">
-                    Bahan mentah masuk gudang dapur, dikeluarkan saat juru masak mulai mengolah menu porsi.
+                    Bahan mentah masuk gudang dapur, otomatis berkurang saat jadwal distribusi diproses.
                   </p>
                 </div>
                 <div className="mt-3 pt-2 border-t border-emerald-200/60 text-[10px] text-emerald-800 font-medium">
-                  ✓ Menu Stok Bahan Dapur
+                  ✓ Menu Stok Bahan (Otomatis KELUAR)
                 </div>
               </div>
 
@@ -1121,8 +1345,7 @@ export function MealDistributionConcept() {
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
                 Makanan matang harus sudah dibagikan dan dikonsumsi oleh siswa maksimal dalam tempo <strong>4 jam</strong>{' '}
-                sejak selesai dimasak oleh juru masak di dapur. Makanan yang melebihi batas 4 jam wajib diuji ulang sebelum
-                dibagikan.
+                sejak selesai dimasak oleh juru masak di dapur. Makanan yang melebihi batas 4 jam wajib diuji ulang sebelum dibagikan.
               </p>
             </div>
 
@@ -1132,8 +1355,7 @@ export function MealDistributionConcept() {
                 <span>2. Suhu Kontrol Penyimpanan & Transport</span>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Makanan panas (nasi, lauk berkuah/tumis) wajib disimpan di wadah insulated thermal box agar suhu terjaga di
-                atas <strong>60°C</strong>. Buah segar dan susu disimpan di chiller box terpisah (&lt; 10°C).
+                Makanan panas (nasi, lauk berkuah/tumis) wajib disimpan di wadah insulated thermal box agar suhu terjaga di atas <strong>60°C</strong>. Buah segar dan susu disimpan di chiller box terpisah (&lt; 10°C).
               </p>
             </div>
 
@@ -1143,8 +1365,7 @@ export function MealDistributionConcept() {
                 <span>3. Food Sample Archiving (Sampel Uji)</span>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Dapur SPPG wajib menyisihkan 1 porsi sampel dari setiap menu harian ke dalam wadah steril dan disimpan di lemari
-                pendingin selama 2 x 24 jam untuk keperluan uji laboratorium bila sewaktu-waktu terjadi audit kesehatan.
+                Dapur SPPG wajib menyisihkan 1 porsi sampel dari setiap menu harian ke dalam wadah steril dan disimpan di lemari pendingin selama 2 x 24 jam untuk keperluan uji laboratorium bila sewaktu-waktu terjadi audit kesehatan.
               </p>
             </div>
 
@@ -1154,18 +1375,17 @@ export function MealDistributionConcept() {
                 <span>4. Penanganan Porsi Berlebih (Surplus Handling)</span>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Bila ada siswa yang sakit/absen, sisa porsi yang masih higienis dan belum dibuka dapat dibagikan kepada tenaga
-                pendidik atau siswa lain yang membutuhkan dengan persetujuan Kepala Sekolah dan dicatat di form BAST.
+                Bila ada siswa yang sakit/absen, sisa porsi yang masih higienis dan belum dibuka dapat dibagikan kepada tenaga pendidik atau siswa lain yang membutuhkan dengan persetujuan Kepala Sekolah dan dicatat di form BAST.
               </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL 1: TAMBAH SURAT JALAN BARU */}
+      {/* MODAL 1: TAMBAH SURAT JALAN BARU & AUTO-POTONG STOK */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 my-8">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 my-8 max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between border-b border-slate-100 pb-3">
               <div>
                 <h3 className="text-base font-bold text-slate-900">Buat Surat Jalan & Jadwal Pengiriman Baru</h3>
@@ -1228,8 +1448,8 @@ export function MealDistributionConcept() {
                     required
                     min="1"
                     value={newForm.targetPortions}
-                    onChange={(e) => setNewForm({ ...newForm, targetPortions: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    onChange={(e) => setNewForm({ ...newForm, targetPortions: Number(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900 font-bold"
                   />
                 </div>
 
@@ -1247,6 +1467,123 @@ export function MealDistributionConcept() {
                     ))}
                   </select>
                 </div>
+              </div>
+
+              {/* Rincian Menu MBG */}
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
+                <span className="font-bold text-slate-800 block text-xs">Komponen Menu MBG Yang Dimasak:</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                  <div>
+                    <span className="text-slate-500 block">Nama Paket Menu:</span>
+                    <input
+                      type="text"
+                      value={newForm.menuTitle}
+                      onChange={(e) => setNewForm({ ...newForm, menuTitle: e.target.value })}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Karbohidrat:</span>
+                    <input
+                      type="text"
+                      value={newForm.carb}
+                      onChange={(e) => setNewForm({ ...newForm, carb: e.target.value })}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Lauk Protein:</span>
+                    <input
+                      type="text"
+                      value={newForm.protein}
+                      onChange={(e) => setNewForm({ ...newForm, protein: e.target.value })}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Sayur Segar:</span>
+                    <input
+                      type="text"
+                      value={newForm.veggie}
+                      onChange={(e) => setNewForm({ ...newForm, veggie: e.target.value })}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Buah Segar:</span>
+                    <input
+                      type="text"
+                      value={newForm.fruit}
+                      onChange={(e) => setNewForm({ ...newForm, fruit: e.target.value })}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Susu / Minuman:</span>
+                    <input
+                      type="text"
+                      value={newForm.dairy}
+                      onChange={(e) => setNewForm({ ...newForm, dairy: e.target.value })}
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* CARD PREVIEW ESTIMASI PEMOTONGAN STOK GUDANG DAPUR */}
+              <div className="p-4 rounded-xl bg-indigo-50/70 border border-indigo-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Box className="w-4 h-4 text-indigo-700" />
+                    <span className="font-bold text-indigo-950 text-xs">
+                      Estimasi Pengurangan Stok Gudang Dapur ({newForm.targetPortions} Porsi)
+                    </span>
+                  </div>
+                  <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-semibold text-indigo-900">
+                    <input
+                      type="checkbox"
+                      checked={newForm.deductStockNow}
+                      onChange={(e) => setNewForm({ ...newForm, deductStockNow: e.target.checked })}
+                      className="rounded text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                    />
+                    <span>Otomatis Potong Stok (KELUAR)</span>
+                  </label>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-[11px]">
+                    <thead className="bg-indigo-100/70 text-indigo-950 font-semibold border-b border-indigo-200">
+                      <tr>
+                        <th className="py-1.5 px-2">Kategori Bahan</th>
+                        <th className="py-1.5 px-2">Bahan di Gudang</th>
+                        <th className="py-1.5 px-2 text-right">Stok Gudang</th>
+                        <th className="py-1.5 px-2 text-right">Jumlah Keluar</th>
+                        <th className="py-1.5 px-2 text-right">Sisa Stok</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-indigo-100 bg-white/70">
+                      {estimatedDeductions.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-indigo-50/50">
+                          <td className="py-1.5 px-2 text-slate-500">{item.category}</td>
+                          <td className="py-1.5 px-2 font-semibold text-slate-800">{item.name}</td>
+                          <td className="py-1.5 px-2 text-right text-slate-600">
+                            {item.currentStock} {item.unit}
+                          </td>
+                          <td className="py-1.5 px-2 text-right font-bold text-rose-600">
+                            -{item.quantity} {item.unit}
+                          </td>
+                          <td className="py-1.5 px-2 text-right font-semibold text-emerald-700">
+                            {item.remainingStock} {item.unit}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <p className="text-[10px] text-indigo-800/80">
+                  ⚡ Saat Anda menyimpan surat jalan ini, sistem akan otomatis mencatat riwayat mutasi stok keluar (type: KELUAR) di Menu 4 (Stok Bahan) dengan nomor referensi surat jalan.
+                </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1307,8 +1644,10 @@ export function MealDistributionConcept() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 transition shadow-xs"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 transition shadow-xs flex items-center gap-1.5"
                 >
+                  {isSubmitting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                   Simpan & Terbitkan Surat Jalan
                 </button>
               </div>
@@ -1317,7 +1656,131 @@ export function MealDistributionConcept() {
         </div>
       )}
 
-      {/* MODAL 2: DETAIL PENGIRIMAN & BAST LENGKAP */}
+      {/* MODAL 2: SAHKAN BAST & SERAH TERIMA SEKOLAH */}
+      {isSigningModalOpen && signingDelivery && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 my-8">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+              <div>
+                <span className="text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                  {signingDelivery.bastNumber}
+                </span>
+                <h3 className="text-base font-bold text-slate-900 mt-1">Sahkan Berita Acara Serah Terima (BAST)</h3>
+                <p className="text-xs text-slate-500">Konfirmasi penerimaan makanan di {signingDelivery.schoolName}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSigningModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmBAST} className="space-y-3.5 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Nama Pihak Penerima Sekolah:</label>
+                  <input
+                    type="text"
+                    required
+                    value={bastForm.recipientName}
+                    onChange={(e) => setBastForm({ ...bastForm, recipientName: e.target.value })}
+                    placeholder="Contoh: Ibu Ratna, S.Pd (Kepala Sekolah)"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">NIP Penerima (Opsional):</label>
+                  <input
+                    type="text"
+                    value={bastForm.recipientNip}
+                    onChange={(e) => setBastForm({ ...bastForm, recipientNip: e.target.value })}
+                    placeholder="Contoh: 19820412 200801 2 009"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Jumlah Porsi Diterima:</label>
+                  <input
+                    type="number"
+                    required
+                    value={bastForm.deliveredPortions}
+                    onChange={(e) => setBastForm({ ...bastForm, deliveredPortions: Number(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900 font-bold text-emerald-700"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Siswa Absen/Sakit:</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={bastForm.absentStudents}
+                    onChange={(e) => setBastForm({ ...bastForm, absentStudents: Number(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900 font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Suhu Saat Diterima:</label>
+                  <input
+                    type="text"
+                    value={bastForm.foodTemperature}
+                    onChange={(e) => setBastForm({ ...bastForm, foodTemperature: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Penanganan Porsi Lebih (Zero Waste):</label>
+                <input
+                  type="text"
+                  value={bastForm.surplusHandling}
+                  onChange={(e) => setBastForm({ ...bastForm, surplusHandling: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Catatan Tambahan:</label>
+                <textarea
+                  rows={2}
+                  value={bastForm.notes}
+                  onChange={(e) => setBastForm({ ...bastForm, notes: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSigningModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-xs flex items-center gap-1.5"
+                >
+                  {isSubmitting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  <CheckCircle2 className="w-4 h-4" />
+                  Sahkan BAST Resmi & Selesaikan
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: DETAIL LENGKAP PENGIRIMAN */}
       {selectedDelivery && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
           <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 space-y-5 my-8">
@@ -1344,9 +1807,11 @@ export function MealDistributionConcept() {
                 <span className="font-semibold text-slate-700">Status Pengiriman:</span>
                 <span className="font-bold text-slate-900">
                   {selectedDelivery.status === 'COMPLETED'
-                    ? '✅ Selesai Diterima Lengkap'
+                    ? '✅ Selesai Diterima Lengkap (BAST Sah)'
                     : selectedDelivery.status === 'IN_TRANSIT'
                     ? '🚚 Sedang Diantar Driver (OTW)'
+                    : selectedDelivery.status === 'ARRIVED'
+                    ? '📍 Armada Telah Tiba di Sekolah'
                     : '📦 Sedang Dipersiapkan di Dapur'}
                 </span>
               </div>
@@ -1370,7 +1835,7 @@ export function MealDistributionConcept() {
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px]">PENERIMA SEKOLAH:</span>
-                  <span className="font-medium text-slate-800">{selectedDelivery.recipientName}</span>
+                  <span className="font-medium text-slate-800">{selectedDelivery.recipientName || selectedDelivery.contactPerson}</span>
                 </div>
               </div>
             </div>
@@ -1379,18 +1844,18 @@ export function MealDistributionConcept() {
             <div className="p-4 rounded-xl bg-indigo-50/60 border border-indigo-100 text-xs space-y-2">
               <span className="text-[10px] font-bold text-indigo-900 uppercase">Rincian Menu Makan Siang:</span>
               <ul className="space-y-1 text-indigo-950 font-medium">
-                <li>• Karbohidrat: {selectedDelivery.menuDetails.carb}</li>
-                <li>• Lauk Protein: {selectedDelivery.menuDetails.protein}</li>
-                <li>• Sayur Segar: {selectedDelivery.menuDetails.veggie}</li>
-                <li>• Buah Segar: {selectedDelivery.menuDetails.fruit}</li>
-                <li>• Minuman Sehat: {selectedDelivery.menuDetails.dairy}</li>
+                <li>• Karbohidrat: {selectedDelivery.menuDetails?.carb || 'Nasi Putih'}</li>
+                <li>• Lauk Protein: {selectedDelivery.menuDetails?.protein || 'Ayam Teriyaki'}</li>
+                <li>• Sayur Segar: {selectedDelivery.menuDetails?.veggie || 'Tumis Brokoli Wortel'}</li>
+                <li>• Buah Segar: {selectedDelivery.menuDetails?.fruit || 'Melon Potong'}</li>
+                <li>• Minuman Sehat: {selectedDelivery.menuDetails?.dairy || 'Susu UHT'}</li>
               </ul>
             </div>
 
             {/* Catatan Penanganan Porsi Lebih */}
             <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 space-y-1">
               <strong className="block text-amber-950">Catatan Zero Waste / Porsi Lebih:</strong>
-              <p>{selectedDelivery.surplusHandling}</p>
+              <p>{selectedDelivery.surplusHandling || 'Sesuai kesepakatan'}</p>
             </div>
 
             {/* Actions */}
@@ -1412,10 +1877,14 @@ export function MealDistributionConcept() {
                 {selectedDelivery.status !== 'COMPLETED' && (
                   <button
                     type="button"
-                    onClick={() => handleUpdateStatus(selectedDelivery.id, 'COMPLETED')}
-                    className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-xs"
+                    onClick={() => {
+                      handleOpenSigningModal(selectedDelivery);
+                      setSelectedDelivery(null);
+                    }}
+                    className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-xs flex items-center gap-1"
                   >
-                    ✓ Tandai Selesai & Sahkan BAST
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Sahkan BAST
                   </button>
                 )}
                 <button
@@ -1431,39 +1900,99 @@ export function MealDistributionConcept() {
         </div>
       )}
 
-      {/* MODAL 3: CETAK SURAT JALAN & BAST RESMI SIAP PRINT */}
+      {/* MODAL 4: LIHAT DETAIL BAHAN YANG TELAH DIPOTONG */}
+      {viewStockItemsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <PackageCheck className="w-4 h-4 text-emerald-600" />
+                  Rincian Bahan Gudang Yang Terpotong
+                </h3>
+                <p className="text-[11px] text-slate-500">Bahan yang telah dikeluarkan dari gudang dapur SPPG</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewStockItemsModal(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="divide-y divide-slate-100 text-xs">
+              {viewStockItemsModal.length > 0 ? (
+                viewStockItemsModal.map((item, idx) => (
+                  <div key={idx} className="py-2.5 flex items-center justify-between">
+                    <div>
+                      <span className="font-semibold text-slate-800 block">{item.name}</span>
+                      <span className="text-[10px] text-slate-400">Tercatat di Kartu Stok Gudang</span>
+                    </div>
+                    <span className="font-bold text-rose-600 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded-md">
+                      -{item.quantity} {item.unit}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="py-4 text-center text-slate-400 text-xs">Belum ada rincian bahan yang dipotong.</p>
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setViewStockItemsModal(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 5: CETAK SURAT JALAN & BAST RESMI SIAP PRINT */}
       {isPrintModalOpen && printDelivery && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-8 shadow-2xl border border-slate-200 space-y-6 my-8 print:m-0 print:p-0 print:shadow-none print:border-none">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white print:fixed print:inset-0">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-8 shadow-2xl border border-slate-200 space-y-6 my-8 print:m-0 print:p-0 print:shadow-none print:border-none print:max-w-none print:w-full">
             {/* Header Surat Jalan Resmi */}
             <div className="border-b-2 border-slate-900 pb-4 text-center">
-              <h2 className="text-xs uppercase font-extrabold tracking-widest text-slate-500">
-                BADAN GIZI NASIONAL • SATUAN PELAYANAN PEMENUHAN GIZI (SPPG)
+              <h2 className="text-[11px] uppercase font-extrabold tracking-widest text-slate-600">
+                BADAN GIZI NASIONAL (BGN) REPUBLIK INDONESIA
               </h2>
+              <h3 className="text-xs uppercase font-bold text-slate-500">
+                SATUAN PELAYANAN PEMENUHAN GIZI (SPPG) • KABUPATEN GRESIK
+              </h3>
               <h1 className="text-base sm:text-lg font-black text-slate-950 mt-1">
-                BERITA ACARA SERAH TERIMA (BAST) & SURAT JALAN PENGIRIMAN MAKANAN
+                BERITA ACARA SERAH TERIMA (BAST) & SURAT JALAN DISTRIBUSI MBG
               </h1>
               <p className="text-xs text-slate-600 font-medium mt-0.5">
-                Nomor Surat: <strong>{printDelivery.bastNumber}</strong> / SJ: <strong>{printDelivery.dispatchNumber}</strong>
+                No. BAST: <strong>{printDelivery.bastNumber}</strong> | No. Surat Jalan: <strong>{printDelivery.dispatchNumber}</strong>
               </p>
             </div>
 
-            {/* Detail Informasi */}
+            {/* Detail Informasi Dua Pihak */}
             <div className="grid grid-cols-2 gap-4 text-xs">
               <div className="space-y-1">
-                <span className="text-slate-400 text-[10px] uppercase font-bold">Dapur SPPG Pengirim:</span>
+                <span className="text-slate-400 text-[10px] uppercase font-bold">PIHAK PERTAMA (PENGIRIM):</span>
                 <p className="font-bold text-slate-900">{printDelivery.sppgUnitName}</p>
-                <p className="text-slate-500">Driver: {printDelivery.driverName}</p>
-                <p className="text-slate-500">Armada / Nopol: {printDelivery.vehiclePlate}</p>
+                <p className="text-slate-600">Pengemudi: {printDelivery.driverName}</p>
+                <p className="text-slate-600">Armada / Nopol: {printDelivery.vehiclePlate}</p>
+                <p className="text-slate-600">Waktu Berangkat: {printDelivery.departureTime}</p>
               </div>
 
               <div className="space-y-1">
-                <span className="text-slate-400 text-[10px] uppercase font-bold">Sekolah Sasaran Penerima:</span>
+                <span className="text-slate-400 text-[10px] uppercase font-bold">PIHAK KEDUA (PENERIMA):</span>
                 <p className="font-bold text-slate-900">{printDelivery.schoolName}</p>
-                <p className="text-slate-500">Alamat: {printDelivery.schoolAddress}</p>
-                <p className="text-slate-500">
-                  Penerima: {printDelivery.recipientName} ({printDelivery.contactPhone})
+                <p className="text-slate-600">Alamat: {printDelivery.schoolAddress}</p>
+                <p className="text-slate-600">
+                  Petugas Penerima: {printDelivery.recipientName || printDelivery.contactPerson} ({printDelivery.contactPhone})
                 </p>
+                {printDelivery.recipientNip && (
+                  <p className="text-slate-600">NIP: {printDelivery.recipientNip}</p>
+                )}
+                <p className="text-slate-600">Waktu Tiba: {printDelivery.actualArrival || printDelivery.estimatedArrival}</p>
               </div>
             </div>
 
@@ -1473,28 +2002,28 @@ export function MealDistributionConcept() {
                 <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
                   <tr>
                     <th className="p-2.5">Menu Makanan</th>
-                    <th className="p-2.5">Rincian Komponen</th>
-                    <th className="p-2.5 text-center">Target</th>
-                    <th className="p-2.5 text-center">Diterima</th>
-                    <th className="p-2.5 text-right">Kondisi / Suhu</th>
+                    <th className="p-2.5">Rincian Komponen 5 Pilar MBG</th>
+                    <th className="p-2.5 text-center">Target Porsi</th>
+                    <th className="p-2.5 text-center">Porsi Diterima</th>
+                    <th className="p-2.5 text-right">QC Suhu</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   <tr>
                     <td className="p-2.5 font-bold text-slate-900 align-top">{printDelivery.menuTitle}</td>
                     <td className="p-2.5 text-slate-600 text-[11px] align-top">
-                      • {printDelivery.menuDetails.carb}
-                      <br />• {printDelivery.menuDetails.protein}
-                      <br />• {printDelivery.menuDetails.veggie}
-                      <br />• {printDelivery.menuDetails.fruit}
-                      <br />• {printDelivery.menuDetails.dairy}
+                      • {printDelivery.menuDetails?.carb || 'Nasi Putih Pulen'}
+                      <br />• {printDelivery.menuDetails?.protein || 'Ayam Fillet Teriyaki'}
+                      <br />• {printDelivery.menuDetails?.veggie || 'Tumis Sayur Segar'}
+                      <br />• {printDelivery.menuDetails?.fruit || 'Melon Potong'}
+                      <br />• {printDelivery.menuDetails?.dairy || 'Susu UHT Segar'}
                     </td>
                     <td className="p-2.5 font-bold text-center align-top">{printDelivery.targetPortions}</td>
                     <td className="p-2.5 font-bold text-emerald-700 text-center align-top">
                       {printDelivery.deliveredPortions || printDelivery.targetPortions}
                     </td>
                     <td className="p-2.5 text-right align-top text-slate-800 font-semibold">
-                      {printDelivery.foodTemperature}
+                      {printDelivery.foodTemperature || '64.5°C'}
                     </td>
                   </tr>
                 </tbody>
@@ -1503,32 +2032,36 @@ export function MealDistributionConcept() {
 
             {/* Catatan Verifikasi */}
             <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs space-y-1">
-              <span className="font-bold text-slate-700 block">Keterangan Khusus / Zero Waste:</span>
-              <p className="text-slate-600 italic">{printDelivery.surplusHandling}</p>
+              <span className="font-bold text-slate-700 block">Keterangan Khusus / Zero Waste & Keamanan Pangan:</span>
+              <p className="text-slate-600 italic">
+                {printDelivery.surplusHandling || 'Sesuai dengan SOP Zero Waste BGN dan disimpan di wadah steril.'}
+              </p>
             </div>
 
             {/* Lembar Tanda Tangan */}
             <div className="grid grid-cols-2 gap-8 pt-6 border-t border-slate-200 text-center text-xs">
               <div className="space-y-12">
-                <span className="text-slate-500 font-medium">Petugas Pengantar / Driver:</span>
+                <span className="text-slate-500 font-medium">Yang Menyerahkan (Driver Logistik SPPG):</span>
                 <div className="h-10 border-b border-slate-300 font-serif italic text-indigo-700 text-sm">
                   ( {printDelivery.driverName} )
                 </div>
-                <p className="text-[11px] text-slate-400">Dapur SPPG Pelaksana</p>
+                <p className="text-[11px] text-slate-400">Satuan Pelayanan Pemenuhan Gizi</p>
               </div>
 
               <div className="space-y-12">
-                <span className="text-slate-500 font-medium">Pihak Sekolah Penerima:</span>
+                <span className="text-slate-500 font-medium">Yang Menerima (Pihak Sekolah Sasaran):</span>
                 <div className="h-10 border-b border-slate-300 font-serif italic text-emerald-700 text-sm">
-                  ( {printDelivery.recipientName} )
+                  ( {printDelivery.recipientName || printDelivery.contactPerson} )
                 </div>
-                <p className="text-[11px] text-slate-400">Kepala Sekolah / Guru Piket</p>
+                <p className="text-[11px] text-slate-400">
+                  Kepala Sekolah / Guru Piket {printDelivery.recipientNip ? `(NIP: ${printDelivery.recipientNip})` : ''}
+                </p>
               </div>
             </div>
 
             {/* Print Footer Controls */}
             <div className="pt-4 border-t border-slate-100 flex items-center justify-between print:hidden">
-              <span className="text-xs text-slate-400">Gunakan tombol cetak untuk print fisik atau simpan PDF.</span>
+              <span className="text-xs text-slate-400">Gunakan tombol cetak untuk print fisik A4 atau simpan PDF.</span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -1543,7 +2076,7 @@ export function MealDistributionConcept() {
                   className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 transition flex items-center gap-1.5 shadow-xs"
                 >
                   <Printer className="w-4 h-4" />
-                  Cetak Lembar Resmi Sekarang
+                  Cetak Lembar BAST Sekarang
                 </button>
               </div>
             </div>
