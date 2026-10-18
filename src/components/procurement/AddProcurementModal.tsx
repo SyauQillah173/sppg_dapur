@@ -1385,13 +1385,15 @@ export function AddProcurementModal({ onClose }: AddProcurementModalProps) {
 
             <div className={`p-3 rounded-lg border shadow-xs ${selisih.over ? 'bg-rose-50/70 border-rose-200' : 'bg-white border-slate-200/80'}`}>
               <span className={`text-[11px] uppercase font-semibold block tracking-wider ${selisih.over ? 'text-rose-800' : 'text-slate-500'}`}>
-                {selisih.over ? 'Status Selisih Nota:' : 'Selisih (Nota vs Kasbon):'}
+                {selisih.over ? 'Status Anggaran (Over):' : 'Realisasi Kasbon:'}
               </span>
               <div className={`font-mono font-bold text-base mt-0.5 break-words ${selisih.over ? 'text-rose-600' : 'text-slate-800'}`}>
-                {selisih.persenText}
+                {selisih.over ? `+${selisih.persenOver.toFixed(1)}% (Nombok)` : selisih.terpakaiText}
               </div>
-              <span className={`text-[10px] font-medium ${selisih.over ? 'text-rose-600' : 'text-slate-500'}`}>
-                {selisih.over ? `${selisih.nominalText} nombok · over-budget` : `${selisih.nominalText} sisa · terkontrol`}
+              <span className={`text-[10px] font-medium ${selisih.over ? 'text-rose-600' : 'text-emerald-700'}`}>
+                {selisih.over
+                  ? `${selisih.nominalText} melebihi pagu kasbon`
+                  : `✓ ${selisih.sisaText} (${formatRupiah(changeReturned)}) aman`}
               </span>
             </div>
           </div>

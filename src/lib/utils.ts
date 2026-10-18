@@ -17,16 +17,32 @@ export function formatIDR(value: number): string {
 
 export const formatRupiah = formatIDR;
 
-/** Selisih nota vs kasbon: nominal + persen, dihitung otomatis sistem. */
+/** Selisih nota vs kasbon: nominal + persen realisasi, dihitung otomatis sistem tanpa minus membingungkan. */
 export function hitungSelisih(amountRequested: number, actualReceiptTotal: number) {
-  const nominal = actualReceiptTotal - amountRequested; // + = over, - = sisa kasbon
-  const persen = amountRequested > 0 ? (nominal / amountRequested) * 100 : 0;
+  const nominal = actualReceiptTotal - amountRequested; // + = over (nombok), - = sisa kasbon
+  const over = nominal > 0;
+  
+  // Berapa persen dana kasbon yang terserap/terpakai
+  const persenTerpakai = amountRequested > 0 ? (actualReceiptTotal / amountRequested) * 100 : (actualReceiptTotal > 0 ? 100 : 0);
+  
+  // Berapa persen sisa dana kasbon yang masih utuh/kembali
+  const persenSisa = amountRequested > 0 ? Math.max(0, 100 - persenTerpakai) : 0;
+  
+  // Persentase selisih nominal relatif terhadap kasbon
+  const persenOver = amountRequested > 0 && over ? ((nominal / amountRequested) * 100) : 0;
+
   return {
     nominal,
-    persen,
-    persenText: `${nominal >= 0 ? '+' : ''}${persen.toFixed(1)}%`,
-    nominalText: `${nominal >= 0 ? '+' : '-'}${formatIDR(Math.abs(nominal))}`,
-    over: nominal > 0,
+    over,
+    persen: over ? persenOver : persenTerpakai,
+    persenTerpakai,
+    persenSisa,
+    persenOver,
+    // Teks persentase yang ramah pengguna
+    persenText: over ? `+${persenOver.toFixed(1)}%` : `${persenTerpakai.toFixed(1)}%`,
+    nominalText: over ? `+${formatIDR(nominal)}` : `-${formatIDR(Math.abs(nominal))}`,
+    terpakaiText: `${persenTerpakai < 0.1 && persenTerpakai > 0 ? '< 0.1%' : persenTerpakai.toFixed(1) + '%'} Terpakai`,
+    sisaText: `${persenSisa.toFixed(1)}% Sisa`,
   };
 }
 

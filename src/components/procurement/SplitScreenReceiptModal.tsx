@@ -270,7 +270,7 @@ export function SplitScreenReceiptModal({ transaction, onClose }: SplitScreenRec
                           ? `Kurang / Nombok ${selisih.nominalText} (${selisih.persenText}) · Melebihi Kasbon`
                           : isBalanceMatch
                           ? 'Rp 0 · Klop pas sesuai kasbon'
-                          : `Sisa Kembalian ${formatIDR(Math.abs(selisih.nominal))} (${selisih.persenText}) · Uang Kembali`}
+                          : `Sisa Kembalian ${formatIDR(Math.abs(selisih.nominal))} (${selisih.sisaText}) · Uang Kembali`}
                       </span>
                     </div>
 
