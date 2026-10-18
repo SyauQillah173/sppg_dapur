@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MealDelivery } from '@/lib/types';
 import {
   Printer,
@@ -16,6 +16,11 @@ import {
   AlertCircle,
   QrCode,
   Check,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Download,
+  Info,
 } from 'lucide-react';
 
 interface OfficialBastDocumentProps {
@@ -24,9 +29,44 @@ interface OfficialBastDocumentProps {
 }
 
 export function OfficialBastDocument({ delivery, onClose }: OfficialBastDocumentProps) {
-  // Mode tampilan di layar: 'a4' (standar surat dinas resmi pemerintah) atau 'mobile' (kartu responsif ramah HP)
+  // Mode tampilan di layar: 'a4' (standar surat dinas resmi pemerintah) atau 'mobile' (kartu ringkas ramah HP)
   const [viewMode, setViewMode] = useState<'a4' | 'mobile'>('a4');
-  const [isCopied, setIsCopied] = useState(false);
+  
+  // Kontrol Skala & Zoom untuk Layar HP
+  const [zoomMode, setZoomMode] = useState<'fit' | '100' | 'custom'>('fit');
+  const [customZoom, setCustomZoom] = useState<number>(1);
+  const [screenWidth, setScreenWidth] = useState<number>(
+    typeof window !== 'undefined' ? window.innerWidth : 800
+  );
+  const [docHeight, setDocHeight] = useState<number>(1150);
+  const docRef = useRef<HTMLDivElement | null>(null);
+
+  // Monitor ukuran layar smartphone
+  useEffect(() => {
+    const handleResize = () => setScreenWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Update tinggi dokumen setelah render
+  useEffect(() => {
+    if (docRef.current) {
+      setDocHeight(docRef.current.scrollHeight || 1150);
+    }
+  }, [viewMode, delivery, screenWidth]);
+
+  // Lebar standar kanvas A4 resmi (794px ≈ 210mm pada 96 DPI)
+  const a4BaseWidth = 794;
+  // Hitung skala auto-fit agar dokumen 100% pas selebar layar HP tanpa terpotong
+  const fitScale = Math.min(1, Math.max(0.38, (screenWidth - 20) / a4BaseWidth));
+  const currentScale =
+    viewMode === 'mobile'
+      ? 1
+      : zoomMode === 'fit'
+      ? fitScale
+      : zoomMode === '100'
+      ? 1
+      : customZoom;
 
   // Format tanggal Indonesia resmi
   const deliveryDate = new Date(delivery.createdAt || Date.now());
@@ -45,63 +85,126 @@ export function OfficialBastDocument({ delivery, onClose }: OfficialBastDocument
   const returCount = delivery.absentStudents || 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-xs overflow-y-auto print:p-0 print:m-0 print:bg-white print:fixed print:inset-0">
-      {/* Top Floating Control Bar (Hidden on Print) */}
-      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-60 bg-slate-900/95 text-white px-3 sm:px-5 py-2 rounded-full shadow-2xl border border-slate-700/80 flex items-center gap-2 sm:gap-4 print:hidden backdrop-blur-md max-w-[95vw]">
-        {/* Toggle Mode di HP */}
-        <div className="flex sm:hidden items-center bg-slate-800 rounded-full p-0.5 text-[11px]">
-          <button
-            type="button"
-            onClick={() => setViewMode('mobile')}
-            className={`px-2.5 py-1 rounded-full font-medium transition flex items-center gap-1 ${
-              viewMode === 'mobile' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Smartphone className="w-3 h-3" />
-            Ringkas HP
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('a4')}
-            className={`px-2.5 py-1 rounded-full font-medium transition flex items-center gap-1 ${
-              viewMode === 'a4' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <FileText className="w-3 h-3" />
-            Kertas A4
-          </button>
+    <div className="fixed inset-0 z-50 flex flex-col items-center bg-slate-950/90 backdrop-blur-md overflow-y-auto print:p-0 print:m-0 print:bg-white print:fixed print:inset-0">
+      {/* =========================================================================
+          STICKY TOP CONTROL BAR (TIDAK AKAN MENABRAK ATAU MENUTUPI KOP SURAT)
+          ========================================================================= */}
+      <header className="sticky top-0 z-60 w-full bg-slate-900/95 border-b border-slate-800 shadow-2xl backdrop-blur-lg print:hidden">
+        <div className="max-w-5xl mx-auto px-3 sm:px-6 py-2.5 flex items-center justify-between gap-2">
+          {/* Sisi Kiri: Switcher Mode Tampilan */}
+          <div className="flex items-center gap-1.5 sm:gap-3">
+            <div className="flex items-center bg-slate-800 rounded-full p-0.5 text-[11px] border border-slate-700/80">
+              <button
+                type="button"
+                onClick={() => setViewMode('mobile')}
+                className={`px-2.5 py-1 rounded-full font-medium transition flex items-center gap-1 ${
+                  viewMode === 'mobile' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Smartphone className="w-3 h-3" />
+                <span className="hidden xs:inline">Mode</span> Ringkas HP
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('a4')}
+                className={`px-2.5 py-1 rounded-full font-medium transition flex items-center gap-1 ${
+                  viewMode === 'a4' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <FileText className="w-3 h-3" />
+                Kertas A4 Resmi
+              </button>
+            </div>
+
+            {/* Kontrol Zoom (Khusus saat Mode Kertas A4 di Layar HP) */}
+            {viewMode === 'a4' && (
+              <div className="flex items-center bg-slate-800/80 rounded-full p-0.5 text-[10px] sm:text-[11px] border border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setZoomMode('fit')}
+                  className={`px-2 py-0.5 sm:py-1 rounded-full font-medium transition flex items-center gap-1 ${
+                    zoomMode === 'fit' ? 'bg-slate-700 text-emerald-400 font-bold' : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Sesuaikan ukuran penuh selebar layar HP"
+                >
+                  <Maximize2 className="w-2.5 h-2.5" />
+                  <span>Pas Layar</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setZoomMode('100')}
+                  className={`px-2 py-0.5 sm:py-1 rounded-full font-medium transition ${
+                    zoomMode === '100' ? 'bg-slate-700 text-white font-bold' : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Ukuran asli 100% A4"
+                >
+                  100%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setZoomMode('custom');
+                    setCustomZoom((prev) => Math.max(0.4, Number((prev - 0.1).toFixed(1))));
+                  }}
+                  className="p-1 text-slate-400 hover:text-white transition"
+                  title="Perkecil"
+                >
+                  <ZoomOut className="w-3 h-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setZoomMode('custom');
+                    setCustomZoom((prev) => Math.min(1.5, Number((prev + 0.1).toFixed(1))));
+                  }}
+                  className="p-1 text-slate-400 hover:text-white transition"
+                  title="Perbesar"
+                >
+                  <ZoomIn className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Sisi Kanan: Tombol Cetak / PDF & Tutup */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="px-3.5 py-1.5 rounded-full text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1.5 shadow-md active:scale-95"
+              title="Cetak A4 atau Simpan sebagai PDF"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Cetak / PDF</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Tutup Pratinjau"
+              className="p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
+      </header>
 
-        <span className="text-xs font-semibold text-slate-300 hidden md:inline">
-          BAST Resmi Standar Badan Gizi Nasional (BGN)
+      {/* Helper Bar Informasi Cetak/Download PDF di Smartphone */}
+      <div className="w-full bg-slate-900/60 border-b border-slate-800/80 py-1.5 px-3 text-center text-[11px] text-slate-300 print:hidden flex items-center justify-center gap-1.5">
+        <Info className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+        <span>
+          💡 <strong>Tips di HP:</strong> Tekan <strong>"Cetak / PDF"</strong> lalu pilih opsi <strong>"Simpan sebagai PDF"</strong> untuk mengunduh dokumen resmi ini.
         </span>
-
-        <button
-          type="button"
-          onClick={handlePrint}
-          className="px-3.5 py-1.5 rounded-full text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1.5 shadow-md active:scale-95"
-        >
-          <Printer className="w-3.5 h-3.5" />
-          <span>Cetak / PDF</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Tutup Pratinjau"
-          className="p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition"
-        >
-          <X className="w-4 h-4" />
-        </button>
       </div>
 
-      {/* Main Wrapper */}
-      <div className="w-full max-w-4xl my-14 print:my-0 print:max-w-none print:w-full">
+      {/* Main Content Area */}
+      <main className="w-full max-w-5xl px-2 sm:px-4 py-4 print:p-0 print:m-0 print:max-w-none print:w-full flex flex-col items-center">
         {/* =========================================================================
             TAMPILAN 1: MODE RINGKAS HP (KHUSUS TAMPILAN SMARTPHONE RESPONSIF)
             ========================================================================= */}
         {viewMode === 'mobile' && (
-          <div className="sm:hidden bg-white rounded-2xl p-4 shadow-2xl border border-slate-200 space-y-4 print:hidden">
+          <div className="w-full max-w-md bg-white rounded-2xl p-4 shadow-2xl border border-slate-200 space-y-4 print:hidden">
             {/* Header Sekolah */}
             <div className="bg-slate-900 text-white p-3.5 rounded-xl space-y-1">
               <div className="flex items-center justify-between">
@@ -202,7 +305,7 @@ export function OfficialBastDocument({ delivery, onClose }: OfficialBastDocument
               <button
                 type="button"
                 onClick={handlePrint}
-                className="w-full py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md"
+                className="w-full py-2.5 rounded-xl bg-slate-900 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md active:scale-95 transition"
               >
                 <Printer className="w-4 h-4" />
                 Cetak Format Kertas Resmi A4
@@ -212,7 +315,7 @@ export function OfficialBastDocument({ delivery, onClose }: OfficialBastDocument
                 onClick={() => setViewMode('a4')}
                 className="w-full py-2 rounded-xl border border-slate-300 text-slate-700 font-semibold text-xs text-center"
               >
-                Buka Pratinjau Kertas Resmi (Standar Dokumen Pemerintah)
+                Buka Pratinjau Kertas A4 Lengkap
               </button>
             </div>
           </div>
@@ -220,16 +323,41 @@ export function OfficialBastDocument({ delivery, onClose }: OfficialBastDocument
 
         {/* =========================================================================
             TAMPILAN 2: FORMAT RESMI TATA NASKAH DINAS PEMERINTAH (KERTAS A4)
-            Sesuai Standar Badan Gizi Nasional (BGN) & Satuan Pelayanan Pemenuhan Gizi (SPPG)
+            DENGAN FITUR AUTO-FIT LAYAR HP RESPONSIF AGAR TIDAK TERPOTONG
             ========================================================================= */}
         <div
-          id="official-government-bast"
           className={`${
-            viewMode === 'mobile' ? 'hidden sm:block' : 'block'
-          } bg-white rounded-none sm:rounded-2xl p-6 sm:p-10 shadow-2xl border border-slate-200 print:shadow-none print:border-none print:p-0 print:m-0 print:rounded-none max-w-full overflow-x-auto`}
+            viewMode === 'mobile' ? 'hidden sm:flex' : 'flex'
+          } w-full justify-center overflow-x-auto print:overflow-visible transition-all duration-200`}
+          style={
+            viewMode === 'a4' && currentScale < 1
+              ? {
+                  height: `${docHeight * currentScale + 20}px`,
+                  minHeight: `${docHeight * currentScale + 20}px`,
+                  overflow: 'hidden',
+                }
+              : {}
+          }
         >
-          {/* Kontainer Kertas Standar A4 (210mm x 297mm) */}
-          <div className="min-w-[680px] sm:min-w-0 text-slate-900 font-serif leading-tight">
+          {/* Kontainer Kertas Standar A4 Resmi */}
+          <div
+            id="official-government-bast"
+            ref={docRef}
+            style={
+              viewMode === 'a4' && currentScale !== 1
+                ? {
+                    width: `${a4BaseWidth}px`,
+                    minWidth: `${a4BaseWidth}px`,
+                    transform: `scale(${currentScale})`,
+                    transformOrigin: 'top center',
+                  }
+                : {
+                    width: '100%',
+                    maxWidth: `${a4BaseWidth}px`,
+                  }
+            }
+            className="bg-white rounded-none sm:rounded-2xl p-6 sm:p-10 shadow-2xl border border-slate-200 print:shadow-none print:border-none print:p-0 print:m-0 print:rounded-none print:transform-none print:w-full print:max-w-none text-slate-900 font-serif leading-tight select-text"
+          >
             {/* 1. KOP SURAT RESMI KEDINASAN PEMERINTAH */}
             <div className="border-b-[3px] border-double border-slate-950 pb-3 mb-4 text-center relative">
               <div className="flex items-center justify-center gap-4">
@@ -532,31 +660,31 @@ export function OfficialBastDocument({ delivery, onClose }: OfficialBastDocument
         </div>
 
         {/* Footer Actions (Hidden on Print) */}
-        <div className="mt-4 bg-white/90 backdrop-blur-md p-3 rounded-2xl border border-slate-200 shadow-lg flex items-center justify-between text-xs print:hidden">
-          <div className="flex items-center gap-2 text-slate-600">
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span className="text-[11px]">Format siap cetak resmi A4 dan unduh PDF dokumen pemerintah</span>
+        <div className="mt-4 w-full max-w-md sm:max-w-3xl bg-slate-900/90 backdrop-blur-md p-3 rounded-2xl border border-slate-800 shadow-xl flex items-center justify-between text-xs text-white print:hidden">
+          <div className="flex items-center gap-2 text-slate-300">
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="text-[11px]">Siap dicetak fisik A4 atau simpan file PDF dokumen kedinasan</span>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
+              className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition"
             >
               Tutup
             </button>
             <button
               type="button"
               onClick={handlePrint}
-              className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white transition flex items-center gap-1.5 shadow-sm active:scale-95"
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1.5 shadow-md active:scale-95"
             >
               <Printer className="w-4 h-4" />
               Cetak / Simpan PDF
             </button>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
