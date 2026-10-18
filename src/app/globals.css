@@ -72,16 +72,36 @@ body {
     margin: 0 !important;
     padding: 0 !important;
     width: 100% !important;
-    height: auto !important;
-    min-height: 0 !important;
-    overflow: visible !important;
+    height: 100% !important;
+    overflow: hidden !important;
   }
 
-  header, nav, footer, button, .no-print {
+  /* Sembunyikan SEMUA elemen root di body (Dashboard, Navbar, dll) */
+  body > * {
     display: none !important;
   }
 
-  /* Isolasi cetak dokumen resmi BAST BGN agar pas 1 halaman A4 */
+  /* HANYA tampilkan portal resmi cetak BAST */
+  body > #official-bast-portal {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    overflow: visible !important;
+  }
+
+  /* Sembunyikan semua elemen UI kontrol modal saat print */
+  #official-bast-portal header,
+  #official-bast-portal button,
+  #official-bast-portal .no-print,
+  #official-bast-portal .official-bast-modal-toolbar,
+  #official-bast-portal .official-bast-action-footer {
+    display: none !important;
+  }
+
   .official-bast-modal-overlay {
     position: static !important;
     inset: auto !important;
@@ -119,6 +139,10 @@ body {
     border: none !important;
     background: #ffffff !important;
     overflow: visible !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+    page-break-before: avoid !important;
+    break-before: avoid !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
     transform: none !important;

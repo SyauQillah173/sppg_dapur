@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { MealDelivery } from '@/lib/types';
 import {
   Printer,
@@ -14,7 +15,12 @@ import {
   ZoomOut,
   Maximize2,
   Info,
-  Layers,
+  Settings,
+  Upload,
+  PenTool,
+  RotateCcw,
+  Check,
+  Edit3,
 } from 'lucide-react';
 
 interface OfficialBastDocumentProps {
@@ -23,12 +29,32 @@ interface OfficialBastDocumentProps {
 }
 
 type ZoomPreset = 'fit-page' | 'fit-width' | '100' | 'custom';
+type HeadSignatureType = 'qr' | 'image' | 'blank';
+
+interface HeadSignerConfig {
+  name: string;
+  nip: string;
+  title: string;
+  signatureType: HeadSignatureType;
+  signatureImage?: string;
+}
+
+const DEFAULT_HEAD_SIGNER: HeadSignerConfig = {
+  name: 'ABDULLAH SYAUQILLAH, S.Kom',
+  nip: '19960717 202601 1 002',
+  title: 'KEPALA SATUAN PELAYANAN PEMENUHAN GIZI (SPPG)',
+  signatureType: 'qr',
+  signatureImage: '',
+};
 
 export function OfficialBastDocument({ delivery, onClose }: OfficialBastDocumentProps) {
-  // Mode Tampilan: 'a4' (Kertas A4 Resmi Standar Tata Naskah Dinas BGN) atau 'mobile' (Ringkasan Kartu HP)
+  // DOM Portal Container untuk Isolasi Cetak (Menghilangkan Dashboard Halaman 2)
+  const [portalNode, setPortalNode] = useState<HTMLElement | null>(null);
+
+  // Mode Tampilan: 'a4' (Kertas A4 Resmi) atau 'mobile' (Ringkasan Kartu HP)
   const [viewMode, setViewMode] = useState<'a4' | 'mobile'>('a4');
 
-  // Kontrol Skala & Zoom Responsif untuk PC Desktop & Smartphone
+  // Kontrol Skala & Zoom Responsif
   const [zoomPreset, setZoomPreset] = useState<ZoomPreset>('fit-page');
   const [customZoom, setCustomZoom] = useState<number>(1);
   const [viewport, setViewport] = useState({
@@ -36,11 +62,46 @@ export function OfficialBastDocument({ delivery, onClose }: OfficialBastDocument
     height: typeof window !== 'undefined' ? window.innerHeight : 800,
   });
 
-  // Base A4 dimensions in pixels at 96 DPI (210mm x 297mm ≈ 794px x 1123px)
+  // Konfigurasi Pejabat Pengesah (Kepala Unit SPPG / BGN)
+  const [headSigner, setHeadSigner] = useState<HeadSignerConfig>(DEFAULT_HEAD_SIGNER);
+  const [isSignerModalOpen, setIsSignerModalOpen] = useState(false);
+  const [tempSigner, setTempSigner] = useState<HeadSignerConfig>(DEFAULT_HEAD_SIGNER);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Ukuran Standar A4 Resmi (210mm x 297mm ≈ 794px x 1123px pada 96 DPI)
   const a4BaseWidth = 794;
   const a4BaseHeight = 1123;
 
-  // Monitor perubahan ukuran jendela browser (PC Desktop, Laptop, Tablet, HP)
+  // Inisialisasi Portal DOM langsung ke document.body
+  useEffect(() => {
+    let node = document.getElementById('official-bast-portal');
+    if (!node) {
+      node = document.createElement('div');
+      node.id = 'official-bast-portal';
+      document.body.appendChild(node);
+    }
+    setPortalNode(node);
+
+    // Muat konfigurasi kepala unit yang tersimpan di localStorage
+    try {
+      const saved = localStorage.getItem('sppg_head_signer_config');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setHeadSigner(parsed);
+        setTempSigner(parsed);
+      }
+    } catch {
+      // ignore parsing error
+    }
+
+    return () => {
+      if (node && node.parentNode) {
+        node.parentNode.removeChild(node);
+      }
+    };
+  }, []);
+
+  // Monitor ukuran viewport browser (HP, Tablet, PC)
   useEffect(() => {
     const handleResize = () => {
       setViewport({
@@ -52,11 +113,15 @@ export function OfficialBastDocument({ delivery, onClose }: OfficialBastDocument
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Shortcut Keyboard: ESC untuk menutup, Ctrl+P / Cmd+P untuk cetak
+  // Keyboard Shortcuts: ESC (tutup), Ctrl+P (cetak)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        if (isSignerModalOpen) {
+          setIsSignerModalOpen(false);
+        } else {
+          onClose();
+        }
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
         e.preventDefault();
         window.print();
@@ -64,25 +129,23 @@ export function OfficialBastDocument({ delivery, onClose }: OfficialBastDocument
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  }, [onClose, isSignerModalOpen]);
 
-  // Hitung skala tampilan responsif
+  // Hitung skala tampilan otomatis
   const calculateCurrentScale = useCallback(() => {
     if (viewMode === 'mobile') return 1;
-
     if (zoomPreset === '100') return 1;
     if (zoomPreset === 'custom') return customZoom;
 
-    // Hitung area viewport yang tersedia (dikurangi header toolbar & padding)
-    const availableWidth = Math.max(300, viewport.width - (viewport.width < 640 ? 16 : 80));
-    const availableHeight = Math.max(400, viewport.height - (viewport.width < 640 ? 120 : 130));
+    const isMobileDevice = viewport.width < 640;
+    const availableWidth = Math.max(300, viewport.width - (isMobileDevice ? 16 : 64));
+    const availableHeight = Math.max(380, viewport.height - (isMobileDevice ? 150 : 130));
 
     if (zoomPreset === 'fit-width') {
-      // Pas lebar layar
       return Math.min(1.3, Math.max(0.35, Number((availableWidth / a4BaseWidth).toFixed(2))));
     }
 
-    // Default 'fit-page': Pas 1 Layar Penuh (Tinggi & Lebar muat sekaligus tanpa scroll)
+    // Default 'fit-page' (Pas 1 Layar Penuh)
     const scaleX = availableWidth / a4BaseWidth;
     const scaleY = availableHeight / a4BaseHeight;
     const fitScale = Math.min(scaleX, scaleY);
@@ -98,11 +161,56 @@ export function OfficialBastDocument({ delivery, onClose }: OfficialBastDocument
 
   const handleZoomOut = () => {
     setZoomPreset('custom');
-    setCustomZoom((prev) => Math.max(0.4, Number((prev - 0.1).toFixed(1))));
+    setCustomZoom((prev) => Math.max(0.35, Number((prev - 0.1).toFixed(1))));
   };
 
   const handlePrint = () => {
     window.print();
+  };
+
+  // Simpan pengaturan Pejabat Pengesah
+  const handleSaveSigner = () => {
+    setHeadSigner(tempSigner);
+    try {
+      localStorage.setItem('sppg_head_signer_config', JSON.stringify(tempSigner));
+    } catch {
+      // ignore
+    }
+    setIsSignerModalOpen(false);
+  };
+
+  // Reset Pejabat Pengesah ke default BGN
+  const handleResetSigner = () => {
+    setTempSigner(DEFAULT_HEAD_SIGNER);
+    setHeadSigner(DEFAULT_HEAD_SIGNER);
+    try {
+      localStorage.removeItem('sppg_head_signer_config');
+    } catch {
+      // ignore
+    }
+    setIsSignerModalOpen(false);
+  };
+
+  // Upload file tanda tangan/stempel
+  const handleUploadSignature = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Mohon unggah file format gambar (PNG / JPG).');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      setTempSigner((prev) => ({
+        ...prev,
+        signatureType: 'image',
+        signatureImage: base64,
+      }));
+    };
+    reader.readAsDataURL(file);
   };
 
   // Format tanggal Indonesia resmi
@@ -117,97 +225,141 @@ export function OfficialBastDocument({ delivery, onClose }: OfficialBastDocument
   const netConsumed = delivery.deliveredPortions || (delivery.targetPortions - (delivery.absentStudents || 0));
   const returCount = delivery.absentStudents || 0;
 
-  return (
+  if (!portalNode) return null;
+
+  return createPortal(
     <div className="official-bast-modal-overlay fixed inset-0 z-50 flex flex-col items-center bg-slate-950/92 backdrop-blur-md overflow-y-auto print:p-0 print:m-0 print:bg-white print:fixed print:inset-0">
       {/* =========================================================================
-          TOOLBAR KONTROL ATAS RESPONSIF (DESKTOP PC, TABLET & HP) - PRINT HIDDEN
+          TOOLBAR KONTROL RESPONSIF (DESKTOP & HP MOBILE DUA BARIS RAPI)
           ========================================================================= */}
-      <header className="sticky top-0 z-60 w-full bg-slate-900/98 border-b border-slate-800 shadow-2xl backdrop-blur-xl print:hidden">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2 sm:py-2.5 flex flex-wrap items-center justify-between gap-2.5">
-          {/* Sisi Kiri: Judul Dokumen & Badge Pas 1 Halaman */}
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
-              <FileText className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs sm:text-sm font-bold text-white tracking-tight">
-                  Pratinjau BAST Resmi BGN
-                </span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30 flex items-center gap-1">
-                  <CheckCircle2 className="w-2.5 h-2.5" />
-                  <span className="hidden xs:inline">Standar</span> Pas 1 Lembar A4
-                </span>
+      <header className="official-bast-modal-toolbar sticky top-0 z-60 w-full bg-slate-900/98 border-b border-slate-800 shadow-2xl backdrop-blur-xl print:hidden">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2 flex flex-col gap-2">
+          {/* Baris 1: Brand, Tombol Atur Pejabat, Cetak, dan Tutup */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
+                <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </div>
-              <p className="text-[11px] text-slate-400 font-mono hidden sm:block">
-                {delivery.bastNumber || 'BAST-MBG'} • {delivery.schoolName}
-              </p>
+              <div>
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <span className="text-xs sm:text-sm font-bold text-white tracking-tight">
+                    BAST Resmi BGN
+                  </span>
+                  <span className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30 flex items-center gap-1">
+                    <CheckCircle2 className="w-2.5 h-2.5" />
+                    <span>Pas 1 Halaman</span>
+                  </span>
+                </div>
+                <p className="text-[10px] sm:text-[11px] text-slate-400 font-mono truncate max-w-[200px] sm:max-w-md">
+                  {delivery.bastNumber || 'BAST-MBG'} • {delivery.schoolName}
+                </p>
+              </div>
+            </div>
+
+            {/* Aksi Utama Kanan: Atur Pejabat, Cetak, Tutup */}
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              {/* Tombol Atur Pejabat & TTD */}
+              <button
+                type="button"
+                onClick={() => {
+                  setTempSigner(headSigner);
+                  setIsSignerModalOpen(true);
+                }}
+                className="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
+                title="Ubah nama Kepala Unit, NIP, atau tempel foto TTD / kosongan"
+              >
+                <Settings className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="hidden xs:inline">Atur </span>Pejabat
+              </button>
+
+              {/* Tombol Cetak / PDF */}
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="px-3 sm:px-4 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1.5 shadow-lg shadow-emerald-950/50 active:scale-95 cursor-pointer"
+                title="Cetak A4 atau Simpan sebagai PDF (Ctrl+P)"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Cetak / PDF</span>
+                <span className="hidden md:inline text-[9px] bg-emerald-700/70 px-1 py-0.5 rounded font-mono text-emerald-100">
+                  Ctrl+P
+                </span>
+              </button>
+
+              {/* Tombol Tutup */}
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Tutup Pratinjau (Esc)"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+                title="Tutup (Esc)"
+              >
+                <X className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
             </div>
           </div>
 
-          {/* Sisi Tengah: Switcher Mode Tampilan & Presets Zoom */}
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* Switcher Mode: Kertas A4 vs Ringkas HP */}
-            <div className="flex items-center bg-slate-800/90 rounded-lg p-0.5 border border-slate-700/80 text-xs">
+          {/* Baris 2: Switcher Mode Tampilan & Kontrol Zoom (Rapi di HP & Desktop) */}
+          <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/60">
+            {/* Mode Switcher */}
+            <div className="flex items-center bg-slate-800/90 rounded-lg p-0.5 border border-slate-700/80 text-[11px]">
               <button
                 type="button"
                 onClick={() => setViewMode('a4')}
-                className={`px-2.5 sm:px-3 py-1 rounded-md font-medium transition flex items-center gap-1.5 ${
+                className={`px-2.5 py-1 rounded-md font-medium transition flex items-center gap-1.5 ${
                   viewMode === 'a4'
                     ? 'bg-indigo-600 text-white shadow-xs font-semibold'
                     : 'text-slate-400 hover:text-white'
                 }`}
-                title="Format Dokumen Resmi Cetak Kertas A4"
               >
-                <FileText className="w-3.5 h-3.5" />
+                <FileText className="w-3 h-3" />
                 <span>Kertas A4</span>
               </button>
               <button
                 type="button"
                 onClick={() => setViewMode('mobile')}
-                className={`px-2.5 sm:px-3 py-1 rounded-md font-medium transition flex items-center gap-1.5 ${
+                className={`px-2.5 py-1 rounded-md font-medium transition flex items-center gap-1.5 ${
                   viewMode === 'mobile'
                     ? 'bg-indigo-600 text-white shadow-xs font-semibold'
                     : 'text-slate-400 hover:text-white'
                 }`}
-                title="Tampilan Kartu Ringkas Layar HP"
               >
-                <Smartphone className="w-3.5 h-3.5" />
+                <Smartphone className="w-3 h-3" />
                 <span>Ringkas HP</span>
               </button>
             </div>
 
             {/* Presets Zoom (Khusus Mode Kertas A4) */}
             {viewMode === 'a4' && (
-              <div className="flex items-center bg-slate-800/90 rounded-lg p-0.5 border border-slate-700/80 text-[11px]">
+              <div className="flex items-center bg-slate-800/90 rounded-lg p-0.5 border border-slate-700/80 text-[10px] sm:text-[11px]">
                 <button
                   type="button"
                   onClick={() => setZoomPreset('fit-page')}
-                  className={`px-2 sm:px-2.5 py-1 rounded-md font-medium transition ${
+                  className={`px-2 py-0.5 sm:py-1 rounded-md font-medium transition ${
                     zoomPreset === 'fit-page'
                       ? 'bg-slate-700 text-emerald-400 font-bold'
                       : 'text-slate-400 hover:text-white'
                   }`}
-                  title="Sesuaikan tinggi & lebar agar pas 1 layar PC tanpa scroll"
+                  title="Sesuaikan tinggi & lebar agar pas 1 layar"
                 >
-                  <span className="hidden sm:inline">Pas </span>1 Layar
+                  Pas Layar
                 </button>
                 <button
                   type="button"
                   onClick={() => setZoomPreset('fit-width')}
-                  className={`px-2 sm:px-2.5 py-1 rounded-md font-medium transition ${
+                  className={`px-2 py-0.5 sm:py-1 rounded-md font-medium transition ${
                     zoomPreset === 'fit-width'
                       ? 'bg-slate-700 text-emerald-400 font-bold'
                       : 'text-slate-400 hover:text-white'
                   }`}
-                  title="Sesuaikan selebar layar"
+                  title="Pas selebar layar"
                 >
                   Lebar
                 </button>
                 <button
                   type="button"
                   onClick={() => setZoomPreset('100')}
-                  className={`hidden md:block px-2 sm:px-2.5 py-1 rounded-md font-medium transition ${
+                  className={`hidden sm:block px-2 py-0.5 sm:py-1 rounded-md font-medium transition ${
                     zoomPreset === '100'
                       ? 'bg-slate-700 text-white font-bold'
                       : 'text-slate-400 hover:text-white'
@@ -216,16 +368,16 @@ export function OfficialBastDocument({ delivery, onClose }: OfficialBastDocument
                 >
                   100%
                 </button>
-                <div className="hidden sm:block h-3.5 w-px bg-slate-700 mx-1" />
+                <div className="h-3 w-px bg-slate-700 mx-0.5" />
                 <button
                   type="button"
                   onClick={handleZoomOut}
                   className="p-1 text-slate-400 hover:text-white transition"
                   title="Perkecil"
                 >
-                  <ZoomOut className="w-3.5 h-3.5" />
+                  <ZoomOut className="w-3 h-3" />
                 </button>
-                <span className="text-[11px] font-mono text-slate-300 px-1 min-w-[34px] text-center">
+                <span className="text-[10px] font-mono text-slate-300 px-1 min-w-[32px] text-center">
                   {Math.round(currentScale * 100)}%
                 </span>
                 <button
@@ -234,50 +386,24 @@ export function OfficialBastDocument({ delivery, onClose }: OfficialBastDocument
                   className="p-1 text-slate-400 hover:text-white transition"
                   title="Perbesar"
                 >
-                  <ZoomIn className="w-3.5 h-3.5" />
+                  <ZoomIn className="w-3 h-3" />
                 </button>
               </div>
             )}
           </div>
-
-          {/* Sisi Kanan: Tombol Aksi Cetak / PDF & Tutup */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="px-3.5 sm:px-4 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1.5 sm:gap-2 shadow-lg shadow-emerald-950/50 active:scale-95 cursor-pointer"
-              title="Cetak A4 atau Simpan sebagai PDF (Ctrl+P)"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Cetak / PDF</span>
-              <span className="hidden md:inline text-[9px] bg-emerald-700/70 px-1.5 py-0.5 rounded font-mono text-emerald-100">
-                Ctrl+P
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Tutup Pratinjau (Esc)"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
-              title="Tutup (Esc)"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
         </div>
       </header>
 
-      {/* Info Banner Khusus Standar Cetak Kedinasan - Print Hidden */}
-      <div className="w-full bg-slate-900/70 border-b border-slate-800/80 py-1 px-4 text-center text-[11px] text-slate-300 print:hidden flex items-center justify-center gap-2">
-        <Info className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+      {/* Info Banner Khusus Standar Cetak - Print Hidden */}
+      <div className="no-print w-full bg-slate-900/70 border-b border-slate-800/80 py-1 px-3 text-center text-[10.5px] sm:text-[11px] text-slate-300 print:hidden flex items-center justify-center gap-1.5">
+        <Info className="w-3 h-3 text-emerald-400 shrink-0" />
         <span>
-          <strong>Standar Kedinasan BGN:</strong> Dokumen BAST ini terstandar <strong>pas 1 lembar A4 utuh</strong>. Di jendela cetak browser, gunakan tujuan <strong>&quot;Simpan sebagai PDF&quot;</strong> atau cetak langsung.
+          💡 <strong>Tips Cetak:</strong> Dokumen terisolasi <strong>tepat 1 halaman A4</strong> (dashboard background otomatis disembunyikan). Klik <strong>&quot;Atur Pejabat&quot;</strong> jika ingin ganti nama Kepala SPPG atau tempel TTD / kosongan.
         </span>
       </div>
 
       {/* =========================================================================
-          AREA KONTEN UTAMA: DOKUMEN RESMI BAST
+          AREA KONTEN DOKUMEN BAST RESMI
           ========================================================================= */}
       <main className="w-full flex-1 flex flex-col items-center p-2 sm:p-6 print:p-0 print:m-0 print:w-full">
         {/* =====================================================================
@@ -377,7 +503,7 @@ export function OfficialBastDocument({ delivery, onClose }: OfficialBastDocument
               )}
             </div>
 
-            {/* Tombol Cetak Dokumen Lengkap */}
+            {/* Tombol Cetak / Switch Mode */}
             <div className="pt-2 flex flex-col gap-2">
               <button
                 type="button"
@@ -407,15 +533,16 @@ export function OfficialBastDocument({ delivery, onClose }: OfficialBastDocument
             viewMode === 'mobile' ? 'hidden sm:flex' : 'flex'
           } official-bast-canvas-wrapper w-full justify-center items-start overflow-visible transition-all duration-150`}
         >
-          {/* Kontainer Pembungkus Berskala (Menjaga Layout PC Rapi & Sentris) */}
+          {/* Kontainer Pembungkus Berskala (Menjaga Layout Sentris & Proporsional) */}
           <div
             style={{
               width: `${a4BaseWidth * currentScale}px`,
               minWidth: `${a4BaseWidth * currentScale}px`,
               height: `${a4BaseHeight * currentScale}px`,
               position: 'relative',
+              margin: '0 auto',
             }}
-            className="shrink-0 transition-all duration-150 print:!w-full print:!h-auto print:!min-w-0"
+            className="shrink-0 transition-all duration-150 shadow-2xl rounded-sm print:!w-full print:!h-auto print:!min-w-0 print:!shadow-none"
           >
             {/* Lembar Dokumen A4 Resmi Pemerintah */}
             <div
@@ -425,9 +552,9 @@ export function OfficialBastDocument({ delivery, onClose }: OfficialBastDocument
                 minWidth: `${a4BaseWidth}px`,
                 height: `${a4BaseHeight}px`,
                 transform: `scale(${currentScale})`,
-                transformOrigin: 'top left',
+                transformOrigin: 'top center',
               }}
-              className="bg-white text-slate-950 font-serif leading-tight select-text shadow-2xl p-8 sm:p-10 flex flex-col justify-between border border-slate-300 print:shadow-none print:border-none print:p-0 print:m-0 print:transform-none print:w-full print:max-w-none print:h-auto"
+              className="bg-white text-slate-950 font-serif leading-tight select-text p-8 sm:p-10 flex flex-col justify-between border border-slate-300 print:shadow-none print:border-none print:p-0 print:m-0 print:transform-none print:w-full print:max-w-none print:h-auto"
             >
               {/* SISI ATAS & KONTEN DOKUMEN */}
               <div className="space-y-2">
@@ -678,33 +805,64 @@ export function OfficialBastDocument({ delivery, onClose }: OfficialBastDocument
                     </div>
                   </div>
 
-                  {/* Kolom 2: Mengetahui Kepala SPPG & QR Code Verifikasi */}
-                  <div className="flex flex-col items-center justify-between min-h-[105px]">
+                  {/* Kolom 2: Mengetahui Kepala SPPG & Opsi TTD Dinamis (Bisa diubah/kosongan/upload) */}
+                  <div
+                    onClick={() => {
+                      setTempSigner(headSigner);
+                      setIsSignerModalOpen(true);
+                    }}
+                    className="group relative flex flex-col items-center justify-between min-h-[105px] cursor-pointer hover:bg-slate-50/80 p-1 rounded transition"
+                    title="Klik untuk ubah nama pejabat / ganti tanda tangan"
+                  >
                     <div>
                       <span className="text-[8px] uppercase text-slate-500 font-bold block">
                         MENGETAHUI / MENYETUJUI:
                       </span>
-                      <p className="font-bold text-slate-900 text-[9.5px]">KEPALA UNIT SPPG</p>
+                      <p className="font-bold text-slate-900 text-[9.5px] line-clamp-1">{headSigner.title}</p>
                     </div>
 
-                    {/* Badge Verifikasi QR Code Realtime */}
+                    {/* Area Tanda Tangan Dinamis Kepala Unit */}
                     <div className="my-1 h-12 flex items-center justify-center">
-                      <div className="border border-slate-900 rounded p-1 bg-white flex items-center gap-1.5 text-[7px] text-slate-700 font-mono text-left shadow-xs">
-                        <QrCode className="w-7 h-7 text-slate-950 shrink-0" />
-                        <span className="leading-tight">
-                          VERIFIKASI RESMI<br />
-                          GIZIFLOW-BGN RI<br />
-                          VALID & TEREKAM
-                        </span>
-                      </div>
+                      {/* Opsi 1: QR Code Verifikasi Realtime */}
+                      {headSigner.signatureType === 'qr' && (
+                        <div className="border border-slate-900 rounded p-1 bg-white flex items-center gap-1.5 text-[7px] text-slate-700 font-mono text-left shadow-xs">
+                          <QrCode className="w-7 h-7 text-slate-950 shrink-0" />
+                          <span className="leading-tight">
+                            VERIFIKASI RESMI<br />
+                            GIZIFLOW-BGN RI<br />
+                            VALID & TEREKAM
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Opsi 2: Tempel TTD Gambar / Stempel Digital */}
+                      {headSigner.signatureType === 'image' && (
+                        headSigner.signatureImage ? (
+                          <img
+                            src={headSigner.signatureImage}
+                            alt="Tanda Tangan Kepala Unit"
+                            className="max-h-11 max-w-[140px] object-contain"
+                          />
+                        ) : (
+                          <div className="border border-dashed border-indigo-300 rounded px-2.5 py-1 text-[8px] text-indigo-700 italic">
+                            (Klik untuk tempel foto TTD)
+                          </div>
+                        )
+                      )}
+
+                      {/* Opsi 3: Kosongan untuk TTD Basah Manual */}
+                      {headSigner.signatureType === 'blank' && (
+                        <div className="w-28 border-b border-dashed border-slate-500 mt-6" />
+                      )}
                     </div>
 
                     <div>
-                      <p className="font-bold underline text-slate-950 text-[9.5px]">
-                        ( ABDULLAH SYAUQILLAH, S.Kom )
+                      <p className="font-bold underline text-slate-950 text-[9.5px] group-hover:text-indigo-600 transition flex items-center justify-center gap-1">
+                        <span>( {headSigner.name} )</span>
+                        <Edit3 className="w-2.5 h-2.5 text-slate-400 group-hover:text-indigo-600 print:hidden" />
                       </p>
                       <p className="text-[8px] text-slate-600">
-                        NIP. 19960717 202601 1 002
+                        {headSigner.nip ? `NIP. ${headSigner.nip}` : 'Kepala SPPG'}
                       </p>
                     </div>
                   </div>
@@ -745,7 +903,7 @@ export function OfficialBastDocument({ delivery, onClose }: OfficialBastDocument
         </div>
 
         {/* Footer Actions (Hidden on Print) */}
-        <div className="mt-4 w-full max-w-md sm:max-w-3xl bg-slate-900/90 backdrop-blur-md p-2.5 sm:p-3 rounded-2xl border border-slate-800 shadow-xl flex items-center justify-between text-xs text-white print:hidden">
+        <div className="official-bast-action-footer mt-4 w-full max-w-md sm:max-w-3xl bg-slate-900/90 backdrop-blur-md p-2.5 sm:p-3 rounded-2xl border border-slate-800 shadow-xl flex items-center justify-between text-xs text-white print:hidden">
           <div className="flex items-center gap-2 text-slate-300">
             <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
             <span className="text-[11px]">Siap dicetak fisik A4 atau simpan file PDF dokumen kedinasan</span>
@@ -770,6 +928,227 @@ export function OfficialBastDocument({ delivery, onClose }: OfficialBastDocument
           </div>
         </div>
       </main>
-    </div>
+
+      {/* =========================================================================
+          MODAL PENGATURAN PEJABAT PENGESAH (KEPALA UNIT SPPG / BGN)
+          ========================================================================= */}
+      {isSignerModalOpen && (
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm print:hidden">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 space-y-4 text-slate-900 animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <Settings className="w-4 h-4 text-indigo-600" />
+                  <span>Pengaturan Pejabat Pengesah BAST</span>
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Ubah nama kepala unit, NIP, atau tentukan format tanda tangannya.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSignerModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Form Inputs */}
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                  Nama Lengkap Kepala Unit / Pejabat BGN:
+                </label>
+                <input
+                  type="text"
+                  value={tempSigner.name}
+                  onChange={(e) => setTempSigner({ ...tempSigner, name: e.target.value })}
+                  placeholder="Contoh: ABDULLAH SYAUQILLAH, S.Kom"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    NIP / No. Identitas:
+                  </label>
+                  <input
+                    type="text"
+                    value={tempSigner.nip}
+                    onChange={(e) => setTempSigner({ ...tempSigner, nip: e.target.value })}
+                    placeholder="Contoh: 19960717 202601 1 002"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-[11px]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                    Jabatan Struktural:
+                  </label>
+                  <input
+                    type="text"
+                    value={tempSigner.title}
+                    onChange={(e) => setTempSigner({ ...tempSigner, title: e.target.value })}
+                    placeholder="Contoh: KEPALA UNIT SPPG"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-[11px]"
+                  />
+                </div>
+              </div>
+
+              {/* Pilihan Format Tanda Tangan */}
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1.5">
+                  Format Tanda Tangan Kepala Unit:
+                </label>
+                <div className="space-y-1.5">
+                  {/* Pilihan 1: QR Code Verifikasi */}
+                  <label
+                    onClick={() => setTempSigner({ ...tempSigner, signatureType: 'qr' })}
+                    className={`flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer transition ${
+                      tempSigner.signatureType === 'qr'
+                        ? 'border-indigo-600 bg-indigo-50/50 ring-1 ring-indigo-600'
+                        : 'border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="headSignatureType"
+                      checked={tempSigner.signatureType === 'qr'}
+                      onChange={() => setTempSigner({ ...tempSigner, signatureType: 'qr' })}
+                      className="mt-0.5 text-indigo-600"
+                    />
+                    <div>
+                      <span className="font-bold text-slate-900 block text-xs flex items-center gap-1.5">
+                        <QrCode className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>QR Code Verifikasi Resmi GiziFlow</span>
+                      </span>
+                      <p className="text-[10.5px] text-slate-500">
+                        Standar elektronik resmi BGN, aman dan terekam di sistem realtime.
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Pilihan 2: Tempel TTD / Upload Gambar */}
+                  <label
+                    onClick={() => setTempSigner({ ...tempSigner, signatureType: 'image' })}
+                    className={`flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer transition ${
+                      tempSigner.signatureType === 'image'
+                        ? 'border-indigo-600 bg-indigo-50/50 ring-1 ring-indigo-600'
+                        : 'border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="headSignatureType"
+                      checked={tempSigner.signatureType === 'image'}
+                      onChange={() => setTempSigner({ ...tempSigner, signatureType: 'image' })}
+                      className="mt-0.5 text-indigo-600"
+                    />
+                    <div className="flex-1">
+                      <span className="font-bold text-slate-900 block text-xs flex items-center gap-1.5">
+                        <Upload className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Tempel Foto Tanda Tangan / Stempel Digital</span>
+                      </span>
+                      <p className="text-[10.5px] text-slate-500">
+                        Unggah gambar TTD transparan (PNG/JPG) untuk tertempel di dokumen.
+                      </p>
+
+                      {/* Area Upload File jika mode Image aktif */}
+                      {tempSigner.signatureType === 'image' && (
+                        <div className="mt-2 pt-2 border-t border-indigo-100 flex items-center gap-2">
+                          <input
+                            type="file"
+                            ref={fileInputRef}
+                            accept="image/*"
+                            onChange={handleUploadSignature}
+                            className="hidden"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="px-3 py-1 rounded-lg text-[11px] font-bold bg-indigo-600 text-white hover:bg-indigo-700 transition flex items-center gap-1"
+                          >
+                            <Upload className="w-3 h-3" />
+                            <span>Pilih Foto TTD</span>
+                          </button>
+                          {tempSigner.signatureImage ? (
+                            <div className="flex items-center gap-1 text-[11px] text-emerald-600 font-semibold">
+                              <Check className="w-3 h-3" />
+                              <span>Foto TTD Terpasang</span>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">Belum ada foto</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </label>
+
+                  {/* Pilihan 3: Kosongan untuk TTD Basah Fisik */}
+                  <label
+                    onClick={() => setTempSigner({ ...tempSigner, signatureType: 'blank' })}
+                    className={`flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer transition ${
+                      tempSigner.signatureType === 'blank'
+                        ? 'border-indigo-600 bg-indigo-50/50 ring-1 ring-indigo-600'
+                        : 'border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="headSignatureType"
+                      checked={tempSigner.signatureType === 'blank'}
+                      onChange={() => setTempSigner({ ...tempSigner, signatureType: 'blank' })}
+                      className="mt-0.5 text-indigo-600"
+                    />
+                    <div>
+                      <span className="font-bold text-slate-900 block text-xs flex items-center gap-1.5">
+                        <PenTool className="w-3.5 h-3.5 text-slate-600" />
+                        <span>Kosongan (Untuk Tanda Tangan Basah Manual)</span>
+                      </span>
+                      <p className="text-[10.5px] text-slate-500">
+                        Menyediakan garis tanda tangan kosong untuk ditandatangani bolpoin fisik di kertas print.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={handleResetSigner}
+                className="px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 transition flex items-center gap-1"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Reset Default</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSignerModalOpen(false)}
+                  className="px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveSigner}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition flex items-center gap-1.5 shadow-md"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Simpan Perubahan</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>,
+    portalNode
   );
 }
