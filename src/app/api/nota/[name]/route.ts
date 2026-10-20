@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/api-auth';
 import prisma from '@/lib/prisma';
 import { safeNotaName } from '@/lib/nota-storage';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 /** Sajikan foto nota ke user yang sudah login (nota tidak boleh publik). */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ name: string }> }) {
@@ -24,6 +25,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ name
       },
     });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }

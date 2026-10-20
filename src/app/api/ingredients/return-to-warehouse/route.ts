@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireSuperadmin } from '@/lib/api-auth';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 export async function POST(req: NextRequest) {
   const auth = await requireSuperadmin(req);
@@ -51,6 +52,6 @@ export async function POST(req: NextRequest) {
       count: targetIngredients.length,
     });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message || 'Gagal memproses penarikan bahan.' }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error, 'Gagal memproses penarikan bahan.') }, { status: 500 });
   }
 }

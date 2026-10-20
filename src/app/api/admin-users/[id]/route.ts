@@ -4,6 +4,7 @@ import { requireAuth, requireSuperadmin, parseSessionToken } from '@/lib/api-aut
 import { UserRole } from '@prisma/client';
 import { hashPassword } from '@/lib/password';
 import { sanitizeText } from '@/lib/sanitize';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 export async function PATCH(
   req: NextRequest,
@@ -82,7 +83,7 @@ export async function PATCH(
 
     return NextResponse.json({ success: true, data: updated, message: 'Data admin berhasil diperbarui!' });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -130,6 +131,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, message: 'Akun admin berhasil dihapus!' });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }

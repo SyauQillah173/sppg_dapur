@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, requireSuperadmin } from '@/lib/api-auth';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 const SINGLETON_ID = 'singleton';
 
@@ -13,7 +14,7 @@ export async function GET(req: NextRequest) {
     const row = await prisma.appState.findUnique({ where: { id: SINGLETON_ID } });
     return NextResponse.json({ success: true, state: row?.payload ?? null, updatedAt: row?.updatedAt ?? null });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -48,6 +49,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, updatedAt: row.updatedAt });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }

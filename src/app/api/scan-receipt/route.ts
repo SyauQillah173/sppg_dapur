@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { requireAuth } from '@/lib/api-auth';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth(req);
@@ -133,7 +134,7 @@ Aturan Kategori Gizi:
     });
   } catch (error: any) {
     return NextResponse.json(
-      { success: false, error: error?.message || 'Gagal memproses gambar nota' },
+      { success: false, error: safeErrorMessage(error, 'Gagal memproses gambar nota') },
       { status: 500 }
     );
   }

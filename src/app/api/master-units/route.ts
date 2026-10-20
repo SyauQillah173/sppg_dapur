@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { normalizeName } from '@/lib/master-helpers';
 import { requireAuth, requireSuperadmin, parseSessionToken } from '@/lib/api-auth';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 
 export async function GET(req: NextRequest) {
@@ -14,7 +15,7 @@ export async function GET(req: NextRequest) {
     });
     return NextResponse.json({ success: true, data: units });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, data: newUnit, message: 'Satuan berhasil ditambahkan!' }, { status: 201 });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -74,6 +75,6 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ success: true, message: 'Satuan berhasil dihapus!' });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }

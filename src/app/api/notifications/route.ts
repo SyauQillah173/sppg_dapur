@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/api-auth';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req);
@@ -51,7 +52,7 @@ export async function GET(req: NextRequest) {
       { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
     );
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -100,7 +101,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: false, error: 'Aksi tidak dikenal.' }, { status: 400 });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -134,6 +135,6 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ success: false, error: 'Parameter id atau action diperlukan.' }, { status: 400 });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }

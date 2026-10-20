@@ -3,6 +3,7 @@ import { requireSuperadmin } from '@/lib/api-auth';
 import prisma from '@/lib/prisma';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { NOTA_URL_PREFIX } from '@/lib/nota-storage';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 const MAX_BYTES = 8 * 1024 * 1024; // 8 MB
 const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
@@ -45,6 +46,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, url: `${NOTA_URL_PREFIX}${name}` });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }

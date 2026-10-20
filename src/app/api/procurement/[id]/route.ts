@@ -4,6 +4,7 @@ import { AuditStatus } from '@prisma/client';
 import { requireSuperadmin } from '@/lib/api-auth';
 import { applyOrderAggregates, orderToApp, withAnomalyCheck } from '@/lib/procurement-db';
 import { deleteNotaPhoto, deleteNotaPhotos, cleanupOrphanedPhotos } from '@/lib/nota-storage';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 /** Edit nota belanja: nominal, tanggal, unit, peminta, supplier, rincian bahan, status. */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -107,7 +108,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     return NextResponse.json({ success: true, data: orderToApp(updated, updated.items, lookups), message: 'Nota belanja diperbarui.' });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -153,7 +154,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     return NextResponse.json({ success: true, data: orderToApp(updated, items, lookups) });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -201,6 +202,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     return NextResponse.json({ success: true, message: 'Nota belanja dihapus beserta foto fisiknya.' });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }

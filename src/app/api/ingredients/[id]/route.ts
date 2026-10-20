@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireSuperadmin } from '@/lib/api-auth';
 import { normalizeName } from '@/lib/master-helpers';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireSuperadmin(req);
@@ -44,7 +45,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const updated = await prisma.ingredient.update({ where: { id }, data });
     return NextResponse.json({ success: true, data: updated, message: 'Data bahan diperbarui.' });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -65,6 +66,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     await prisma.ingredient.delete({ where: { id } });
     return NextResponse.json({ success: true, message: 'Bahan berhasil dihapus.' });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }

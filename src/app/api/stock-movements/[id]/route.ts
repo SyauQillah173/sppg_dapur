@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { MovementType } from '@prisma/client';
 import { requireSuperadmin } from '@/lib/api-auth';
 import { normalizeName } from '@/lib/master-helpers';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 /** Ubah catatan mutasi stok keluar/masuk. */
 export async function PATCH(
@@ -107,7 +108,7 @@ export async function PATCH(
       message: 'Catatan mutasi stok berhasil diperbarui dan stok bahan telah disesuaikan!',
     });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -177,6 +178,6 @@ export async function DELETE(
       message: `Mutasi berhasil dihapus. Stok ${existing.ingredient.name} disesuaikan kembali menjadi ${stock} ${existing.unit}.`,
     });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }

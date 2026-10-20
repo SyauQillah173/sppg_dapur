@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireSuperadmin, parseSessionToken } from '@/lib/api-auth';
 import { normalizeName } from '@/lib/master-helpers';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 /** Ubah data kategori bahan. */
 export async function PATCH(
@@ -54,7 +55,7 @@ export async function PATCH(
 
     return NextResponse.json({ success: true, data: updated, message: 'Kategori berhasil diperbarui!' });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -92,6 +93,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, message: 'Kategori berhasil dihapus!' });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }

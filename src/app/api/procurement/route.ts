@@ -4,6 +4,7 @@ import { AuditStatus } from '@prisma/client';
 import { requireAuth, requireSuperadmin } from '@/lib/api-auth';
 import { applyOrderAggregates, orderToApp, withAnomalyCheck } from '@/lib/procurement-db';
 import { sanitizeObject } from '@/lib/sanitize';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 
 /** Daftar pembelanjaan + rincian bahannya (tabel procurement_orders & procurement_items). */
@@ -46,7 +47,7 @@ export async function GET(req: NextRequest) {
       { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate' } }
     );
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -244,6 +245,6 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }

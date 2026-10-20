@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getSessionSecret } from '@/lib/session-secret';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 async function verifyToken(token: string): Promise<{ username: string; role: string } | null> {
   try {
@@ -34,6 +35,11 @@ const SEC: Record<string, string> = {
   'Referrer-Policy': 'strict-origin-when-cross-origin',
   'Permissions-Policy': 'camera=(self), microphone=(), geolocation=()',
   'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Resource-Policy': 'same-origin',
+  'X-DNS-Prefetch-Control': 'off',
+  'X-Download-Options': 'noopen',
+  'X-Permitted-Cross-Domain-Policies': 'none',
   'Content-Security-Policy': [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
@@ -59,13 +65,61 @@ export async function middleware(request: NextRequest) {
     /\.(png|jpg|jpeg|gif|webp|svg|ico|woff2?|ttf|otf|css|js|map|json|webmanifest)$/.test(pathname)
   ) return NextResponse.next();
 
+  // 1. IP Extraction & Rate Limiting for API routes to prevent scraping & DDoS
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0].trim() || 'unknown';
+  if (pathname.startsWith('/api/')) {
+    if (pathname === '/api/auth/restore') {
+      if (!checkRateLimit(`rl:restore:${ip}`, 30, 60_000)) {
+        return NextResponse.json(
+          { success: false, error: 'Terlalu banyak permintaan restore sesi. Harap tunggu sebentar.' },
+          { status: 429 }
+        );
+      }
+    } else if (pathname !== '/api/auth/login') {
+      if (!checkRateLimit(`rl:api:${ip}`, 180, 60_000)) {
+        return NextResponse.json(
+          { success: false, error: 'Batas frekuensi permintaan API terlampaui. Harap perlambat akses Anda demi kestabilan server.' },
+          { status: 429 }
+        );
+      }
+    }
+
+    // 2. CSRF & Cross-Origin Protection for state-modifying methods
+    const mutatingMethods = ['POST', 'PUT', 'PATCH', 'DELETE'];
+    if (mutatingMethods.includes(request.method)) {
+      const origin = request.headers.get('origin');
+      const host = request.headers.get('host');
+      if (origin && host) {
+        try {
+          const originHost = new URL(origin).host;
+          if (originHost !== host) {
+            return NextResponse.json(
+              { success: false, error: 'Akses ditolak: Permintaan lintas-asal (Cross-Origin CSRF) tidak diizinkan.' },
+              { status: 403 }
+            );
+          }
+        } catch {
+          return NextResponse.json(
+            { success: false, error: 'Header Origin permintaan tidak valid.' },
+            { status: 400 }
+          );
+        }
+      }
+    }
+  }
+
   if (pathname === '/api/auth/login' || pathname === '/api/auth/logout' || pathname === '/api/auth/restore') {
     const res = NextResponse.next();
     Object.entries(SEC).forEach(([k, v]) => res.headers.set(k, v));
     return res;
   }
 
-  const token = request.cookies.get('giziflow_session')?.value;
+  // Dukung token dari Cookie HttpOnly maupun Bearer Authorization header
+  const cookieToken = request.cookies.get('giziflow_session')?.value;
+  const authHeader = request.headers.get('authorization');
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+  const token = cookieToken || bearerToken;
+
   const session = token ? await verifyToken(token) : null;
   const isAuthenticated = !!session;
   const isLoginPage = pathname === '/login';
@@ -73,7 +127,7 @@ export async function middleware(request: NextRequest) {
   if (!isAuthenticated && !isLoginPage) {
     if (pathname.startsWith('/api/')) {
       return NextResponse.json(
-        { success: false, error: 'Akses ditolak. Silakan login.' }, { status: 401 }
+        { success: false, error: 'Akses ditolak. Silakan login terlebih dahulu.' }, { status: 401 }
       );
     }
     return NextResponse.redirect(new URL('/login', request.url));

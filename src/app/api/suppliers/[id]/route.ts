@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireSuperadmin } from '@/lib/api-auth';
 import { normalizeName } from '@/lib/master-helpers';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 /** Ubah data supplier (nama, kontak, rekening, kategori). */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -46,7 +47,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const updated = await prisma.supplier.update({ where: { id }, data });
     return NextResponse.json({ success: true, data: updated, message: 'Data supplier diperbarui.' });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -70,6 +71,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     await prisma.supplier.delete({ where: { id } });
     return NextResponse.json({ success: true, message: 'Supplier berhasil dihapus.' });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }

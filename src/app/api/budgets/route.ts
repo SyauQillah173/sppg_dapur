@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { requireAuth, requireSuperadmin } from '@/lib/api-auth';
 import { applyBudgetToUnits, budgetToApp } from '@/lib/budget-db';
 import { sanitizeObject } from '@/lib/sanitize';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 
 /** Daftar dana masuk / pagu kas (tabel budget_allocations). */
@@ -35,7 +36,7 @@ export async function GET(req: NextRequest) {
       { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate' } }
     );
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -171,6 +172,6 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }

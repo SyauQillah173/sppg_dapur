@@ -241,12 +241,26 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   // ── Helper API ────────────────────────────────────────────────────────────
   const postJson = async (url: string, body: unknown, method: 'POST' | 'PATCH' | 'PUT' | 'DELETE' = 'POST') => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const storedToken = typeof window !== 'undefined' ? localStorage.getItem('giziflow_session_token') : null;
+    if (storedToken) {
+      headers['Authorization'] = `Bearer ${storedToken}`;
+    }
+
     const res = await fetch(url, {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: method === 'DELETE' ? undefined : JSON.stringify(body),
     });
     const json = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('giziflow_session_token');
+        localStorage.removeItem('giziflow_session_user');
+        window.location.replace('/login');
+      }
+      return { ok: false, error: json?.error || 'Sesi telah berakhir atau dicabut. Silakan login kembali.' };
+    }
     if (!res.ok || json?.success === false) {
       return { ok: false, error: json?.error || `Gagal menyimpan (HTTP ${res.status}).` };
     }

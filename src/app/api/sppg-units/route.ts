@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, requireSuperadmin, parseSessionToken } from '@/lib/api-auth';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req);
@@ -62,7 +63,7 @@ export async function GET(req: NextRequest) {
       { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate' } }
     );
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -102,6 +103,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, data: newUnit, message: 'Unit SPPG berhasil ditambahkan!' }, { status: 201 });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }

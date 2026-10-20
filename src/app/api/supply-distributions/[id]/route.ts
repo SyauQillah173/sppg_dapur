@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth, requireSuperadmin } from '@/lib/api-auth';
 import { sanitizeObject } from '@/lib/sanitize';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 const db = prisma as any;
 
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     return NextResponse.json({ success: true, data: record });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -255,7 +256,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       message: 'Alokasi bahan belanja berhasil diperbarui.',
     });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -344,6 +345,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       message: 'Alokasi bahan berhasil dihapus dan seluruh stok bahan telah dikembalikan ke Gudang Sementara.',
     });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }

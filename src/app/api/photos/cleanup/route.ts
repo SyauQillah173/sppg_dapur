@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSuperadmin } from '@/lib/api-auth';
 import { cleanupOrphanedPhotos } from '@/lib/nota-storage';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 export async function POST(req: NextRequest) {
   const auth = await requireSuperadmin(req);
@@ -14,6 +15,6 @@ export async function POST(req: NextRequest) {
       data: result,
     });
   } catch (err: any) {
-    return NextResponse.json({ success: false, error: err?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(err) }, { status: 500 });
   }
 }

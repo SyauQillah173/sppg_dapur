@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { requireSuperadmin } from '@/lib/api-auth';
 import { applyBudgetToUnits, budgetToApp } from '@/lib/budget-db';
 import { deleteNotaPhotos, cleanupOrphanedPhotos } from '@/lib/nota-storage';
+import { safeErrorMessage } from '@/lib/safe-error';
 
 /** Edit catatan dana masuk. */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -83,7 +84,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const unitMap = new Map(units.map((u) => [u.id, u.name]));
     return NextResponse.json({ success: true, data: budgetToApp(updated, unitMap), message: 'Catatan dana masuk diperbarui.' });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 400 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 400 });
   }
 }
 
@@ -120,6 +121,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     return NextResponse.json({ success: true, message: 'Catatan dana masuk dihapus beserta bukti transfernya.' });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: safeErrorMessage(error) }, { status: 500 });
   }
 }
