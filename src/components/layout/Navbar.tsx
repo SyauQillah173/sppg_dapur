@@ -27,8 +27,8 @@ export function Navbar({ activeTab, setActiveTab }: NavbarProps) {
     { id: 'dashboard', icon: LayoutDashboard, label: 'Ringkasan', short: 'Home' },
     { id: 'budget', icon: WalletCards, label: 'Anggaran', short: 'Kas' },
     { id: 'procurement', icon: ShoppingCart, label: 'Belanja', short: 'Belanja' },
-    { id: 'supply_allocation', icon: Truck, label: 'Alokasi Belanja', short: 'Alokasi' },
     { id: 'inventory', icon: Boxes, label: 'Stok Bahan', short: 'Stok' },
+    { id: 'supply_allocation', icon: Truck, label: 'Sebar Bahan', short: 'Sebar' },
     // Menu Konsep Distribusi Porsi Makanan HANYA muncul untuk SUPERADMIN, tersembunyi dari AUDITOR
     ...(userRole === 'SUPERADMIN'
       ? [

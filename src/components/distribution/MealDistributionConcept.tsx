@@ -71,7 +71,7 @@ const INITIAL_DELIVERIES: MealDelivery[] = [];
  * Helper untuk menghitung estimasi bahan gudang dapur MBG berdasarkan gramasi resmi per porsi siswa
  * Terhubung langsung secara real-time dengan master stok bahan di gudang (Menu 4).
  */
-function computeMBGDeductionList(targetPortions: number, allIngredients: MasterIngredient[]) {
+function computeMBGDeductionList(targetPortions: number, allIngredients: MasterIngredient[], targetUnitId?: string) {
   const portions = Math.max(1, Number(targetPortions) || 1);
 
   // Standar Gramasi Bahan Mentah MBG per porsi anak sekolah:
@@ -126,8 +126,17 @@ function computeMBGDeductionList(targetPortions: number, allIngredients: MasterI
     });
 
     const currentStock = matched ? Number(matched.currentStock) || 0 : 0;
-    const remainingStock = Math.max(0, currentStock - spec.qtyNeeded);
-    const isDeficit = currentStock < spec.qtyNeeded;
+    const dist = (matched?.sppgDistribution as Record<string, number>) || {};
+    const kitchenStock = targetUnitId && targetUnitId !== 'ALL' ? Number(dist[targetUnitId]) || 0 : currentStock;
+    const totalAllocatedAll = Object.values(dist).reduce((a, b) => a + (Number(b) || 0), 0);
+    const gudangStock = Math.max(0, currentStock - totalAllocatedAll);
+
+    const qtyNeeded = spec.qtyNeeded;
+    const takenFromKitchen = Math.min(kitchenStock, qtyNeeded);
+    const shortfall = Math.max(0, qtyNeeded - kitchenStock);
+    const takenFromGudang = Math.min(gudangStock, shortfall);
+    const unfulfilled = shortfall - takenFromGudang;
+    const isDeficit = unfulfilled > 0;
 
     return {
       ingredientId: matched?.id,
@@ -135,8 +144,15 @@ function computeMBGDeductionList(targetPortions: number, allIngredients: MasterI
       category: spec.category,
       unit: matched?.defaultUnit || spec.unit,
       currentStock,
-      quantity: spec.qtyNeeded,
-      remainingStock,
+      kitchenStock,
+      gudangStock,
+      takenFromKitchen,
+      takenFromGudang,
+      isPulledFromGudang: takenFromGudang > 0,
+      quantity: qtyNeeded,
+      remainingKitchenStock: Math.max(0, kitchenStock - takenFromKitchen),
+      remainingGudangStock: Math.max(0, gudangStock - takenFromGudang),
+      remainingStock: Math.max(0, currentStock - qtyNeeded),
       isDeficit,
     };
   });
@@ -460,8 +476,8 @@ export function MealDistributionConcept() {
 
   // Hitung estimasi bahan yang akan dipotong untuk form penambahan
   const estimatedDeductions = useMemo(() => {
-    return computeMBGDeductionList(Number(newForm.targetPortions) || 0, ingredients);
-  }, [newForm.targetPortions, ingredients]);
+    return computeMBGDeductionList(Number(newForm.targetPortions) || 0, ingredients, newForm.sppgUnitId);
+  }, [newForm.targetPortions, ingredients, newForm.sppgUnitId]);
 
   // Proteksi Role Superadmin
   if (userRole === 'EXECUTIVE_AUDITOR') {
@@ -2122,26 +2138,46 @@ export function MealDistributionConcept() {
                   <table className="w-full text-left text-[11px]">
                     <thead className="bg-indigo-100/70 text-indigo-950 font-semibold border-b border-indigo-200">
                       <tr>
-                        <th className="py-1.5 px-2">Kategori Bahan</th>
-                        <th className="py-1.5 px-2">Bahan di Gudang</th>
-                        <th className="py-1.5 px-2 text-right">Stok Gudang</th>
-                        <th className="py-1.5 px-2 text-right">Jumlah Keluar</th>
-                        <th className="py-1.5 px-2 text-right">Sisa Stok</th>
+                        <th className="py-1.5 px-2">Bahan Dapur</th>
+                        <th className="py-1.5 px-2 text-right">Jatah Dapur Ini</th>
+                        <th className="py-1.5 px-2 text-right">Cadangan Gudang</th>
+                        <th className="py-1.5 px-2 text-right">Jumlah Masak</th>
+                        <th className="py-1.5 px-2 text-center">Sumber Pengambilan</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-indigo-100 bg-white/70">
                       {estimatedDeductions.map((item, idx) => (
                         <tr key={idx} className="hover:bg-indigo-50/50">
-                          <td className="py-1.5 px-2 text-slate-500">{item.category}</td>
-                          <td className="py-1.5 px-2 font-semibold text-slate-800">{item.name}</td>
-                          <td className="py-1.5 px-2 text-right text-slate-600">
-                            {item.currentStock} {item.unit}
+                          <td className="py-1.5 px-2">
+                            <span className="font-semibold text-slate-800 block">{item.name}</span>
+                            <span className="text-[10px] text-slate-400">{item.category}</span>
                           </td>
-                          <td className="py-1.5 px-2 text-right font-bold text-rose-600">
+                          <td className="py-1.5 px-2 text-right font-mono font-medium text-slate-700">
+                            {item.kitchenStock} {item.unit}
+                          </td>
+                          <td className="py-1.5 px-2 text-right font-mono text-indigo-700">
+                            {item.gudangStock} {item.unit}
+                          </td>
+                          <td className="py-1.5 px-2 text-right font-bold text-rose-600 font-mono">
                             -{item.quantity} {item.unit}
                           </td>
-                          <td className="py-1.5 px-2 text-right font-semibold text-emerald-700">
-                            {item.remainingStock} {item.unit}
+                          <td className="py-1.5 px-2 text-center">
+                            {item.isPulledFromGudang ? (
+                              <span
+                                title="Jatah dapur kurang, ditarik dari sisa stok Gudang Sementara"
+                                className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-200"
+                              >
+                                Dapur: {item.takenFromKitchen} + Gudang: {item.takenFromGudang} {item.unit}
+                              </span>
+                            ) : item.isDeficit ? (
+                              <span className="inline-flex items-center rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-700 border border-rose-200">
+                                Defisit Total
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+                                Jatah Dapur Aman
+                              </span>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -2150,7 +2186,7 @@ export function MealDistributionConcept() {
                 </div>
 
                 <p className="text-[10px] text-indigo-800/80">
-                  ⚡ Saat Anda menyimpan surat jalan ini, sistem akan otomatis mencatat riwayat mutasi stok keluar (type: KELUAR) di Menu 4 (Stok Bahan) dengan nomor referensi surat jalan.
+                  ⚡ <strong>Fleksibilitas Logistik:</strong> Jika stok jatah dapur kurang, sistem otomatis menarik kekurangan dari cadangan yang masih tersimpan di Gudang Sementara. Mutasi stok keluar akan tercatat otomatis.
                 </p>
               </div>
 

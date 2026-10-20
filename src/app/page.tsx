@@ -95,8 +95,10 @@ function AppContent() {
             {/* Menu Alokasi: Penyebaran Pasokan Belanja ke Dapur SPPG */}
             {activeTab === 'supply_allocation' && <SupplyAllocationModule />}
 
-            {/* Menu 4: Stok & Pemakaian Bahan */}
-            {activeTab === 'inventory' && <KitchenInventoryCMS />}
+            {/* Menu 4: Stok & Pemakaian Bahan (Gudang Sementara) */}
+            {activeTab === 'inventory' && (
+              <KitchenInventoryCMS onNavigateToSupplyAllocation={() => setActiveTab('supply_allocation')} />
+            )}
 
             {/* Menu 5: Master Data / CMS */}
             {activeTab === 'cms' && <MasterDataCMS />}

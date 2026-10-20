@@ -1,5 +1,5 @@
 // Service Worker for SPPG Dapur PWA
-const CACHE_NAME = 'sppg-dapur-v4';
+const CACHE_NAME = 'sppg-dapur-v5';
 const PRECACHE_ASSETS = [
   '/manifest.json',
   '/badan-gizi.png',

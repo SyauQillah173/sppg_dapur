@@ -58,6 +58,11 @@ export function SupplyAllocationModule() {
   // State Modal Pratinjau Surat Jalan Resmi
   const [selectedForPrint, setSelectedForPrint] = useState<SupplyDistribution | null>(null);
 
+  // State Tab View: Gudang Sementara vs Riwayat Surat Jalan
+  const [activeTabMode, setActiveTabMode] = useState<'warehouse' | 'history'>('warehouse');
+  const [warehouseSearch, setWarehouseSearch] = useState('');
+  const [warehouseCategoryFilter, setWarehouseCategoryFilter] = useState('ALL');
+
   // Filter pengadaan belanja yang punya rincian items
   const validProcurements = useMemo(() => {
     return procurements.filter((p) => Array.isArray(p.items) && p.items.length > 0);
@@ -68,27 +73,45 @@ export function SupplyAllocationModule() {
     setSelectedProcurementId(procId);
     setErrorMessage('');
 
-    if (procId === 'MANUAL') {
-      // Mode alokasi bebas: ambil 5-10 bahan teratas dari master
-      setManualSupplierName('CV Rekanan Pengadaan SPPG');
-      setDriverName('');
-      setVehiclePlate('');
-      const defaultItems: SupplyAllocationItem[] = ingredients.slice(0, 6).map((ing) => ({
-        ingredientId: ing.id,
-        name: ing.name,
-        category: ing.category || 'Bahan Pokok',
-        totalPurchased: 100,
-        unit: ing.defaultUnit || 'Kg',
-        allocations: {
-          'SPPG-AA02': 25,
-          'SPPG-BS02': 25,
-          'SPPG-DR01': 25,
-          'SPPG-SM01': 25,
-        },
-        allocatedTotal: 100,
-        remainingUnallocated: 0,
-      }));
-      setItemsToAllocate(defaultItems);
+    if (procId === 'GUDANG_REALTIME' || !procId || procId === 'MANUAL') {
+      setSelectedProcurementId(procId || 'GUDANG_REALTIME');
+      setManualSupplierName('Gudang Sementara Logistik (Hasil Belanja CV)');
+      setDriverName('Mas Joko Santoso (Driver CV / Ekspedisi SPPG)');
+      setDriverPhone('0812-3456-7890');
+      setVehiclePlate('W 8923 AB (Pickup Logistik)');
+      setDeliveryDate(new Date().toISOString().slice(0, 10));
+
+      const itemsWithStock = ingredients.filter((ing) => (Number(ing.currentStock) || 0) > 0);
+      const sourceList = itemsWithStock.length > 0 ? itemsWithStock : ingredients.slice(0, 8);
+
+      const mapped: SupplyAllocationItem[] = sourceList.map((ing) => {
+        const totalAllocated = Object.values(ing.sppgDistribution || {}).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
+        const availableGudang = Math.max(0, (Number(ing.currentStock) || 0) - totalAllocated);
+        const targetQty = availableGudang > 0 ? availableGudang : (Number(ing.currentStock) || 100);
+
+        const count = sppgUnits.length || 4;
+        const perUnit = Math.floor(targetQty / count);
+        const remainder = targetQty - perUnit * count;
+
+        const alloc: Record<string, number> = {};
+        sppgUnits.forEach((u, idx) => {
+          const code = u.code || u.id;
+          alloc[code] = perUnit + (idx === 0 ? remainder : 0);
+        });
+
+        return {
+          ingredientId: ing.id,
+          name: ing.name,
+          category: ing.category || 'Bahan Dapur',
+          totalPurchased: targetQty,
+          unit: ing.defaultUnit || 'Kg',
+          allocations: alloc,
+          allocatedTotal: targetQty,
+          remainingUnallocated: 0,
+        };
+      });
+
+      setItemsToAllocate(mapped);
       return;
     }
 
@@ -128,6 +151,56 @@ export function SupplyAllocationModule() {
 
     setItemsToAllocate(mapped);
   };
+
+  // Handler sebar spesifik 1 bahan dari gudang sementara
+  const handleStartAllocationForSpecificIngredient = (ing: any) => {
+    setSelectedProcurementId('GUDANG_REALTIME');
+    setManualSupplierName('Gudang Sementara Logistik (Hasil Belanja CV)');
+    setDriverName('Mas Joko Santoso (Driver CV / Ekspedisi SPPG)');
+    setDriverPhone('0812-3456-7890');
+    setVehiclePlate('W 8923 AB (Pickup Logistik)');
+    setDeliveryDate(new Date().toISOString().slice(0, 10));
+
+    const totalAllocated = Object.values(ing.sppgDistribution || {}).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
+    const availableGudang = Math.max(0, (Number(ing.currentStock) || 0) - totalAllocated);
+    const targetQty = availableGudang > 0 ? availableGudang : (Number(ing.currentStock) || 100);
+
+    const count = sppgUnits.length || 4;
+    const perUnit = Math.floor(targetQty / count);
+    const remainder = targetQty - perUnit * count;
+
+    const alloc: Record<string, number> = {};
+    sppgUnits.forEach((u, idx) => {
+      const code = u.code || u.id;
+      alloc[code] = perUnit + (idx === 0 ? remainder : 0);
+    });
+
+    setItemsToAllocate([
+      {
+        ingredientId: ing.id,
+        name: ing.name,
+        category: ing.category || 'Bahan Dapur',
+        totalPurchased: targetQty,
+        unit: ing.defaultUnit || 'Kg',
+        allocations: alloc,
+        allocatedTotal: targetQty,
+        remainingUnallocated: 0,
+      },
+    ]);
+    setIsCreateModalOpen(true);
+  };
+
+  // List Bahan Gudang Sementara dengan status real-time
+  const warehouseIngredients = useMemo(() => {
+    return ingredients.filter((ing) => {
+      if (warehouseCategoryFilter !== 'ALL' && ing.category !== warehouseCategoryFilter) return false;
+      if (warehouseSearch.trim()) {
+        const q = warehouseSearch.toLowerCase();
+        return ing.name.toLowerCase().includes(q) || ing.code.toLowerCase().includes(q);
+      }
+      return true;
+    });
+  }, [ingredients, warehouseCategoryFilter, warehouseSearch]);
 
   // Ubah kuantitas alokasi unit tertentu
   const handleUpdateItemAllocation = (itemIdx: number, unitCode: string, value: string) => {
@@ -294,19 +367,18 @@ export function SupplyAllocationModule() {
         </div>
 
         {/* Action Button */}
+        {/* Action Button */}
         {isSuperadmin && (
           <button
             type="button"
             onClick={() => {
               setIsCreateModalOpen(true);
-              if (validProcurements.length > 0 && !selectedProcurementId) {
-                handleSelectProcurement(validProcurements[0].id);
-              }
+              handleSelectProcurement('GUDANG_REALTIME');
             }}
             className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm shadow-md transition transform active:scale-95 shrink-0"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Buat Alokasi Bahan Baru</span>
+            <span>+ Sebar Bahan ke 4 Dapur</span>
           </button>
         )}
       </div>
@@ -355,198 +427,358 @@ export function SupplyAllocationModule() {
         </div>
       </div>
 
-      {/* Filter & Search Bar */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
-        <div className="relative w-full sm:w-72">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Cari Surat Jalan, Driver, atau CV..."
-            className="w-full pl-9 pr-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition"
-          />
-        </div>
+      {/* Sub-Tab Navigation: Gudang Sementara vs Riwayat Surat Jalan */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pt-2">
+        <button
+          type="button"
+          onClick={() => setActiveTabMode('warehouse')}
+          className={`flex items-center gap-2 pb-3 px-4 text-xs font-bold border-b-2 transition ${
+            activeTabMode === 'warehouse'
+              ? 'border-emerald-600 text-emerald-800'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Boxes className="w-4 h-4 text-emerald-600" />
+          <span>📦 Stok Gudang Sementara Real-Time ({ingredients.length} Bahan)</span>
+        </button>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-          <span className="text-xs text-slate-500 font-medium">Status:</span>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as any)}
-            className="px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-          >
-            <option value="ALL">Semua Status</option>
-            <option value="COMPLETED">Telah Diterima (Selesai)</option>
-            <option value="IN_DELIVERY">Dalam Pengantaran</option>
-          </select>
-        </div>
+        <button
+          type="button"
+          onClick={() => setActiveTabMode('history')}
+          className={`flex items-center gap-2 pb-3 px-4 text-xs font-bold border-b-2 transition ${
+            activeTabMode === 'history'
+              ? 'border-emerald-600 text-emerald-800'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <FileText className="w-4 h-4 text-emerald-600" />
+          <span>📋 Riwayat Surat Jalan Pasokan ({supplyDistributions.length})</span>
+        </button>
       </div>
 
-      {/* List Surat Jalan Alokasi Pasokan */}
-      <div className="space-y-3">
-        {filteredList.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
-            <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mx-auto mb-4">
-              <Truck className="w-8 h-8" />
+      {/* VIEW 1: TAB GUDANG SEMENTARA & SEBAR CEPAT */}
+      {activeTabMode === 'warehouse' && (
+        <div className="space-y-4">
+          {/* Informational Guidance Banner */}
+          <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-50 via-teal-50 to-indigo-50 border border-emerald-200/80 flex items-start gap-3 shadow-xs">
+            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+              <Boxes className="w-4 h-4" />
             </div>
-            <h3 className="text-base font-bold text-slate-900 mb-1">
-              Belum Ada Riwayat Alokasi Pasokan Bahan
-            </h3>
-            <p className="text-xs text-slate-500 max-w-md mx-auto mb-5">
-              Ketika selesai mencatat pembelanjaan dari CV/supplier, klik tombol di bawah untuk menyebar kuantitas bahan belanja tersebut ke 4 dapur SPPG.
-            </p>
-            {isSuperadmin && (
+            <div className="space-y-1">
+              <h4 className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                <span>Konsep Gudang Sementara & Sebar Bahan ke Dapur</span>
+                <span className="text-[10px] bg-emerald-200 text-emerald-800 px-2 py-0.2 rounded-full font-bold">Real-Time</span>
+              </h4>
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                Semua pembelanjaan dari CV/vendor langsung masuk ke <strong>Gudang Sementara</strong> ini. Dari gudang ini, Anda dapat menyebarkan bahan ke 4 dapur SPPG (SPPG AA02, BS02, DR01, SM01) secara merata atau sesuai porsi. Jika sewaktu memasak di menu <strong>Distribusi Siswa</strong> stok jatah dapur kurang, sistem akan secara otomatis menarik kekurangan dari sisa stok cadangan di gudang sementara ini.
+              </p>
+            </div>
+          </div>
+
+          {/* Search & Filter Bar */}
+          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={warehouseSearch}
+                onChange={(e) => setWarehouseSearch(e.target.value)}
+                placeholder="Cari nama atau kode bahan gudang..."
+                className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
               <button
                 type="button"
                 onClick={() => {
                   setIsCreateModalOpen(true);
-                  if (validProcurements.length > 0) {
-                    handleSelectProcurement(validProcurements[0].id);
-                  }
+                  handleSelectProcurement('GUDANG_REALTIME');
                 }}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xs transition"
               >
-                <Plus className="w-4 h-4" />
-                <span>Mulai Buat Alokasi Bahan</span>
+                <Plus className="w-3.5 h-3.5" />
+                <span>Sebar Semua Bahan Gudang</span>
               </button>
-            )}
+            </div>
           </div>
-        ) : (
-          filteredList.map((dist) => {
-            const items = Array.isArray(dist.items) ? dist.items : [];
-            const totalKg = items.reduce((acc, it) => acc + (Number(it.totalPurchased) || 0), 0);
 
-            return (
-              <div
-                key={dist.id}
-                className="bg-white rounded-2xl border border-slate-200/90 hover:border-emerald-300 p-4 sm:p-5 shadow-xs hover:shadow-md transition space-y-4"
+          {/* Warehouse Materials Realtime Table */}
+          <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold text-[11px] uppercase">
+                  <tr>
+                    <th className="py-2.5 px-3">No</th>
+                    <th className="py-2.5 px-3">Kode</th>
+                    <th className="py-2.5 px-3">Nama Bahan Dapur</th>
+                    <th className="py-2.5 px-3">Kategori</th>
+                    <th className="py-2.5 px-3 text-right">Gudang Sementara (Sisa Standby)</th>
+                    <th className="py-2.5 px-3 text-center">Sebaran di 4 Dapur SPPG</th>
+                    <th className="py-2.5 px-3 text-right">Total Belanja Masuk</th>
+                    <th className="py-2.5 px-3 text-center">Satuan</th>
+                    {isSuperadmin && <th className="py-2.5 px-3 text-right">Aksi</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {warehouseIngredients.map((ing, idx) => {
+                    const totalAllocated = Object.values(ing.sppgDistribution || {}).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
+                    const gudangStock = Math.max(0, (Number(ing.currentStock) || 0) - totalAllocated);
+
+                    return (
+                      <tr key={ing.id} className="hover:bg-slate-50/70 transition">
+                        <td className="py-2.5 px-3 font-mono text-slate-400 text-[11px]">{idx + 1}</td>
+                        <td className="py-2.5 px-3 font-mono text-slate-600 font-medium">{ing.code}</td>
+                        <td className="py-2.5 px-3 font-semibold text-slate-900">{ing.name}</td>
+                        <td className="py-2.5 px-3">
+                          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-700">
+                            {ing.category}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold tabular-nums">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold border ${
+                            gudangStock > 0 ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-slate-100 text-slate-400 border-slate-200'
+                          }`}>
+                            {gudangStock.toLocaleString('id-ID')} {ing.defaultUnit}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <div className="flex items-center justify-center gap-1 text-[10px] font-mono">
+                            <span title="SPPG Abar Abir 02" className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-semibold">
+                              AA: {ing.sppgDistribution?.['SPPG-AA02'] || 0}
+                            </span>
+                            <span title="SPPG Banjarsari 02" className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-semibold">
+                              BS: {ing.sppgDistribution?.['SPPG-BS02'] || 0}
+                            </span>
+                            <span title="SPPG Dahan Rejo 01" className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-semibold">
+                              DR: {ing.sppgDistribution?.['SPPG-DR01'] || 0}
+                            </span>
+                            <span title="SPPG Semampir" className="bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded font-semibold">
+                              SM: {ing.sppgDistribution?.['SPPG-SM01'] || 0}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-medium text-slate-600 tabular-nums">
+                          {Number(ing.currentStock).toLocaleString('id-ID')}
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-mono text-slate-600">{ing.defaultUnit}</td>
+                        {isSuperadmin && (
+                          <td className="py-2.5 px-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleStartAllocationForSpecificIngredient(ing)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold border border-emerald-200 transition"
+                            >
+                              <Truck className="w-3.5 h-3.5" />
+                              <span>Sebar Bahan</span>
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW 2: TAB RIWAYAT SURAT JALAN PASOKAN */}
+      {activeTabMode === 'history' && (
+        <div className="space-y-4">
+          {/* Filter & Search Bar */}
+          <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Cari Surat Jalan, Driver, atau CV..."
+                className="w-full pl-9 pr-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <span className="text-xs text-slate-500 font-medium">Status:</span>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as any)}
+                className="px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
               >
-                {/* Header Kartu */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-sm">
-                      <Truck className="w-4 h-4" />
+                <option value="ALL">Semua Status</option>
+                <option value="COMPLETED">Telah Diterima (Selesai)</option>
+                <option value="IN_DELIVERY">Dalam Pengantaran</option>
+              </select>
+            </div>
+          </div>
+
+          {/* List Surat Jalan Alokasi Pasokan */}
+          <div className="space-y-3">
+            {filteredList.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
+                <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mx-auto mb-4">
+                  <Truck className="w-8 h-8" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900 mb-1">
+                  Belum Ada Riwayat Alokasi Pasokan Bahan
+                </h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto mb-5">
+                  Ketika selesai mencatat pembelanjaan dari CV/supplier, klik tombol di bawah untuk menyebar kuantitas bahan belanja tersebut ke 4 dapur SPPG.
+                </p>
+                {isSuperadmin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCreateModalOpen(true);
+                      handleSelectProcurement('GUDANG_REALTIME');
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Mulai Buat Alokasi Bahan</span>
+                  </button>
+                )}
+              </div>
+            ) : (
+              filteredList.map((dist) => {
+                const items = Array.isArray(dist.items) ? dist.items : [];
+                const totalKg = items.reduce((acc, it) => acc + (Number(it.totalPurchased) || 0), 0);
+
+                return (
+                  <div
+                    key={dist.id}
+                    className="bg-white rounded-2xl border border-slate-200/90 hover:border-emerald-300 p-4 sm:p-5 shadow-xs hover:shadow-md transition space-y-4"
+                  >
+                    {/* Header Kartu */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-sm">
+                          <Truck className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-slate-900 text-sm">
+                              {dist.dispatchNumber}
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                              {dist.status === 'COMPLETED' ? 'Selesai Disebar' : 'Dalam Perjalanan'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
+                            <span>{dist.supplierName}</span>
+                            <span>&bull;</span>
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              {new Date(dist.date).toLocaleDateString('id-ID', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric',
+                              })}
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedForPrint(dist)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs border border-emerald-200 transition"
+                          title="Lihat & Cetak Surat Jalan Resmi Standar Pemerintah"
+                        >
+                          <Printer className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Cetak Surat Jalan</span>
+                        </button>
+
+                        {isSuperadmin && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (
+                                confirm(
+                                  `Apakah Anda yakin ingin menghapus alokasi ${dist.dispatchNumber}? Stok yang disebar ke dapur SPPG akan dikembalikan secara otomatis.`
+                                )
+                              ) {
+                                await deleteSupplyDistribution(dist.id);
+                              }
+                            }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                            title="Hapus Alokasi"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-slate-900 text-sm">
-                          {dist.dispatchNumber}
-                        </span>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                          {dist.status === 'COMPLETED' ? 'Selesai Disebar' : 'Dalam Perjalanan'}
+
+                    {/* Info Driver & Ekspedisi */}
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block">Driver CV</span>
+                        <span className="font-semibold text-slate-800">{dist.driverName}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block">No. Polisi Armada</span>
+                        <span className="font-semibold text-slate-800 font-mono">{dist.vehiclePlate || '-'}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block">Nota Asal Belanja</span>
+                        <span className="font-semibold text-slate-800 font-mono">{dist.receiptNumber || 'Alokasi Mandiri'}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Muatan</span>
+                        <span className="font-black text-emerald-700 font-mono">
+                          {items.length} Bahan ({totalKg} Total Satuan)
                         </span>
                       </div>
-                      <p className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
-                        <span>{dist.supplierName}</span>
-                        <span>&bull;</span>
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {new Date(dist.date).toLocaleDateString('id-ID', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                          })}
-                        </span>
-                      </p>
+                    </div>
+
+                    {/* Matriks Ringkasan Sebaran per SPPG */}
+                    <div>
+                      <h4 className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                        <Building2 className="w-3.5 h-3.5 text-emerald-600" />
+                        Penyebaran Bahan ke Tiap Unit Dapur:
+                      </h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                        {sppgUnits.map((u) => {
+                          const code = u.code || u.id;
+                          const unitItemCount = items.filter((it) => (it.allocations?.[code] || 0) > 0).length;
+                          const unitQtySum = items.reduce((acc, it) => acc + (Number(it.allocations?.[code]) || 0), 0);
+
+                          return (
+                            <div
+                              key={u.id}
+                              className="bg-white p-2.5 rounded-xl border border-slate-200/80 flex items-center justify-between text-xs"
+                            >
+                              <div>
+                                <span className="font-bold text-slate-900 block truncate max-w-[130px]">
+                                  {u.shortName}
+                                </span>
+                                <span className="text-[10px] text-slate-500">
+                                  {unitItemCount} jenis bahan
+                                </span>
+                              </div>
+                              <div className="text-right">
+                                <span className="font-black text-emerald-700 font-mono">
+                                  {unitQtySum}
+                                </span>
+                                <span className="text-[9px] text-slate-400 block">Diterima</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex items-center gap-2 self-end sm:self-auto">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedForPrint(dist)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs border border-emerald-200 transition"
-                      title="Lihat & Cetak Surat Jalan Resmi Standar Pemerintah"
-                    >
-                      <Printer className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Cetak Surat Jalan</span>
-                    </button>
-
-                    {isSuperadmin && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (
-                            confirm(
-                              `Apakah Anda yakin ingin menghapus alokasi ${dist.dispatchNumber}? Stok yang disebar ke dapur SPPG akan dikembalikan secara otomatis.`
-                            )
-                          ) {
-                            await deleteSupplyDistribution(dist.id);
-                          }
-                        }}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
-                        title="Hapus Alokasi"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Info Driver & Ekspedisi */}
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Driver CV</span>
-                    <span className="font-semibold text-slate-800">{dist.driverName}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase block">No. Polisi Armada</span>
-                    <span className="font-semibold text-slate-800 font-mono">{dist.vehiclePlate || '-'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Nota Asal Belanja</span>
-                    <span className="font-semibold text-slate-800 font-mono">{dist.receiptNumber || 'Alokasi Mandiri'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Muatan</span>
-                    <span className="font-black text-emerald-700 font-mono">
-                      {items.length} Bahan ({totalKg} Total Satuan)
-                    </span>
-                  </div>
-                </div>
-
-                {/* Matriks Ringkasan Sebaran per SPPG */}
-                <div>
-                  <h4 className="text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                    <Building2 className="w-3.5 h-3.5 text-emerald-600" />
-                    Penyebaran Bahan ke Tiap Unit Dapur:
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                    {sppgUnits.map((u) => {
-                      const code = u.code || u.id;
-                      const unitItemCount = items.filter((it) => (it.allocations?.[code] || 0) > 0).length;
-                      const unitQtySum = items.reduce((acc, it) => acc + (Number(it.allocations?.[code]) || 0), 0);
-
-                      return (
-                        <div
-                          key={u.id}
-                          className="bg-white p-2.5 rounded-xl border border-slate-200/80 flex items-center justify-between text-xs"
-                        >
-                          <div>
-                            <span className="font-bold text-slate-900 block truncate max-w-[130px]">
-                              {u.shortName}
-                            </span>
-                            <span className="text-[10px] text-slate-500">
-                              {unitItemCount} jenis bahan
-                            </span>
-                          </div>
-                          <div className="text-right">
-                            <span className="font-black text-emerald-700 font-mono">
-                              {unitQtySum}
-                            </span>
-                            <span className="text-[9px] text-slate-400 block">Diterima</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Modal Buat Alokasi Bahan Baru */}
       {isCreateModalOpen && (
@@ -599,13 +831,13 @@ export function SupplyAllocationModule() {
                     onChange={(e) => handleSelectProcurement(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   >
-                    <option value="">-- Pilih Nota Pembelanjaan --</option>
+                    <option value="GUDANG_REALTIME">📦 Ambil dari Stok Gudang Sementara Real-Time ({ingredients.length} Bahan)</option>
                     {validProcurements.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.receiptNumber} &bull; {p.supplierName} &bull; {p.items.length} Bahan (Rp {p.actualReceiptTotal.toLocaleString('id-ID')})
+                        🧾 Nota {p.receiptNumber} &bull; {p.supplierName} &bull; {p.items.length} Bahan (Rp {p.actualReceiptTotal.toLocaleString('id-ID')})
                       </option>
                     ))}
-                    <option value="MANUAL">-- Alokasi Bebas (Tanpa Nota Belanja) --</option>
+                    <option value="MANUAL">📋 Alokasi Bebas Manual</option>
                   </select>
 
                   <div className="flex items-center justify-between px-3 py-2 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-900 font-semibold">

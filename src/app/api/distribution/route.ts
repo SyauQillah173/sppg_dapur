@@ -117,16 +117,28 @@ export async function POST(req: NextRequest) {
           }
 
           if (targetIngId) {
-            // Kurangi stok di tabel ingredient
+            const currentIng = await tx.ingredient.findUnique({
+              where: { id: targetIngId },
+            });
+            const safeUnitId = sppgUnitId === 'ALL' || !sppgUnitId ? 'SPPG-AA02' : sppgUnitId;
+            let updatedDist = (currentIng?.sppgDistribution as Record<string, number>) || {};
+            if (updatedDist && typeof updatedDist === 'object') {
+              const currentKitchenQty = Number(updatedDist[safeUnitId]) || 0;
+              const deductedFromKitchen = Math.min(currentKitchenQty, qty);
+              updatedDist = {
+                ...updatedDist,
+                [safeUnitId]: Math.max(0, currentKitchenQty - deductedFromKitchen),
+              };
+            }
+
+            // Kurangi stok di tabel ingredient dan update sppgDistribution
             const updatedIng = await tx.ingredient.update({
               where: { id: targetIngId },
               data: {
                 currentStock: { decrement: qty },
+                sppgDistribution: updatedDist,
               },
             });
-
-            // Catat buku kartu stok KELUAR
-            const safeUnitId = sppgUnitId === 'ALL' || !sppgUnitId ? 'SPPG-AA02' : sppgUnitId;
             await tx.stockMovement.create({
               data: {
                 sppgUnitId: safeUnitId,

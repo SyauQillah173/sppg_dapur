@@ -24,11 +24,16 @@ import {
  Sparkles,
  Calculator,
  Share2,
+ Truck,
 } from 'lucide-react';
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal';
 import { StockLedgerEntry, IngredientCategory } from '@/lib/types';
 
-export function KitchenInventoryCMS() {
+interface KitchenInventoryCMSProps {
+  onNavigateToSupplyAllocation?: () => void;
+}
+
+export function KitchenInventoryCMS({ onNavigateToSupplyAllocation }: KitchenInventoryCMSProps = {}) {
  const {
  ingredients,
  categories,
@@ -289,7 +294,16 @@ export function KitchenInventoryCMS() {
 
  {userRole === 'SUPERADMIN' ? (
  <div className="flex items-center gap-2">
-
+ {onNavigateToSupplyAllocation && (
+ <button
+ type="button"
+ onClick={onNavigateToSupplyAllocation}
+ className="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 transition"
+ >
+ <Truck className="h-3.5 w-3.5" />
+ <span>🚚 Sebar Bahan ke 4 Dapur SPPG</span>
+ </button>
+ )}
 
  <button
  type="button"
@@ -421,10 +435,11 @@ export function KitchenInventoryCMS() {
  <th className="py-2.5 px-3">Kode Bahan</th>
  <th className="py-2.5 px-3">Nama Bahan Dapur</th>
  <th className="py-2.5 px-3">Kategori</th>
- <th className="py-2.5 px-3 text-right">Total Stok</th>
+ <th className="py-2.5 px-3 text-right">Gudang Sementara</th>
+ <th className="py-2.5 px-3 text-center">Sebaran 4 SPPG</th>
+ <th className="py-2.5 px-3 text-right">Total Masuk</th>
  <th className="py-2.5 px-3 text-center">Satuan</th>
  <th className="py-2.5 px-3 text-right">Estimasi Harga</th>
- <th className="py-2.5 px-3 text-center">Sebaran 4 SPPG</th>
  <th className="py-2.5 px-3 text-center">Status</th>
  {userRole === 'SUPERADMIN' && <th className="py-2.5 px-3 text-right">Aksi</th>}
  </tr>
@@ -432,6 +447,8 @@ export function KitchenInventoryCMS() {
  <tbody className="divide-y divide-slate-100">
  {filteredList.map((item, idx) => {
  const isLowStock = item.currentStock <= item.minStockAlert;
+ const totalAllocated = Object.values(item.sppgDistribution || {}).reduce((a, b) => a + (Number(b) || 0), 0);
+ const gudangStock = Math.max(0, item.currentStock - totalAllocated);
  return (
  <tr key={item.id} className="hover:bg-slate-50/70">
  <td className="py-2.5 px-3 font-mono text-slate-400 text-[11px]">{idx + 1}</td>
@@ -442,12 +459,12 @@ export function KitchenInventoryCMS() {
  {item.category}
  </span>
  </td>
- <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 tabular-nums">
- {formatNumber(item.currentStock, item.currentStock % 1 === 0 ? 0 : 1)}
- </td>
- <td className="py-2.5 px-3 text-center font-mono text-slate-600">{item.defaultUnit}</td>
- <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-700">
- {formatIDR(item.lastPurchasePrice)}
+ <td className="py-2.5 px-3 text-right font-mono font-bold tabular-nums">
+ <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold border ${
+ gudangStock > 0 ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-slate-100 text-slate-400 border-slate-200'
+ }`}>
+ {formatNumber(gudangStock, gudangStock % 1 === 0 ? 0 : 1)} {item.defaultUnit}
+ </span>
  </td>
  <td className="py-2.5 px-3 text-center">
  <div className="flex items-center justify-center gap-1 text-[10px] font-mono">
@@ -465,6 +482,13 @@ export function KitchenInventoryCMS() {
  </span>
  </div>
  </td>
+ <td className="py-2.5 px-3 text-right font-mono font-medium text-slate-600 tabular-nums">
+ {formatNumber(item.currentStock, item.currentStock % 1 === 0 ? 0 : 1)}
+ </td>
+ <td className="py-2.5 px-3 text-center font-mono text-slate-600">{item.defaultUnit}</td>
+ <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-700">
+ {formatIDR(item.lastPurchasePrice)}
+ </td>
  <td className="py-2.5 px-3 text-center">
  {isLowStock ? (
  <span className="inline-flex items-center gap-0.5 rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700 border border-rose-200">
@@ -479,6 +503,16 @@ export function KitchenInventoryCMS() {
  {userRole === 'SUPERADMIN' && (
  <td className="py-2.5 px-3 text-right">
  <div className="flex items-center justify-end gap-1">
+ {onNavigateToSupplyAllocation && (
+ <button
+ type="button"
+ onClick={onNavigateToSupplyAllocation}
+ className="p-1 rounded text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition"
+ title="Sebar bahan ini ke 4 dapur SPPG"
+ >
+ <Truck className="h-3.5 w-3.5" />
+ </button>
+ )}
  <button
  type="button"
  onClick={() => {
