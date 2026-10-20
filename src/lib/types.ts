@@ -239,4 +239,36 @@ export interface MealDelivery {
   createdAt: string;
 }
 
+export interface SupplyAllocationItem {
+  ingredientId?: string;
+  name: string;
+  category: string;
+  totalPurchased: number;
+  unit: string;
+  allocations: Record<string, number>; // { 'SPPG-AA02': 25, 'SPPG-BS02': 25, ... }
+  allocatedTotal: number;
+  remainingUnallocated: number;
+}
+
+export interface SupplyDistribution {
+  id: string;
+  dispatchNumber: string; // e.g. SJ-PASOKAN-20261020-001
+  date: string;
+  procurementOrderId?: string;
+  receiptNumber?: string;
+  supplierId?: string;
+  supplierName: string;
+  driverName: string;
+  driverPhone?: string;
+  vehiclePlate?: string;
+  status: 'PENDING' | 'IN_DELIVERY' | 'COMPLETED';
+  notes?: string;
+  items: SupplyAllocationItem[];
+  headSignerName?: string;
+  headSignerTitle?: string;
+  headSignerNip?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 

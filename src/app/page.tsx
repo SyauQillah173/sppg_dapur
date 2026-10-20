@@ -11,6 +11,7 @@ import { ProcurementModule } from '@/components/procurement/ProcurementModule';
 import { KitchenInventoryCMS } from '@/components/inventory/KitchenInventoryCMS';
 import { MasterDataCMS } from '@/components/cms/MasterDataCMS';
 import { MealDistributionConcept } from '@/components/distribution/MealDistributionConcept';
+import { SupplyAllocationModule } from '@/components/supply-allocation/SupplyAllocationModule';
 import { DriverDeliveryView } from '@/components/distribution/DriverDeliveryView';
 import { SplitScreenReceiptModal } from '@/components/procurement/SplitScreenReceiptModal';
 import { AIScannerModal } from '@/components/procurement/AIScannerModal';
@@ -87,7 +88,12 @@ function AppContent() {
             {activeTab === 'budget' && <BudgetAllocationModule />}
 
             {/* Menu 3: Catat Belanja & Nota */}
-            {activeTab === 'procurement' && <ProcurementModule />}
+            {activeTab === 'procurement' && (
+              <ProcurementModule onNavigateToAllocation={() => setActiveTab('supply_allocation')} />
+            )}
+
+            {/* Menu Alokasi: Penyebaran Pasokan Belanja ke Dapur SPPG */}
+            {activeTab === 'supply_allocation' && <SupplyAllocationModule />}
 
             {/* Menu 4: Stok & Pemakaian Bahan */}
             {activeTab === 'inventory' && <KitchenInventoryCMS />}

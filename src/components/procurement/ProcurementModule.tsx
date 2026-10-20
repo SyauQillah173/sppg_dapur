@@ -23,11 +23,16 @@ import {
   Trash2,
   ShieldCheck,
   Eye,
+  Truck,
 } from 'lucide-react';
 import { ReturnChangeModal } from './ReturnChangeModal';
 import { ViewReturnProofModal } from './ViewReturnProofModal';
 
-export function ProcurementModule() {
+interface ProcurementModuleProps {
+  onNavigateToAllocation?: (procurementId?: string) => void;
+}
+
+export function ProcurementModule({ onNavigateToAllocation }: ProcurementModuleProps = {}) {
   const {
     filteredProcurements,
     selectedSppgUnit,
@@ -488,6 +493,17 @@ export function ProcurementModule() {
                       </td>
                       <td className="py-2.5 px-3 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
+                          {trx.items && trx.items.length > 0 && onNavigateToAllocation && (
+                            <button
+                              type="button"
+                              onClick={() => onNavigateToAllocation(trx.id)}
+                              className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 shadow-xs transition"
+                              title="Sebar / Distribusikan bahan belanja ini ke 4 Dapur SPPG"
+                            >
+                              <Truck className="h-3.5 w-3.5 text-emerald-600" />
+                              <span className="hidden xl:inline">Sebar Bahan</span>
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => openModal('INSPECT_RECEIPT', trx)}

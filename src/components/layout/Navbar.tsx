@@ -9,9 +9,10 @@ import {
   Boxes,
   Settings2,
   UtensilsCrossed,
+  Truck,
 } from 'lucide-react';
 
-export type ActiveTab = 'dashboard' | 'budget' | 'procurement' | 'inventory' | 'distribution_concept' | 'cms';
+export type ActiveTab = 'dashboard' | 'budget' | 'procurement' | 'supply_allocation' | 'inventory' | 'distribution_concept' | 'cms';
 
 interface NavbarProps {
   activeTab: ActiveTab;
@@ -26,6 +27,7 @@ export function Navbar({ activeTab, setActiveTab }: NavbarProps) {
     { id: 'dashboard', icon: LayoutDashboard, label: 'Ringkasan', short: 'Home' },
     { id: 'budget', icon: WalletCards, label: 'Anggaran', short: 'Kas' },
     { id: 'procurement', icon: ShoppingCart, label: 'Belanja', short: 'Belanja' },
+    { id: 'supply_allocation', icon: Truck, label: 'Alokasi Belanja', short: 'Alokasi' },
     { id: 'inventory', icon: Boxes, label: 'Stok Bahan', short: 'Stok' },
     // Menu Konsep Distribusi Porsi Makanan HANYA muncul untuk SUPERADMIN, tersembunyi dari AUDITOR
     ...(userRole === 'SUPERADMIN'

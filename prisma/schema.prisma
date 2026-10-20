@@ -343,3 +343,28 @@ model MealDistribution {
   @@map("meal_distributions")
 }
 
+model SupplyDistribution {
+  id                 String   @id @default(cuid())
+  dispatchNumber     String   @unique // e.g. SJ-PASOKAN-20261020-001
+  date               DateTime @default(now())
+  procurementOrderId String?
+  receiptNumber      String?  // Nomor nota asal belanja jika ada
+  supplierId         String?
+  supplierName       String   // e.g. "CV Sumber Pangan Abadi"
+  driverName         String   // Nama kurir / driver pengantar CV
+  driverPhone        String?
+  vehiclePlate       String?  // Plat kendaraan mobil box / pickup pengantar
+  status             String   @default("COMPLETED") // PENDING, IN_DELIVERY, COMPLETED
+  notes              String?
+  items              Json     // [ { ingredientId, name, category, totalPurchased, unit, allocations: { "SPPG-AA02": 25, ... } } ]
+  headSignerName     String?  @default("Drs. H. M. Zainudin, M.M.")
+  headSignerTitle    String?  @default("Kepala Satuan Pelayanan Pemenuhan Gizi (SPPG)")
+  headSignerNip      String?  @default("19750812 199903 1 004")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([date])
+  @@index([procurementOrderId])
+  @@map("supply_distributions")
+}
+
