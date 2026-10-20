@@ -89,6 +89,7 @@ interface StoreContextType {
   deleteDistribution: (id: string) => Promise<{ ok: boolean; error?: string }>;
   refreshDistributions: () => Promise<void>;
   addSupplyDistribution: (dist: any) => Promise<{ ok: boolean; error?: string }>;
+  updateSupplyDistribution: (id: string, updates: any) => Promise<{ ok: boolean; error?: string }>;
   deleteSupplyDistribution: (id: string) => Promise<{ ok: boolean; error?: string }>;
   refreshSupplyDistributions: () => Promise<void>;
   addIngredient: (ing: Omit<MasterIngredient, 'id' | 'code' | 'updatedAt'>) => Promise<{ ok: boolean; error?: string }>;
@@ -503,6 +504,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return failNotify(result);
   };
 
+  const updateSupplyDistribution = async (id: string, updates: any) => {
+    setSupplyDistributions((prev) => prev.map((d) => (d.id === id ? { ...d, ...updates } : d)));
+    const result = await postJson(`/api/supply-distributions/${id}`, updates, 'PUT');
+    if (result.ok) await Promise.all([refreshFromDb(), refreshMasterFromDb(), refreshSupplyDistributions()]);
+    return failNotify(result);
+  };
+
   const deleteSupplyDistribution = async (id: string) => {
     setSupplyDistributions((prev) => prev.filter((d) => d.id !== id));
     const result = await postJson(`/api/supply-distributions/${id}`, null, 'DELETE');
@@ -898,6 +906,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         distributions,
         supplyDistributions,
         addSupplyDistribution,
+        updateSupplyDistribution,
         deleteSupplyDistribution,
         refreshSupplyDistributions,
         modal,

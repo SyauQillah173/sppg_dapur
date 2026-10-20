@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useStore } from '@/lib/store';
-import { SupplyDistribution, SupplyAllocationItem } from '@/lib/types';
+import { SupplyDistribution, SupplyAllocationItem, MasterIngredient } from '@/lib/types';
 import {
   Truck,
   Plus,
@@ -22,6 +22,11 @@ import {
   ArrowRight,
   Sparkles,
   X,
+  Pencil,
+  ChevronDown,
+  ChevronUp,
+  RotateCcw,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { OfficialSupplyDispatchDocument } from './OfficialSupplyDispatchDocument';
 
@@ -32,18 +37,21 @@ export function SupplyAllocationModule() {
     ingredients,
     supplyDistributions,
     addSupplyDistribution,
+    updateSupplyDistribution,
     deleteSupplyDistribution,
     userRole,
   } = useStore();
 
   const isSuperadmin = userRole === 'SUPERADMIN';
 
-  // State pencarian & filter
+  // State pencarian & filter riwayat
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'COMPLETED' | 'IN_DELIVERY'>('ALL');
 
-  // State Modal Buat Alokasi Baru
+  // State Modal Buat / Edit Alokasi
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editingDistribution, setEditingDistribution] = useState<SupplyDistribution | null>(null);
+
   const [selectedProcurementId, setSelectedProcurementId] = useState<string>('');
   const [manualSupplierName, setManualSupplierName] = useState('');
   const [driverName, setDriverName] = useState('');
@@ -52,9 +60,19 @@ export function SupplyAllocationModule() {
   const [deliveryDate, setDeliveryDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState('');
   const [itemsToAllocate, setItemsToAllocate] = useState<SupplyAllocationItem[]>([]);
+  const [modalItemSearch, setModalItemSearch] = useState('');
+  const [selectedAddIngredientId, setSelectedAddIngredientId] = useState('');
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+
+  // State Konfirmasi Hapus Modal
+  const [distributionToDelete, setDistributionToDelete] = useState<SupplyDistribution | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // State Accordion Expand / Collapse per Card Riwayat
+  const [expandedCardIds, setExpandedCardIds] = useState<Record<string, boolean>>({});
 
   // State Modal Pratinjau Surat Jalan Resmi
   const [selectedForPrint, setSelectedForPrint] = useState<SupplyDistribution | null>(null);
@@ -103,9 +121,9 @@ export function SupplyAllocationModule() {
         return {
           ingredientId: ing.id,
           name: ing.name,
-          category: ing.category || 'Bahan Dapur',
+          category: ing.category,
           totalPurchased: targetQty,
-          unit: ing.defaultUnit || 'Kg',
+          unit: ing.defaultUnit,
           allocations: alloc,
           allocatedTotal: targetQty,
           remainingUnallocated: 0,
@@ -116,36 +134,35 @@ export function SupplyAllocationModule() {
       return;
     }
 
-    const proc = procurements.find((p) => p.id === procId);
+    const proc = validProcurements.find((p) => p.id === procId);
     if (!proc) return;
 
-    setManualSupplierName(proc.supplierName || 'CV Sumber Pangan');
-    setDriverName('Mas Joko Santoso (Driver CV)');
-    setVehiclePlate('W 8923 AB');
+    setManualSupplierName(proc.supplierName || 'CV Rekanan SPPG');
+    setDriverName('Mas Joko Santoso (Driver Rekanan CV)');
+    setDriverPhone('0812-3456-7890');
+    setVehiclePlate('W 8923 AB (Pickup CV)');
     setDeliveryDate(proc.date ? new Date(proc.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
 
-    // Petakan items dari nota belanja
     const mapped: SupplyAllocationItem[] = proc.items.map((it) => {
-      const qty = Number(it.quantity) || 0;
-      // Otomatis hitung pembagian rata 4 dapur
-      const perUnit = Math.floor(qty / (sppgUnits.length || 4));
-      const remainder = qty - perUnit * (sppgUnits.length || 4);
+      const targetQty = Number(it.quantity) || 0;
+      const count = sppgUnits.length || 4;
+      const perUnit = Math.floor(targetQty / count);
+      const remainder = targetQty - perUnit * count;
 
       const alloc: Record<string, number> = {};
       sppgUnits.forEach((u, idx) => {
         const code = u.code || u.id;
-        // Tambahkan sisa pembagian ke dapur pertama
         alloc[code] = perUnit + (idx === 0 ? remainder : 0);
       });
 
       return {
         ingredientId: it.ingredientId,
         name: it.name,
-        category: it.category || 'Bahan Dapur',
-        totalPurchased: qty,
-        unit: it.unit || 'Kg',
+        category: it.category,
+        totalPurchased: targetQty,
+        unit: it.unit,
         allocations: alloc,
-        allocatedTotal: qty,
+        allocatedTotal: targetQty,
         remainingUnallocated: 0,
       };
     });
@@ -153,18 +170,20 @@ export function SupplyAllocationModule() {
     setItemsToAllocate(mapped);
   };
 
-  // Handler sebar spesifik 1 bahan dari gudang sementara
-  const handleStartAllocationForSpecificIngredient = (ing: any) => {
+  // Handler Alokasi Cepat dari Tabel Gudang Sementara
+  const handleStartAllocationForSpecificIngredient = (ing: MasterIngredient) => {
+    setEditingDistribution(null);
     setSelectedProcurementId('GUDANG_REALTIME');
     setManualSupplierName('Gudang Sementara Logistik (Hasil Belanja CV)');
     setDriverName('Mas Joko Santoso (Driver CV / Ekspedisi SPPG)');
     setDriverPhone('0812-3456-7890');
     setVehiclePlate('W 8923 AB (Pickup Logistik)');
     setDeliveryDate(new Date().toISOString().slice(0, 10));
+    setNotes(`Penyebaran khusus bahan ${ing.name} dari Gudang Sementara ke Dapur SPPG.`);
 
     const totalAllocated = Object.values(ing.sppgDistribution || {}).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
-    const availableGudang = Math.max(0, (Number(ing.currentStock) || 0) - totalAllocated);
-    const targetQty = availableGudang > 0 ? availableGudang : (Number(ing.currentStock) || 100);
+    const available = Math.max(0, (Number(ing.currentStock) || 0) - totalAllocated);
+    const targetQty = available > 0 ? available : (Number(ing.currentStock) || 50);
 
     const count = sppgUnits.length || 4;
     const perUnit = Math.floor(targetQty / count);
@@ -180,21 +199,95 @@ export function SupplyAllocationModule() {
       {
         ingredientId: ing.id,
         name: ing.name,
-        category: ing.category || 'Bahan Dapur',
+        category: ing.category,
         totalPurchased: targetQty,
-        unit: ing.defaultUnit || 'Kg',
+        unit: ing.defaultUnit,
         allocations: alloc,
         allocatedTotal: targetQty,
         remainingUnallocated: 0,
       },
     ]);
+
     setIsCreateModalOpen(true);
+    setErrorMessage('');
   };
 
-  // List Bahan Gudang Sementara dengan status real-time
+  // Handler Buka Form Buat Alokasi Baru
+  const handleOpenCreateModal = () => {
+    setEditingDistribution(null);
+    setNotes('');
+    setModalItemSearch('');
+    setIsCreateModalOpen(true);
+    handleSelectProcurement('GUDANG_REALTIME');
+  };
+
+  // Handler Mulai Edit Alokasi yang Sudah Ada
+  const handleStartEdit = (dist: SupplyDistribution) => {
+    setEditingDistribution(dist);
+    setSelectedProcurementId(dist.procurementOrderId || 'MANUAL');
+    setManualSupplierName(dist.supplierName || '');
+    setDriverName(dist.driverName || '');
+    setDriverPhone(dist.driverPhone || '');
+    setVehiclePlate(dist.vehiclePlate || '');
+    setDeliveryDate(dist.date ? new Date(dist.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
+    setNotes(dist.notes || '');
+    setModalItemSearch('');
+
+    const mapped: SupplyAllocationItem[] = (dist.items || []).map((it) => {
+      const allocations = { ...(it.allocations || {}) };
+      const allocatedSum = Object.values(allocations).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
+      const totalPurchased = Number(it.totalPurchased) || 0;
+      return {
+        ...it,
+        allocations,
+        allocatedTotal: allocatedSum,
+        remainingUnallocated: totalPurchased - allocatedSum,
+      };
+    });
+
+    setItemsToAllocate(mapped);
+    setIsCreateModalOpen(true);
+    setErrorMessage('');
+  };
+
+  // Handler Konfirmasi Hapus Alokasi
+  const handleConfirmDelete = async () => {
+    if (!distributionToDelete) return;
+    setIsDeleting(true);
+    try {
+      const res = await deleteSupplyDistribution(distributionToDelete.id);
+      if (res.ok) {
+        setSuccessMessage(`✅ Alokasi ${distributionToDelete.dispatchNumber} berhasil dihapus. Stok bahan di 4 dapur telah dikembalikan ke gudang sementara.`);
+        setDistributionToDelete(null);
+      } else {
+        setErrorMessage(res.error || 'Gagal menghapus alokasi bahan.');
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Terjadi kesalahan sistem.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Toggle Accordion Rincian Bahan di Riwayat Card
+  const toggleExpandCard = (id: string) => {
+    setExpandedCardIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  // Filter Bahan Gudang Sementara
+  const warehouseCategories = useMemo(() => {
+    const set = new Set<string>();
+    ingredients.forEach((ing) => {
+      if (ing.category) set.add(ing.category);
+    });
+    return Array.from(set);
+  }, [ingredients]);
+
   const warehouseIngredients = useMemo(() => {
     return ingredients.filter((ing) => {
-      if (warehouseCategoryFilter !== 'ALL' && ing.category !== warehouseCategoryFilter) return false;
+      if (warehouseCategoryFilter !== 'ALL' && ing.category !== warehouseCategoryFilter) {
+        return false;
+      }
       if (warehouseSearch.trim()) {
         const q = warehouseSearch.toLowerCase();
         return ing.name.toLowerCase().includes(q) || ing.code.toLowerCase().includes(q);
@@ -268,7 +361,53 @@ export function SupplyAllocationModule() {
     });
   };
 
-  // Submit Simpan Alokasi
+  // Hapus 1 baris bahan dari alokasi
+  const handleRemoveItemFromAllocation = (index: number) => {
+    setItemsToAllocate((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Tambah bahan lain dari gudang secara manual
+  const handleAddCustomIngredient = () => {
+    if (!selectedAddIngredientId) return;
+    const ing = ingredients.find((i) => i.id === selectedAddIngredientId);
+    if (!ing) return;
+
+    if (itemsToAllocate.some((it) => it.ingredientId === ing.id || it.name.toLowerCase() === ing.name.toLowerCase())) {
+      setErrorMessage(`Bahan "${ing.name}" sudah ada di dalam daftar alokasi.`);
+      return;
+    }
+
+    const totalAllocated = Object.values(ing.sppgDistribution || {}).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
+    const available = Math.max(0, (Number(ing.currentStock) || 0) - totalAllocated);
+    const targetQty = available > 0 ? available : (Number(ing.currentStock) || 50);
+
+    const count = sppgUnits.length || 4;
+    const perUnit = Math.floor(targetQty / count);
+    const remainder = targetQty - perUnit * count;
+
+    const alloc: Record<string, number> = {};
+    sppgUnits.forEach((u, idx) => {
+      const code = u.code || u.id;
+      alloc[code] = perUnit + (idx === 0 ? remainder : 0);
+    });
+
+    const newItem: SupplyAllocationItem = {
+      ingredientId: ing.id,
+      name: ing.name,
+      category: ing.category,
+      totalPurchased: targetQty,
+      unit: ing.defaultUnit,
+      allocations: alloc,
+      allocatedTotal: targetQty,
+      remainingUnallocated: 0,
+    };
+
+    setItemsToAllocate((prev) => [...prev, newItem]);
+    setSelectedAddIngredientId('');
+    setErrorMessage('');
+  };
+
+  // Submit Simpan Alokasi (Create atau Update)
   const handleSaveAllocation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!driverName.trim()) {
@@ -284,34 +423,58 @@ export function SupplyAllocationModule() {
     setErrorMessage('');
 
     try {
-      const proc = procurements.find((p) => p.id === selectedProcurementId);
-      const dispatchNumber = `SJ-BAHAN-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(100 + Math.random() * 900)}`;
+      if (editingDistribution) {
+        // Mode Edit / Revisi
+        const payload = {
+          supplierName: manualSupplierName || editingDistribution.supplierName,
+          driverName: driverName.trim(),
+          driverPhone: driverPhone.trim() || '-',
+          vehiclePlate: vehiclePlate.trim() || '-',
+          date: new Date(deliveryDate).toISOString(),
+          notes: notes.trim() || null,
+          items: itemsToAllocate,
+        };
 
-      const payload = {
-        dispatchNumber,
-        date: new Date(deliveryDate).toISOString(),
-        procurementOrderId: selectedProcurementId === 'MANUAL' ? null : selectedProcurementId,
-        receiptNumber: proc?.receiptNumber || 'ALOKASI-MANDIRI',
-        supplierId: proc?.supplierId || null,
-        supplierName: manualSupplierName || proc?.supplierName || 'CV Rekanan SPPG',
-        driverName: driverName.trim(),
-        driverPhone: driverPhone.trim() || '-',
-        vehiclePlate: vehiclePlate.trim() || '-',
-        status: 'COMPLETED',
-        notes: notes.trim() || null,
-        items: itemsToAllocate,
-        headSignerName: 'Drs. H. M. Zainudin, M.M.',
-        headSignerTitle: 'Kepala Satuan Pelayanan Pemenuhan Gizi (SPPG)',
-        headSignerNip: '19750812 199903 1 004',
-      };
-
-      const res = await addSupplyDistribution(payload);
-      if (res.ok) {
-        setIsCreateModalOpen(false);
-        setActiveTabMode('history');
-        setSuccessMessage(`✅ Berhasil! Bahan berhasil disebarkan ke 4 Dapur SPPG dengan Nomor Dokumen ${dispatchNumber}.`);
+        const res = await updateSupplyDistribution(editingDistribution.id, payload);
+        if (res.ok) {
+          setIsCreateModalOpen(false);
+          setEditingDistribution(null);
+          setActiveTabMode('history');
+          setSuccessMessage(`✅ Berhasil! Alokasi bahan ${editingDistribution.dispatchNumber} berhasil diperbarui.`);
+        } else {
+          setErrorMessage(res.error || 'Gagal memperbarui alokasi bahan.');
+        }
       } else {
-        setErrorMessage(res.error || 'Gagal menyimpan alokasi bahan.');
+        // Mode Buat Baru
+        const proc = procurements.find((p) => p.id === selectedProcurementId);
+        const dispatchNumber = `SJ-BAHAN-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(100 + Math.random() * 900)}`;
+
+        const payload = {
+          dispatchNumber,
+          date: new Date(deliveryDate).toISOString(),
+          procurementOrderId: selectedProcurementId === 'MANUAL' ? null : selectedProcurementId,
+          receiptNumber: proc?.receiptNumber || 'ALOKASI-MANDIRI',
+          supplierId: proc?.supplierId || null,
+          supplierName: manualSupplierName || proc?.supplierName || 'CV Rekanan SPPG',
+          driverName: driverName.trim(),
+          driverPhone: driverPhone.trim() || '-',
+          vehiclePlate: vehiclePlate.trim() || '-',
+          status: 'COMPLETED',
+          notes: notes.trim() || null,
+          items: itemsToAllocate,
+          headSignerName: 'Drs. H. M. Zainudin, M.M.',
+          headSignerTitle: 'Kepala Satuan Pelayanan Pemenuhan Gizi (SPPG)',
+          headSignerNip: '19750812 199903 1 004',
+        };
+
+        const res = await addSupplyDistribution(payload);
+        if (res.ok) {
+          setIsCreateModalOpen(false);
+          setActiveTabMode('history');
+          setSuccessMessage(`✅ Berhasil! Bahan berhasil disebarkan ke 4 Dapur SPPG dengan Nomor Dokumen ${dispatchNumber}.`);
+        } else {
+          setErrorMessage(res.error || 'Gagal menyimpan alokasi bahan.');
+        }
       }
     } catch (err: any) {
       setErrorMessage(err?.message || 'Terjadi kesalahan sistem.');
@@ -320,7 +483,7 @@ export function SupplyAllocationModule() {
     }
   };
 
-  // Filtered List
+  // Filtered List Riwayat
   const filteredList = useMemo(() => {
     return supplyDistributions.filter((d) => {
       const matchSearch =
@@ -332,6 +495,15 @@ export function SupplyAllocationModule() {
       return matchSearch && matchStatus;
     });
   }, [supplyDistributions, searchTerm, statusFilter]);
+
+  // Filtered Items to Allocate inside Modal
+  const filteredModalItems = useMemo(() => {
+    if (!modalItemSearch.trim()) return itemsToAllocate;
+    const q = modalItemSearch.toLowerCase();
+    return itemsToAllocate.filter(
+      (it) => it.name.toLowerCase().includes(q) || (it.category || '').toLowerCase().includes(q)
+    );
+  }, [itemsToAllocate, modalItemSearch]);
 
   // Ringkasan KPI
   const totalSupplyCount = supplyDistributions.length;
@@ -346,11 +518,11 @@ export function SupplyAllocationModule() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
         <div>
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-800">
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-800 shrink-0">
               <Truck className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+              <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2 flex-wrap">
                 <span>Alokasi Belanja ke Dapur SPPG</span>
                 <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                   Penyebaran Bahan
@@ -364,14 +536,10 @@ export function SupplyAllocationModule() {
         </div>
 
         {/* Action Button */}
-        {/* Action Button */}
         {isSuperadmin && (
           <button
             type="button"
-            onClick={() => {
-              setIsCreateModalOpen(true);
-              handleSelectProcurement('GUDANG_REALTIME');
-            }}
+            onClick={handleOpenCreateModal}
             className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm shadow-md transition transform active:scale-95 shrink-0"
           >
             <Plus className="w-4 h-4" />
@@ -480,12 +648,12 @@ export function SupplyAllocationModule() {
               <Boxes className="w-4 h-4" />
             </div>
             <div className="space-y-1">
-              <h4 className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+              <h4 className="text-xs font-bold text-emerald-950 flex items-center gap-1.5 flex-wrap">
                 <span>Konsep Gudang Sementara & Sebar Bahan ke Dapur</span>
                 <span className="text-[10px] bg-emerald-200 text-emerald-800 px-2 py-0.2 rounded-full font-bold">Real-Time</span>
               </h4>
               <p className="text-[11px] text-slate-600 leading-relaxed">
-                Semua pembelanjaan dari CV/vendor langsung masuk ke <strong>Gudang Sementara</strong> ini. Dari gudang ini, Anda dapat menyebarkan bahan ke 4 dapur SPPG (SPPG AA02, BS02, DR01, SM01) secara merata atau sesuai porsi. Jika sewaktu memasak di menu <strong>Distribusi Siswa</strong> stok jatah dapur kurang, sistem akan secara otomatis menarik kekurangan dari sisa stok cadangan di gudang sementara ini.
+                Semua pembelanjaan dari CV/vendor langsung masuk ke <strong>Gudang Sementara</strong> ini. Dari gudang ini, Anda dapat menyebarkan bahan ke 4 dapur SPPG secara merata atau sesuai kebutuhan. Jika saat memasak di menu <strong>Distribusi Makanan</strong> jatah dapur kurang, sistem akan secara otomatis menarik kekurangan dari sisa stok cadangan di gudang sementara ini.
               </p>
             </div>
           </div>
@@ -498,41 +666,43 @@ export function SupplyAllocationModule() {
                 type="text"
                 value={warehouseSearch}
                 onChange={(e) => setWarehouseSearch(e.target.value)}
-                placeholder="Cari nama atau kode bahan gudang..."
-                className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                placeholder="Cari kode atau nama bahan di gudang..."
+                className="w-full pl-9 pr-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition"
               />
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsCreateModalOpen(true);
-                  handleSelectProcurement('GUDANG_REALTIME');
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xs transition"
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end overflow-x-auto scrollbar-none">
+              <span className="text-xs text-slate-500 font-medium shrink-0">Kategori:</span>
+              <select
+                value={warehouseCategoryFilter}
+                onChange={(e) => setWarehouseCategoryFilter(e.target.value)}
+                className="px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Sebar Semua Bahan Gudang</span>
-              </button>
+                <option value="ALL">Semua Kategori</option>
+                {warehouseCategories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
-          {/* Warehouse Materials Realtime Table */}
-          <div className="rounded-xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+          {/* Tabel Stok Gudang Sementara */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold text-[11px] uppercase">
-                  <tr>
-                    <th className="py-2.5 px-3">No</th>
-                    <th className="py-2.5 px-3">Kode</th>
-                    <th className="py-2.5 px-3">Nama Bahan Dapur</th>
+                <thead>
+                  <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                    <th className="py-2.5 px-3 w-8">#</th>
+                    <th className="py-2.5 px-3 w-28">Kode</th>
+                    <th className="py-2.5 px-3">Nama Bahan</th>
                     <th className="py-2.5 px-3">Kategori</th>
                     <th className="py-2.5 px-3 text-right">Gudang Sementara (Sisa Standby)</th>
-                    <th className="py-2.5 px-3 text-center">Sebaran di 4 Dapur SPPG</th>
-                    <th className="py-2.5 px-3 text-right">Total Belanja Masuk</th>
+                    <th className="py-2.5 px-3 text-center">Tersebar di 4 Dapur SPPG</th>
+                    <th className="py-2.5 px-3 text-right">Total Fisik</th>
                     <th className="py-2.5 px-3 text-center">Satuan</th>
-                    {isSuperadmin && <th className="py-2.5 px-3 text-right">Aksi</th>}
+                    {isSuperadmin && <th className="py-2.5 px-3 text-right">Aksi Cepat</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -558,7 +728,7 @@ export function SupplyAllocationModule() {
                           </span>
                         </td>
                         <td className="py-2.5 px-3 text-center">
-                          <div className="flex items-center justify-center gap-1 text-[10px] font-mono">
+                          <div className="flex items-center justify-center gap-1 text-[10px] font-mono flex-wrap">
                             <span title="SPPG Abar Abir 02" className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-semibold">
                               AA: {ing.sppgDistribution?.['SPPG-AA02'] || 0}
                             </span>
@@ -603,7 +773,7 @@ export function SupplyAllocationModule() {
       {activeTabMode === 'history' && (
         <div className="space-y-4">
           {/* Filter & Search Bar */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
+          <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
             <div className="relative w-full sm:w-72">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -645,10 +815,7 @@ export function SupplyAllocationModule() {
                 {isSuperadmin && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setIsCreateModalOpen(true);
-                      handleSelectProcurement('GUDANG_REALTIME');
-                    }}
+                    onClick={handleOpenCreateModal}
                     className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition"
                   >
                     <Plus className="w-4 h-4" />
@@ -660,6 +827,7 @@ export function SupplyAllocationModule() {
               filteredList.map((dist) => {
                 const items = Array.isArray(dist.items) ? dist.items : [];
                 const totalKg = items.reduce((acc, it) => acc + (Number(it.totalPurchased) || 0), 0);
+                const isExpanded = !!expandedCardIds[dist.id];
 
                 return (
                   <div
@@ -667,13 +835,13 @@ export function SupplyAllocationModule() {
                     className="bg-white rounded-2xl border border-slate-200/90 hover:border-emerald-300 p-4 sm:p-5 shadow-xs hover:shadow-md transition space-y-4"
                   >
                     {/* Header Kartu */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-sm">
+                        <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-sm shrink-0">
                           <Truck className="w-4 h-4" />
                         </div>
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-mono font-bold text-slate-900 text-sm">
                               {dist.dispatchNumber}
                             </span>
@@ -681,11 +849,11 @@ export function SupplyAllocationModule() {
                               {dist.status === 'COMPLETED' ? 'Selesai Disebar' : 'Dalam Perjalanan'}
                             </span>
                           </div>
-                          <p className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
-                            <span>{dist.supplierName}</span>
+                          <p className="text-xs text-slate-500 flex items-center gap-2 mt-0.5 flex-wrap">
+                            <span className="font-semibold text-slate-700">{dist.supplierName}</span>
                             <span>&bull;</span>
                             <span className="flex items-center gap-1">
-                              <Calendar className="w-3 h-3" />
+                              <Calendar className="w-3 h-3 text-slate-400" />
                               {new Date(dist.date).toLocaleDateString('id-ID', {
                                 day: 'numeric',
                                 month: 'short',
@@ -696,8 +864,8 @@ export function SupplyAllocationModule() {
                         </div>
                       </div>
 
-                      {/* Action Buttons */}
-                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                      {/* Action Buttons: Cetak, Edit, Hapus */}
+                      <div className="flex items-center gap-1.5 flex-wrap self-end sm:self-auto">
                         <button
                           type="button"
                           onClick={() => setSelectedForPrint(dist)}
@@ -708,24 +876,25 @@ export function SupplyAllocationModule() {
                           <span>Cetak Surat Jalan</span>
                         </button>
 
-                        {isSuperadmin && (
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              if (
-                                confirm(
-                                  `Apakah Anda yakin ingin menghapus alokasi ${dist.dispatchNumber}? Stok yang disebar ke dapur SPPG akan dikembalikan secara otomatis.`
-                                )
-                              ) {
-                                await deleteSupplyDistribution(dist.id);
-                              }
-                            }}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
-                            title="Hapus Alokasi"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleStartEdit(dist)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs border border-blue-200 transition"
+                          title="Edit Rincian Alokasi Pasokan"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setDistributionToDelete(dist)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 transition"
+                          title="Hapus Alokasi Pasokan"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Hapus</span>
+                        </button>
                       </div>
                     </div>
 
@@ -746,7 +915,7 @@ export function SupplyAllocationModule() {
                       <div>
                         <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Muatan</span>
                         <span className="font-black text-emerald-700 font-mono">
-                          {items.length} Bahan ({totalKg} Total Satuan)
+                          {items.length} Bahan ({totalKg.toLocaleString('id-ID')} Total Satuan)
                         </span>
                       </div>
                     </div>
@@ -778,7 +947,7 @@ export function SupplyAllocationModule() {
                               </div>
                               <div className="text-right">
                                 <span className="font-black text-emerald-700 font-mono">
-                                  {unitQtySum}
+                                  {unitQtySum.toLocaleString('id-ID')}
                                 </span>
                                 <span className="text-[9px] text-slate-400 block">Diterima</span>
                               </div>
@@ -786,6 +955,67 @@ export function SupplyAllocationModule() {
                           );
                         })}
                       </div>
+                    </div>
+
+                    {/* Accordion / Toggle Rincian Bahan yang Disebar (Scrollable & Tidak Memanjang) */}
+                    <div className="pt-2 border-t border-slate-100">
+                      <div className="flex items-center justify-between">
+                        <button
+                          type="button"
+                          onClick={() => toggleExpandCard(dist.id)}
+                          className="flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-emerald-700 transition"
+                        >
+                          <span>{isExpanded ? 'Tutup Rincian Bahan' : `Lihat Rincian ${items.length} Bahan Lengkap`}</span>
+                          {isExpanded ? <ChevronUp className="w-4 h-4 text-emerald-600" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                        </button>
+
+                        <span className="text-[11px] text-slate-400 font-medium">
+                          {items.length} Bahan &bull; {totalKg.toLocaleString('id-ID')} Total Satuan
+                        </span>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="mt-3 border border-slate-200 rounded-xl overflow-hidden shadow-2xs animate-in fade-in">
+                          <div className="max-h-60 overflow-y-auto overflow-x-auto scrollbar-thin">
+                            <table className="w-full text-left text-xs border-collapse">
+                              <thead className="sticky top-0 bg-slate-100 font-bold text-slate-700 border-b border-slate-200 shadow-2xs">
+                                <tr>
+                                  <th className="py-2 px-2.5 w-10 text-center">No</th>
+                                  <th className="py-2 px-3">Nama Bahan</th>
+                                  <th className="py-2 px-2">Kategori</th>
+                                  <th className="py-2 px-2 text-right">Total Beli</th>
+                                  {sppgUnits.map((u) => (
+                                    <th key={u.id} className="py-2 px-2 text-right w-24">
+                                      {u.shortName}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {items.map((it, itIdx) => (
+                                  <tr key={itIdx} className="hover:bg-slate-50/70 transition">
+                                    <td className="py-2 px-2.5 text-center text-slate-400 font-mono text-[11px]">{itIdx + 1}</td>
+                                    <td className="py-2 px-3 font-bold text-slate-900">{it.name}</td>
+                                    <td className="py-2 px-2 text-slate-500 text-[11px]">{it.category}</td>
+                                    <td className="py-2 px-2 text-right font-mono font-bold text-slate-900">
+                                      {it.totalPurchased} {it.unit}
+                                    </td>
+                                    {sppgUnits.map((u) => {
+                                      const code = u.code || u.id;
+                                      const val = it.allocations?.[code] || 0;
+                                      return (
+                                        <td key={u.id} className="py-2 px-2 text-right font-mono text-slate-700">
+                                          {val > 0 ? `${val} ${it.unit}` : '-'}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -795,31 +1025,38 @@ export function SupplyAllocationModule() {
         </div>
       )}
 
-      {/* Modal Buat Alokasi Bahan Baru */}
+      {/* MODAL BUAT / EDIT ALOKASI BAHAN (SCROLLABLE & FULL RESPONSIF) */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-6 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             {/* Modal Header */}
             <div className="bg-slate-900 text-white p-4 sm:p-5 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
                   <Truck className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-slate-100 flex items-center gap-2">
-                    <span>Sebar Bahan Belanja ke Dapur SPPG</span>
-                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                      Surat Jalan Pasokan
+                  <h3 className="font-bold text-sm sm:text-base text-slate-100 flex items-center gap-2 flex-wrap">
+                    <span>
+                      {editingDistribution ? `Edit Alokasi: ${editingDistribution.dispatchNumber}` : 'Sebar Bahan Belanja ke Dapur SPPG'}
+                    </span>
+                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30 font-semibold">
+                      {editingDistribution ? 'Mode Revisi' : 'Surat Jalan Pasokan'}
                     </span>
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Bahan belanja dari CV langsung dibagi dan dikirim ke 4 dapur SPPG terdaftar.
+                    {editingDistribution
+                      ? 'Sesuaikan driver, tanggal, atau pembagian porsi bahan ke 4 dapur SPPG.'
+                      : 'Bahan belanja dari CV langsung dibagi dan dikirim ke 4 dapur SPPG terdaftar.'}
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setIsCreateModalOpen(false)}
+                onClick={() => {
+                  setIsCreateModalOpen(false);
+                  setEditingDistribution(null);
+                }}
                 className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
               >
                 <X className="w-5 h-5" />
@@ -827,7 +1064,7 @@ export function SupplyAllocationModule() {
             </div>
 
             {/* Modal Body */}
-            <form onSubmit={handleSaveAllocation} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+            <form onSubmit={handleSaveAllocation} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 scrollbar-thin">
               {errorMessage && (
                 <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
@@ -838,13 +1075,14 @@ export function SupplyAllocationModule() {
               {/* 1. Pilih Nota Belanja Sumber */}
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
-                  1. Pilih Nota Pembelanjaan Yang Ingin Disebar:
+                  1. Sumber Nota Pembelanjaan / Gudang:
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <select
+                    disabled={!!editingDistribution}
                     value={selectedProcurementId}
                     onChange={(e) => handleSelectProcurement(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 disabled:opacity-70 disabled:cursor-not-allowed"
                   >
                     <option value="GUDANG_REALTIME">📦 Ambil dari Stok Gudang Sementara Real-Time ({ingredients.length} Bahan)</option>
                     {validProcurements.map((p) => (
@@ -856,32 +1094,42 @@ export function SupplyAllocationModule() {
                   </select>
 
                   <div className="flex items-center justify-between px-3 py-2 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-900 font-semibold">
-                    <span>Supplier/CV: {manualSupplierName || '-'}</span>
-                    <span className="text-[10px] bg-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                    <span className="truncate">Supplier/CV: {manualSupplierName || '-'}</span>
+                    <span className="text-[10px] bg-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full font-bold shrink-0">
                       {itemsToAllocate.length} Bahan Terpilih
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* 2. Informasi Pengantar / Driver CV */}
+              {/* 2. Informasi Pengantar / Driver CV & Tanggal */}
               <div className="space-y-2 pt-2 border-t border-slate-100">
                 <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
-                  2. Informasi Kurir / Driver CV Pengirim:
+                  2. Informasi Kurir CV & Jadwal Pengantaran:
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                  <div className="sm:col-span-1">
+                    <label className="text-[11px] text-slate-500 block mb-1">Tanggal Kirim *</label>
+                    <input
+                      type="date"
+                      required
+                      value={deliveryDate}
+                      onChange={(e) => setDeliveryDate(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-900 font-medium focus:bg-white focus:ring-2 focus:ring-emerald-500/30"
+                    />
+                  </div>
+                  <div className="sm:col-span-1">
                     <label className="text-[11px] text-slate-500 block mb-1">Nama Driver CV *</label>
                     <input
                       type="text"
                       required
                       value={driverName}
                       onChange={(e) => setDriverName(e.target.value)}
-                      placeholder="Contoh: Joko Santoso (CV SPA)"
+                      placeholder="Contoh: Mas Joko Santoso"
                       className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-900 font-medium focus:bg-white focus:ring-2 focus:ring-emerald-500/30"
                     />
                   </div>
-                  <div>
+                  <div className="sm:col-span-1">
                     <label className="text-[11px] text-slate-500 block mb-1">No. HP Driver</label>
                     <input
                       type="text"
@@ -891,7 +1139,7 @@ export function SupplyAllocationModule() {
                       className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-900 font-medium focus:bg-white focus:ring-2 focus:ring-emerald-500/30"
                     />
                   </div>
-                  <div>
+                  <div className="sm:col-span-1">
                     <label className="text-[11px] text-slate-500 block mb-1">No. Polisi Armada</label>
                     <input
                       type="text"
@@ -904,7 +1152,7 @@ export function SupplyAllocationModule() {
                 </div>
               </div>
 
-              {/* 3. Matriks Alokasi ke 4 Dapur SPPG */}
+              {/* 3. Matriks Alokasi ke 4 Dapur SPPG (SCROLLABLE & TIDAK MEMANJANG) */}
               <div className="space-y-3 pt-2 border-t border-slate-100">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
@@ -912,13 +1160,13 @@ export function SupplyAllocationModule() {
                       3. Matriks Alokasi Pembagian ke 4 Dapur SPPG:
                     </label>
                     <p className="text-[11px] text-slate-500">
-                      Tentukan banyaknya bahan yang diserahkan ke masing-masing dapur sentral.
+                      Tentukan banyaknya bahan yang diserahkan ke masing-masing dapur. Tabel di bawah dapat di-scroll vertikal dan horizontal.
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={handleEqualSplitAll}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-xs transition border border-emerald-300 self-start sm:self-auto"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-xs transition border border-emerald-300 self-start sm:self-auto shrink-0"
                   >
                     <Divide className="w-3.5 h-3.5 text-emerald-700" />
                     <span>Bagi Rata Semua Bahan (Equal Split)</span>
@@ -930,78 +1178,149 @@ export function SupplyAllocationModule() {
                     Pilih nota belanja di langkah 1 untuk memuat daftar bahan yang baru dibeli.
                   </div>
                 ) : (
-                  <div className="border border-slate-200 rounded-xl overflow-x-auto">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                          <th className="py-2.5 px-3">Bahan Makanan</th>
-                          <th className="py-2.5 px-2 text-center w-24">Total Beli</th>
-                          {sppgUnits.map((u) => (
-                            <th key={u.id} className="py-2.5 px-2 text-center w-28">
-                              {u.shortName}
-                            </th>
-                          ))}
-                          <th className="py-2.5 px-2 text-center w-20">Sisa</th>
-                          <th className="py-2.5 px-2 text-center w-16">Aksi</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {itemsToAllocate.map((it, idx) => {
-                          const isComplete = it.remainingUnallocated === 0;
-                          const isOverflow = it.remainingUnallocated < 0;
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+                    {/* Toolbar Pencarian & Tambah Bahan di dalam Modal */}
+                    <div className="bg-slate-50 px-3 py-2 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold text-slate-700">
+                          Daftar Bahan ({itemsToAllocate.length} Item Terdaftar)
+                        </span>
+                        {itemsToAllocate.length > 5 && (
+                          <span className="text-[10px] text-slate-500 bg-slate-200/80 px-2 py-0.5 rounded-full font-medium">
+                            Scroll ke bawah untuk melihat semua
+                          </span>
+                        )}
+                      </div>
 
-                          return (
-                            <tr key={idx} className="hover:bg-slate-50/70 transition">
-                              <td className="py-2.5 px-3">
-                                <span className="font-bold text-slate-900 block">{it.name}</span>
-                                <span className="text-[10px] text-slate-400">{it.category}</span>
-                              </td>
-                              <td className="py-2.5 px-2 text-center font-mono font-bold text-slate-900 bg-slate-50/50">
-                                {it.totalPurchased} {it.unit}
-                              </td>
-                              {sppgUnits.map((u) => {
-                                const code = u.code || u.id;
-                                const val = it.allocations?.[code] ?? 0;
-                                return (
-                                  <td key={u.id} className="py-2 px-1 text-center">
-                                    <input
-                                      type="number"
-                                      min={0}
-                                      value={val}
-                                      onChange={(e) => handleUpdateItemAllocation(idx, code, e.target.value)}
-                                      className="w-20 px-2 py-1.5 text-center font-mono font-bold text-xs rounded border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                                    />
-                                  </td>
-                                );
-                              })}
-                              <td className="py-2.5 px-2 text-center font-mono text-xs">
-                                <span
-                                  className={`px-1.5 py-0.5 rounded font-bold text-[10px] ${
-                                    isComplete
-                                      ? 'bg-emerald-100 text-emerald-800'
-                                      : isOverflow
-                                      ? 'bg-rose-100 text-rose-800'
-                                      : 'bg-amber-100 text-amber-800'
-                                  }`}
-                                >
-                                  {it.remainingUnallocated} {it.unit}
-                                </span>
-                              </td>
-                              <td className="py-2.5 px-2 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => handleEqualSplitRow(idx)}
-                                  className="p-1 rounded text-emerald-700 hover:bg-emerald-100 transition"
-                                  title="Bagi rata bahan ini"
-                                >
-                                  <Divide className="w-3.5 h-3.5" />
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* Input Pencarian Bahan dalam Modal */}
+                        <div className="relative w-full sm:w-44">
+                          <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type="text"
+                            value={modalItemSearch}
+                            onChange={(e) => setModalItemSearch(e.target.value)}
+                            placeholder="Cari nama bahan..."
+                            className="w-full pl-7 pr-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          />
+                        </div>
+
+                        {/* Tambah Bahan Lain dari Gudang */}
+                        <div className="flex items-center gap-1">
+                          <select
+                            value={selectedAddIngredientId}
+                            onChange={(e) => setSelectedAddIngredientId(e.target.value)}
+                            className="text-[11px] bg-white border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-500 max-w-[150px]"
+                          >
+                            <option value="">+ Tambah Bahan Gudang</option>
+                            {ingredients
+                              .filter((ing) => !itemsToAllocate.some((it) => it.ingredientId === ing.id))
+                              .map((ing) => (
+                                <option key={ing.id} value={ing.id}>
+                                  {ing.name} ({ing.currentStock} {ing.defaultUnit})
+                                </option>
+                              ))}
+                          </select>
+                          <button
+                            type="button"
+                            disabled={!selectedAddIngredientId}
+                            onClick={handleAddCustomIngredient}
+                            className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white font-bold text-xs transition"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Scrollable Container dengan Sticky Header (Batas Tinggi Aman max-h-72 s.d. max-h-80) */}
+                    <div className="max-h-72 sm:max-h-80 overflow-y-auto overflow-x-auto scrollbar-thin">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead className="sticky top-0 bg-slate-100 text-slate-700 font-bold border-b border-slate-200 z-10 shadow-2xs">
+                          <tr>
+                            <th className="py-2.5 px-3">Bahan Makanan</th>
+                            <th className="py-2.5 px-2 text-center w-24">Total Beli</th>
+                            {sppgUnits.map((u) => (
+                              <th key={u.id} className="py-2.5 px-2 text-center w-24 sm:w-28">
+                                {u.shortName}
+                              </th>
+                            ))}
+                            <th className="py-2.5 px-2 text-center w-20">Sisa</th>
+                            <th className="py-2.5 px-2 text-center w-20">Aksi</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {filteredModalItems.map((it) => {
+                            const originalIdx = itemsToAllocate.findIndex(
+                              (orig) => orig.ingredientId === it.ingredientId && orig.name === it.name
+                            );
+                            const actualIdx = originalIdx >= 0 ? originalIdx : 0;
+                            const isComplete = it.remainingUnallocated === 0;
+                            const isOverflow = it.remainingUnallocated < 0;
+
+                            return (
+                              <tr key={actualIdx} className="hover:bg-slate-50/70 transition">
+                                <td className="py-2 px-3">
+                                  <span className="font-bold text-slate-900 block truncate max-w-[180px]">{it.name}</span>
+                                  <span className="text-[10px] text-slate-400">{it.category}</span>
+                                </td>
+                                <td className="py-2 px-2 text-center font-mono font-bold text-slate-900 bg-slate-50/50">
+                                  {it.totalPurchased} {it.unit}
+                                </td>
+                                {sppgUnits.map((u) => {
+                                  const code = u.code || u.id;
+                                  const val = it.allocations?.[code] ?? 0;
+                                  return (
+                                    <td key={u.id} className="py-1.5 px-1 text-center">
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        value={val}
+                                        onChange={(e) => handleUpdateItemAllocation(actualIdx, code, e.target.value)}
+                                        className="w-16 sm:w-20 px-1.5 py-1 text-center font-mono font-bold text-xs rounded border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                                      />
+                                    </td>
+                                  );
+                                })}
+                                <td className="py-2 px-2 text-center font-mono text-xs">
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded font-bold text-[10px] ${
+                                      isComplete
+                                        ? 'bg-emerald-100 text-emerald-800'
+                                        : isOverflow
+                                        ? 'bg-rose-100 text-rose-800'
+                                        : 'bg-amber-100 text-amber-800'
+                                    }`}
+                                  >
+                                    {it.remainingUnallocated} {it.unit}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-2 text-center">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEqualSplitRow(actualIdx)}
+                                      className="p-1 rounded text-emerald-700 hover:bg-emerald-100 transition"
+                                      title="Bagi rata bahan ini"
+                                    >
+                                      <Divide className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveItemFromAllocation(actualIdx)}
+                                      className="p-1 rounded text-rose-500 hover:bg-rose-50 transition"
+                                      title="Hapus bahan ini dari alokasi"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1019,10 +1338,13 @@ export function SupplyAllocationModule() {
               </div>
 
               {/* Footer Buttons */}
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2 shrink-0">
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
+                  onClick={() => {
+                    setIsCreateModalOpen(false);
+                    setEditingDistribution(null);
+                  }}
                   className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold text-xs transition"
                 >
                   Batal
@@ -1033,10 +1355,63 @@ export function SupplyAllocationModule() {
                   className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white font-bold text-xs sm:text-sm shadow-md transition"
                 >
                   <PackageCheck className="w-4 h-4" />
-                  <span>{isSubmitting ? 'Menyimpan...' : 'Simpan & Terbitkan Surat Jalan'}</span>
+                  <span>
+                    {isSubmitting
+                      ? 'Menyimpan...'
+                      : editingDistribution
+                      ? 'Simpan Perubahan Alokasi'
+                      : 'Simpan & Terbitkan Surat Jalan'}
+                  </span>
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL KONFIRMASI HAPUS ALOKASI */}
+      {distributionToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-4 animate-in zoom-in-95">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div className="text-center">
+              <h3 className="text-base font-black text-slate-900">Konfirmasi Hapus Alokasi Pasokan</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Apakah Anda yakin ingin menghapus dokumen alokasi <strong className="text-slate-900">{distributionToDelete.dispatchNumber}</strong>?
+              </p>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1">
+              <p className="font-bold flex items-center gap-1.5 text-amber-800">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Pengembalian Stok Otomatis</span>
+              </p>
+              <p className="text-[11px] leading-relaxed text-amber-900">
+                Sebanyak <strong>{distributionToDelete.items?.length || 0} item bahan</strong> yang dialokasikan ke 4 dapur akan otomatis ditarik kembali ke saldo <strong>Gudang Sementara (Belum Disebar)</strong>.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDistributionToDelete(null)}
+                className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold text-xs transition"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:bg-slate-300 text-white font-bold text-xs shadow-md transition flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{isDeleting ? 'Menghapus...' : 'Ya, Hapus & Tarik Kembali'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
