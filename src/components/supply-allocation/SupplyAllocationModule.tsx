@@ -40,6 +40,7 @@ export function SupplyAllocationModule() {
     updateSupplyDistribution,
     deleteSupplyDistribution,
     updateIngredient,
+    returnIngredientsToWarehouse,
     userRole,
   } = useStore();
 
@@ -82,6 +83,19 @@ export function SupplyAllocationModule() {
   const [activeTabMode, setActiveTabMode] = useState<'warehouse' | 'history'>('warehouse');
   const [warehouseSearch, setWarehouseSearch] = useState('');
   const [warehouseCategoryFilter, setWarehouseCategoryFilter] = useState('ALL');
+
+  // State Checkbox Pilihan Bahan Gudang Sementara untuk Ditarik Sekaligus
+  const [selectedWarehouseIds, setSelectedWarehouseIds] = useState<string[]>([]);
+
+  // State Modal Konfirmasi Tarik ke Gudang (Pengganti window.confirm bawaan)
+  interface ReturnModalConfig {
+    isOpen: boolean;
+    mode: 'SINGLE' | 'SELECTED' | 'ALL' | 'DISTRIBUTION';
+    targetIngredient?: MasterIngredient;
+    targetDistribution?: SupplyDistribution;
+  }
+  const [returnModal, setReturnModal] = useState<ReturnModalConfig>({ isOpen: false, mode: 'SINGLE' });
+  const [isReturning, setIsReturning] = useState(false);
 
   // Filter pengadaan belanja yang punya rincian items
   const validProcurements = useMemo(() => {
@@ -316,6 +330,109 @@ export function SupplyAllocationModule() {
       return true;
     });
   }, [ingredients, warehouseCategoryFilter, warehouseSearch]);
+
+  // Bahan yang saat ini sedang tersebar di 4 dapur (totalAllocated > 0)
+  const dispersedIngredients = useMemo(() => {
+    return warehouseIngredients.filter((ing) => {
+      const total = Object.values(ing.sppgDistribution || {}).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
+      return total > 0;
+    });
+  }, [warehouseIngredients]);
+
+  // Bahan terpilih yang punya alokasi di dapur
+  const activeSelectedDispersedIds = useMemo(() => {
+    return selectedWarehouseIds.filter((id) => {
+      const ing = ingredients.find((i) => i.id === id);
+      if (!ing) return false;
+      const total = Object.values(ing.sppgDistribution || {}).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
+      return total > 0;
+    });
+  }, [selectedWarehouseIds, ingredients]);
+
+  const isAllDispersedSelected =
+    dispersedIngredients.length > 0 &&
+    dispersedIngredients.every((ing) => selectedWarehouseIds.includes(ing.id));
+
+  const handleToggleSelectAll = () => {
+    if (isAllDispersedSelected) {
+      setSelectedWarehouseIds([]);
+    } else {
+      setSelectedWarehouseIds(dispersedIngredients.map((i) => i.id));
+    }
+  };
+
+  const handleToggleSelectOne = (id: string) => {
+    setSelectedWarehouseIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  // Buka Modal Konfirmasi Tarik Cerdas (Bukan browser confirm bawaan)
+  const handleOpenReturnSingle = (ing: MasterIngredient) => {
+    setReturnModal({ isOpen: true, mode: 'SINGLE', targetIngredient: ing });
+  };
+
+  const handleOpenReturnSelected = () => {
+    if (activeSelectedDispersedIds.length === 0) return;
+    setReturnModal({ isOpen: true, mode: 'SELECTED' });
+  };
+
+  const handleOpenReturnAll = () => {
+    if (dispersedIngredients.length === 0) return;
+    setReturnModal({ isOpen: true, mode: 'ALL' });
+  };
+
+  const handleOpenReturnDistribution = (dist: SupplyDistribution) => {
+    setReturnModal({ isOpen: true, mode: 'DISTRIBUTION', targetDistribution: dist });
+  };
+
+  // Eksekusi Tarik Bahan ke Gudang Sementara (Atomic & Instan)
+  const handleConfirmReturn = async () => {
+    setIsReturning(true);
+    setErrorMessage('');
+    try {
+      if (returnModal.mode === 'DISTRIBUTION' && returnModal.targetDistribution) {
+        const res = await updateSupplyDistribution(returnModal.targetDistribution.id, { action: 'return' });
+        if (res.ok) {
+          setSuccessMessage(`✅ Berhasil! Seluruh bahan dari surat jalan ${returnModal.targetDistribution.dispatchNumber} telah ditarik kembali ke Gudang Sementara.`);
+          setReturnModal({ isOpen: false, mode: 'SINGLE' });
+        } else {
+          setErrorMessage(res.error || 'Gagal menarik kembali bahan ke gudang.');
+        }
+      } else if (returnModal.mode === 'SINGLE' && returnModal.targetIngredient) {
+        const res = await returnIngredientsToWarehouse([returnModal.targetIngredient.id], false);
+        if (res.ok) {
+          setSuccessMessage(`✅ Berhasil! Bahan "${returnModal.targetIngredient.name}" telah ditarik kembali ke Gudang Sementara.`);
+          setReturnModal({ isOpen: false, mode: 'SINGLE' });
+          setSelectedWarehouseIds((prev) => prev.filter((id) => id !== returnModal.targetIngredient?.id));
+        } else {
+          setErrorMessage(res.error || 'Gagal menarik kembali bahan ke gudang.');
+        }
+      } else if (returnModal.mode === 'SELECTED') {
+        const res = await returnIngredientsToWarehouse(activeSelectedDispersedIds, false);
+        if (res.ok) {
+          setSuccessMessage(`✅ Berhasil! Sebanyak ${activeSelectedDispersedIds.length} bahan terpilih telah ditarik kembali ke Gudang Sementara.`);
+          setReturnModal({ isOpen: false, mode: 'SINGLE' });
+          setSelectedWarehouseIds([]);
+        } else {
+          setErrorMessage(res.error || 'Gagal menarik bahan terpilih.');
+        }
+      } else if (returnModal.mode === 'ALL') {
+        const res = await returnIngredientsToWarehouse([], true);
+        if (res.ok) {
+          setSuccessMessage(`✅ Berhasil! Seluruh bahan yang tersebar di 4 dapur (${dispersedIngredients.length} jenis) telah ditarik kembali ke Gudang Sementara.`);
+          setReturnModal({ isOpen: false, mode: 'SINGLE' });
+          setSelectedWarehouseIds([]);
+        } else {
+          setErrorMessage(res.error || 'Gagal menarik seluruh bahan ke gudang.');
+        }
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Terjadi kesalahan sistem.');
+    } finally {
+      setIsReturning(false);
+    }
+  };
 
   // Ubah kuantitas alokasi unit tertentu
   const handleUpdateItemAllocation = (itemIdx: number, unitCode: string, value: string) => {
@@ -680,7 +797,7 @@ export function SupplyAllocationModule() {
               />
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-end overflow-x-auto scrollbar-none">
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end overflow-x-auto scrollbar-none flex-wrap">
               <span className="text-xs text-slate-500 font-medium shrink-0">Kategori:</span>
               <select
                 value={warehouseCategoryFilter}
@@ -694,6 +811,30 @@ export function SupplyAllocationModule() {
                   </option>
                 ))}
               </select>
+
+              {isSuperadmin && activeSelectedDispersedIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleOpenReturnSelected}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-xs transition shrink-0 animate-in fade-in"
+                  title="Tarik bahan terpilih kembali ke gudang sementara"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Tarik {activeSelectedDispersedIds.length} Terpilih</span>
+                </button>
+              )}
+
+              {isSuperadmin && dispersedIngredients.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleOpenReturnAll}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-300 text-xs font-bold transition shrink-0"
+                  title="Tarik seluruh bahan yang sedang tersebar di 4 dapur SPPG sekaligus ke gudang sementara"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Tarik Seluruhnya ({dispersedIngredients.length} Bahan)</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -703,7 +844,19 @@ export function SupplyAllocationModule() {
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
-                    <th className="py-2.5 px-3 w-8">#</th>
+                    {isSuperadmin && (
+                      <th className="py-2.5 px-2 w-8 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isAllDispersedSelected}
+                          onChange={handleToggleSelectAll}
+                          disabled={dispersedIngredients.length === 0}
+                          className="w-3.5 h-3.5 rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer disabled:opacity-30"
+                          title="Pilih / Batalkan Semua Bahan Tersebar"
+                        />
+                      </th>
+                    )}
+                    <th className="py-2.5 px-2 w-8 text-center">#</th>
                     <th className="py-2.5 px-3 w-28">Kode</th>
                     <th className="py-2.5 px-3">Nama Bahan</th>
                     <th className="py-2.5 px-3">Kategori</th>
@@ -721,7 +874,19 @@ export function SupplyAllocationModule() {
 
                     return (
                       <tr key={ing.id} className="hover:bg-slate-50/70 transition">
-                        <td className="py-2.5 px-3 font-mono text-slate-400 text-[11px]">{idx + 1}</td>
+                        {isSuperadmin && (
+                          <td className="py-2.5 px-2 text-center">
+                            <input
+                              type="checkbox"
+                              checked={selectedWarehouseIds.includes(ing.id)}
+                              onChange={() => handleToggleSelectOne(ing.id)}
+                              disabled={totalAllocated <= 0}
+                              className="w-3.5 h-3.5 rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer disabled:opacity-20"
+                              title={totalAllocated > 0 ? `Pilih ${ing.name} untuk ditarik` : 'Bahan ini belum tersebar di dapur'}
+                            />
+                          </td>
+                        )}
+                        <td className="py-2.5 px-2 font-mono text-slate-400 text-[11px] text-center">{idx + 1}</td>
                         <td className="py-2.5 px-3 font-mono text-slate-600 font-medium">{ing.code}</td>
                         <td className="py-2.5 px-3 font-semibold text-slate-900">{ing.name}</td>
                         <td className="py-2.5 px-3">
@@ -762,14 +927,7 @@ export function SupplyAllocationModule() {
                               {totalAllocated > 0 && (
                                 <button
                                   type="button"
-                                  onClick={async () => {
-                                    if (window.confirm(`Tarik kembali ${totalAllocated} ${ing.defaultUnit} ${ing.name} dari 4 dapur SPPG ke Gudang Sementara?`)) {
-                                      const res = await updateIngredient(ing.id, { sppgDistribution: { 'SPPG-AA02': 0, 'SPPG-BS02': 0, 'SPPG-DR01': 0, 'SPPG-SM01': 0 } });
-                                      if (res.ok) {
-                                        setSuccessMessage(`✅ Berhasil! Sebaran bahan ${ing.name} telah ditarik kembali ke Gudang Sementara.`);
-                                      }
-                                    }
-                                  }}
+                                  onClick={() => handleOpenReturnSingle(ing)}
                                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold border border-amber-200 transition"
                                   title={`Tarik kembali ${totalAllocated} ${ing.defaultUnit} ke Gudang Sementara`}
                                 >
@@ -914,7 +1072,7 @@ export function SupplyAllocationModule() {
                         {isSuperadmin && dist.status !== 'RETURNED' && (
                           <button
                             type="button"
-                            onClick={() => handleReturnAllocation(dist)}
+                            onClick={() => handleOpenReturnDistribution(dist)}
                             className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-xs border border-amber-200 transition"
                             title="Tarik kembali bahan alokasi ini dari 4 dapur ke gudang sementara"
                           >
@@ -1470,6 +1628,144 @@ export function SupplyAllocationModule() {
           sppgUnits={sppgUnits}
           onClose={() => setSelectedForPrint(null)}
         />
+      )}
+
+      {/* MODAL KONFIRMASI TARIK BAHAN KE GUDANG (PENGGANTI WINDOW.CONFIRM) */}
+      {returnModal.isOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-in zoom-in-95 space-y-4 p-5 sm:p-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <RotateCcw className="w-6 h-6 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">
+                  {returnModal.mode === 'SINGLE' && returnModal.targetIngredient
+                    ? `Tarik Bahan "${returnModal.targetIngredient.name}"`
+                    : returnModal.mode === 'SELECTED'
+                    ? `Tarik ${activeSelectedDispersedIds.length} Bahan Terpilih`
+                    : returnModal.mode === 'ALL'
+                    ? `Tarik Seluruh Bahan (${dispersedIngredients.length} Jenis)`
+                    : `Tarik Bahan Surat Jalan ${returnModal.targetDistribution?.dispatchNumber}`}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Kembalikan sebaran logistik dari 4 dapur SPPG ke saldo Gudang Sementara (Sisa Standby).
+                </p>
+              </div>
+            </div>
+
+            {/* Kotak Info Rincian yang akan ditarik */}
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2 text-xs text-amber-950">
+              <div className="flex items-center justify-between font-bold text-amber-900 border-b border-amber-200/70 pb-1.5">
+                <span>Rincian Bahan yang Ditarik:</span>
+                <span className="text-[11px] bg-amber-200/80 px-2 py-0.5 rounded font-mono">
+                  {returnModal.mode === 'SINGLE' && returnModal.targetIngredient
+                    ? `1 Bahan`
+                    : returnModal.mode === 'SELECTED'
+                    ? `${activeSelectedDispersedIds.length} Bahan`
+                    : returnModal.mode === 'ALL'
+                    ? `${dispersedIngredients.length} Bahan`
+                    : `${returnModal.targetDistribution?.items?.length || 0} Bahan`}
+                </span>
+              </div>
+
+              <div className="max-h-44 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin">
+                {returnModal.mode === 'SINGLE' && returnModal.targetIngredient && (() => {
+                  const ing = returnModal.targetIngredient;
+                  const total = Object.values(ing.sppgDistribution || {}).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
+                  return (
+                    <div className="bg-white/80 p-2 rounded-lg border border-amber-200/60 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-bold text-slate-900 block">{ing.name}</span>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          AA: {ing.sppgDistribution?.['SPPG-AA02'] || 0} &bull; BS: {ing.sppgDistribution?.['SPPG-BS02'] || 0} &bull; DR: {ing.sppgDistribution?.['SPPG-DR01'] || 0} &bull; SM: {ing.sppgDistribution?.['SPPG-SM01'] || 0}
+                        </span>
+                      </div>
+                      <span className="font-black text-amber-700 font-mono text-sm">
+                        {total} {ing.defaultUnit}
+                      </span>
+                    </div>
+                  );
+                })()}
+
+                {returnModal.mode === 'SELECTED' && activeSelectedDispersedIds.map((id) => {
+                  const ing = ingredients.find((i) => i.id === id);
+                  if (!ing) return null;
+                  const total = Object.values(ing.sppgDistribution || {}).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
+                  return (
+                    <div key={id} className="bg-white/80 p-2 rounded-lg border border-amber-200/60 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-bold text-slate-900 block">{ing.name}</span>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          AA: {ing.sppgDistribution?.['SPPG-AA02'] || 0} &bull; BS: {ing.sppgDistribution?.['SPPG-BS02'] || 0} &bull; DR: {ing.sppgDistribution?.['SPPG-DR01'] || 0} &bull; SM: {ing.sppgDistribution?.['SPPG-SM01'] || 0}
+                        </span>
+                      </div>
+                      <span className="font-black text-amber-700 font-mono">
+                        {total} {ing.defaultUnit}
+                      </span>
+                    </div>
+                  );
+                })}
+
+                {returnModal.mode === 'ALL' && dispersedIngredients.map((ing) => {
+                  const total = Object.values(ing.sppgDistribution || {}).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
+                  return (
+                    <div key={ing.id} className="bg-white/80 p-2 rounded-lg border border-amber-200/60 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-bold text-slate-900 block">{ing.name}</span>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          AA: {ing.sppgDistribution?.['SPPG-AA02'] || 0} &bull; BS: {ing.sppgDistribution?.['SPPG-BS02'] || 0} &bull; DR: {ing.sppgDistribution?.['SPPG-DR01'] || 0} &bull; SM: {ing.sppgDistribution?.['SPPG-SM01'] || 0}
+                        </span>
+                      </div>
+                      <span className="font-black text-amber-700 font-mono">
+                        {total} {ing.defaultUnit}
+                      </span>
+                    </div>
+                  );
+                })}
+
+                {returnModal.mode === 'DISTRIBUTION' && (returnModal.targetDistribution?.items || []).map((it, idx) => (
+                  <div key={idx} className="bg-white/80 p-2 rounded-lg border border-amber-200/60 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="font-bold text-slate-900 block">{it.name}</span>
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        Alokasi: {it.allocatedTotal || it.totalPurchased} {it.unit}
+                      </span>
+                    </div>
+                    <span className="font-black text-amber-700 font-mono">
+                      {it.totalPurchased} {it.unit}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <p className="text-[11px] leading-relaxed text-amber-900 pt-1 border-t border-amber-200/70">
+                💡 Setelah ditarik, kuantitas tersebut langsung masuk ke <strong>Gudang Sementara (Sisa Standby)</strong> dan dapat Anda sebar ulang kapan saja.
+              </p>
+            </div>
+
+            {/* Tombol Aksi Modal */}
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isReturning}
+                onClick={() => setReturnModal({ isOpen: false, mode: 'SINGLE' })}
+                className="px-4 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 font-bold text-xs transition"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isReturning}
+                onClick={handleConfirmReturn}
+                className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:bg-slate-300 text-white font-bold text-xs shadow-md transition flex items-center gap-2"
+              >
+                <RotateCcw className={`w-4 h-4 ${isReturning ? 'animate-spin' : ''}`} />
+                <span>{isReturning ? 'Memproses Penarikan...' : 'Ya, Tarik ke Gudang Sekarang'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

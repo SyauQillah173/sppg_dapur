@@ -95,6 +95,7 @@ interface StoreContextType {
   addIngredient: (ing: Omit<MasterIngredient, 'id' | 'code' | 'updatedAt'>) => Promise<{ ok: boolean; error?: string }>;
   updateIngredient: (id: string, ing: Partial<MasterIngredient>) => Promise<{ ok: boolean; error?: string }>;
   deleteIngredient: (id: string) => Promise<{ ok: boolean; error?: string }>;
+  returnIngredientsToWarehouse: (ingredientIds?: string[], returnAll?: boolean) => Promise<{ ok: boolean; count?: number; error?: string }>;
   addCategory: (cat: Omit<IngredientCategory, 'id'>) => Promise<{ ok: boolean; error?: string }>;
   updateCategory: (id: string, cat: Partial<IngredientCategory>) => Promise<{ ok: boolean; error?: string }>;
   deleteCategory: (id: string) => Promise<{ ok: boolean; error?: string }>;
@@ -570,6 +571,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return failNotify(result);
   };
 
+  const returnIngredientsToWarehouse = async (ingredientIds?: string[], returnAll?: boolean) => {
+    const result = await postJson('/api/ingredients/return-to-warehouse', { ingredientIds, returnAll });
+    if (result.ok) await refreshMasterFromDb();
+    return failNotify(result);
+  };
+
   const addCategory = async (cat: Omit<IngredientCategory, 'id'>) => {
     const result = await postJson('/api/categories', {
       name: cat.name,
@@ -922,6 +929,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         addIngredient,
         updateIngredient,
         deleteIngredient,
+        returnIngredientsToWarehouse,
         addCategory,
         updateCategory,
         deleteCategory,

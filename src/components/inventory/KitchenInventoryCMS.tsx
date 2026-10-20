@@ -59,6 +59,7 @@ export function KitchenInventoryCMS({ onNavigateToSupplyAllocation }: KitchenInv
 
  const [activeSubTab, setActiveSubTab] = useState<'master' | 'ledger' | 'categories' | 'units'>('master');
  const [deleteTargetIngredient, setDeleteTargetIngredient] = useState<MasterIngredient | null>(null);
+  const [returnTargetIngredient, setReturnTargetIngredient] = useState<MasterIngredient | null>(null);
  const [searchQuery, setSearchQuery] = useState<string>('');
  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('ALL');
 
@@ -517,15 +518,7 @@ export function KitchenInventoryCMS({ onNavigateToSupplyAllocation }: KitchenInv
  {totalAllocated > 0 && (
  <button
  type="button"
- onClick={async () => {
-   if (
-     window.confirm(
-       `Tarik kembali seluruh ${totalAllocated} ${item.defaultUnit} "${item.name}" dari 4 dapur SPPG ke Gudang Sementara?`
-     )
-   ) {
-     await updateIngredient(item.id, { sppgDistribution: { 'SPPG-AA02': 0, 'SPPG-BS02': 0, 'SPPG-DR01': 0, 'SPPG-SM01': 0 } });
-   }
- }}
+ onClick={() => setReturnTargetIngredient(item)}
  className="p-1 rounded text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition"
  title={`Tarik kembali ${totalAllocated} ${item.defaultUnit} dari 4 dapur ke Gudang Sementara`}
  >
@@ -1188,6 +1181,58 @@ export function KitchenInventoryCMS({ onNavigateToSupplyAllocation }: KitchenInv
     }}
     onClose={() => setDeleteTargetCategory(null)}
   />
+
+  {/* Modern Confirm Return Modal: Single Ingredient */}
+  {returnTargetIngredient && (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-4 animate-in zoom-in-95">
+        <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
+          <RotateCcw className="w-6 h-6 animate-pulse" />
+        </div>
+        <div className="text-center">
+          <h3 className="text-base font-black text-slate-900">Tarik Bahan ke Gudang Sementara</h3>
+          <p className="text-xs text-slate-500 mt-1">
+            Apakah Anda yakin ingin menarik seluruh sebaran bahan <strong className="text-slate-900">{returnTargetIngredient.name}</strong> dari 4 dapur SPPG ke Gudang Sementara?
+          </p>
+        </div>
+
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1">
+          <p className="font-bold flex items-center gap-1.5 text-amber-800">
+            <Boxes className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>Kuantitas yang Ditarik:</span>
+          </p>
+          <p className="text-[11px] leading-relaxed text-amber-900">
+            Sebanyak <strong>{Object.values(returnTargetIngredient.sppgDistribution || {}).reduce((a, b) => a + (Number(b) || 0), 0)} {returnTargetIngredient.defaultUnit}</strong> akan ditarik dari dapur dan 100% masuk ke saldo Gudang Sementara (Sisa Standby).
+          </p>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={() => setReturnTargetIngredient(null)}
+            className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold text-xs transition"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              if (returnTargetIngredient) {
+                await updateIngredient(returnTargetIngredient.id, {
+                  sppgDistribution: { 'SPPG-AA02': 0, 'SPPG-BS02': 0, 'SPPG-DR01': 0, 'SPPG-SM01': 0 },
+                });
+                setReturnTargetIngredient(null);
+              }
+            }}
+            className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-md transition flex items-center gap-1.5"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span>Ya, Tarik ke Gudang</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  )}
  </div>
  );
 }
