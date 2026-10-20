@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { createSessionToken } from '@/lib/auth';
 import { checkRateLimit, getRateLimitHeaders } from '@/lib/rate-limit';
-import { hashPassword, isLegacyPassword, verifyPassword } from '@/lib/password';
+import { hashPassword, needsRehash, verifyPassword } from '@/lib/password';
 import { createOrUpdateSession } from '@/lib/session-manager';
 import { sanitizeText } from '@/lib/sanitize';
 
-// Dummy scrypt hash untuk timing attack protection
-const DUMMY_HASH = 'scrypt$0123456789abcdef0123456789abcdef$0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+// Dummy bcrypt hash untuk timing attack protection ($2b$12$)
+const DUMMY_HASH = '$2b$12$.i/EDcfdVyXDDKD7ENfhQOe.9u7FIwzFIFtsXTExrbmyZrOX4Ugxe';
 
 export async function POST(req: NextRequest) {
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown';
@@ -59,15 +59,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Username atau Password salah.' }, { status: 401 });
     }
 
-    // Password lama (masih plaintext) langsung di-upgrade ke scrypt setelah login berhasil
-    if (isLegacyPassword(user.password)) {
+    // Upgrade transparan: jika password masih scrypt atau plaintext lama, otomatis di-upgrade ke bcrypt 12 rounds
+    if (needsRehash(user.password)) {
       try {
         await prisma.adminUser.update({
           where: { id: user.id },
           data: { password: hashPassword(password) },
         });
       } catch (e) {
-        console.error('Gagal upgrade hash password:', e);
+        console.error('Gagal upgrade hash password ke bcrypt:', e);
       }
     }
 

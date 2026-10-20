@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { requireAuth, parseSessionToken } from '@/lib/api-auth';
+import { requireAuth, requireSuperadmin, parseSessionToken } from '@/lib/api-auth';
 
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req);
@@ -67,16 +67,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  try {
-    const token = req.cookies.get('giziflow_session')?.value;
-    const session = token ? await parseSessionToken(token) : null;
+  const auth = await requireSuperadmin(req);
+  if ('error' in auth) return auth.error;
 
-    if (!session || session.role !== 'SUPERADMIN') {
-      return NextResponse.json(
-        { success: false, error: 'Hanya Superadmin yang berhak menambah Unit SPPG baru!' },
-        { status: 403 }
-      );
-    }
+  try {
 
     const body = await req.json();
     const { name, shortName, location, picName, phone, activeBudget } = body;

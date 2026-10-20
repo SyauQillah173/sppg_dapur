@@ -5,6 +5,9 @@ import { requireAuth, requireSuperadmin, parseSessionToken } from '@/lib/api-aut
 
 
 export async function GET(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if ('error' in auth) return auth.error;
+
   try {
     const { searchParams } = new URL(req.url);
     const sppgUnitId = searchParams.get('sppgUnitId');
@@ -37,16 +40,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  try {
-    const token = req.cookies.get('giziflow_session')?.value;
-    const session = token ? await parseSessionToken(token) : null;
+  const auth = await requireSuperadmin(req);
+  if ('error' in auth) return auth.error;
+  const session = auth.user;
 
-    if (!session || session.role !== 'SUPERADMIN') {
-      return NextResponse.json(
-        { success: false, error: 'Hanya Superadmin yang berhak mencatat mutasi stok bahan!' },
-        { status: 403 }
-      );
-    }
+  try {
 
     const body = await req.json();
     const {

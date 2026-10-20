@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { MovementType } from '@prisma/client';
-import { parseSessionToken } from '@/lib/api-auth';
+import { requireSuperadmin } from '@/lib/api-auth';
 import { normalizeName } from '@/lib/master-helpers';
 
 /** Ubah catatan mutasi stok keluar/masuk. */
@@ -9,16 +9,10 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const token = req.cookies.get('giziflow_session')?.value;
-    const session = token ? await parseSessionToken(token) : null;
+  const auth = await requireSuperadmin(req);
+  if ('error' in auth) return auth.error;
 
-    if (!session || session.role !== 'SUPERADMIN') {
-      return NextResponse.json(
-        { success: false, error: 'Hanya Superadmin yang berhak mengubah riwayat mutasi stok!' },
-        { status: 403 }
-      );
-    }
+  try {
 
     const { id } = await params;
     const body = await req.json();
@@ -124,16 +118,10 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const token = req.cookies.get('giziflow_session')?.value;
-    const session = token ? await parseSessionToken(token) : null;
+  const auth = await requireSuperadmin(req);
+  if ('error' in auth) return auth.error;
 
-    if (!session || session.role !== 'SUPERADMIN') {
-      return NextResponse.json(
-        { success: false, error: 'Hanya Superadmin yang berhak menghapus riwayat mutasi stok!' },
-        { status: 403 }
-      );
-    }
+  try {
 
     const { id } = await params;
 

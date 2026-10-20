@@ -4,7 +4,10 @@ import { normalizeName } from '@/lib/master-helpers';
 import { requireAuth, requireSuperadmin, parseSessionToken } from '@/lib/api-auth';
 
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if ('error' in auth) return auth.error;
+
   try {
     const units = await prisma.masterUnit.findMany({
       orderBy: { symbol: 'asc' },
@@ -16,16 +19,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  try {
-    const token = req.cookies.get('giziflow_session')?.value;
-    const session = token ? await parseSessionToken(token) : null;
+  const auth = await requireSuperadmin(req);
+  if ('error' in auth) return auth.error;
 
-    if (!session || session.role !== 'SUPERADMIN') {
-      return NextResponse.json(
-        { success: false, error: 'Hanya Superadmin yang berhak menambah Satuan Ukur!' },
-        { status: 403 }
-      );
-    }
+  try {
 
     const body = await req.json();
     const { symbol, name, type } = body;
@@ -59,16 +56,10 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  try {
-    const token = req.cookies.get('giziflow_session')?.value;
-    const session = token ? await parseSessionToken(token) : null;
+  const auth = await requireSuperadmin(req);
+  if ('error' in auth) return auth.error;
 
-    if (!session || session.role !== 'SUPERADMIN') {
-      return NextResponse.json(
-        { success: false, error: 'Hanya Superadmin yang berhak menghapus Satuan Ukur!' },
-        { status: 403 }
-      );
-    }
+  try {
 
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');

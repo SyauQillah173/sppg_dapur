@@ -8,16 +8,10 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const token = req.cookies.get('giziflow_session')?.value;
-    const session = token ? await parseSessionToken(token) : null;
+  const auth = await requireSuperadmin(req);
+  if ('error' in auth) return auth.error;
 
-    if (!session || session.role !== 'SUPERADMIN') {
-      return NextResponse.json(
-        { success: false, error: 'Hanya Superadmin yang berhak mengubah Kategori Bahan!' },
-        { status: 403 }
-      );
-    }
+  try {
 
     const { id } = await params;
     const body = await req.json();
@@ -71,16 +65,10 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const token = req.cookies.get('giziflow_session')?.value;
-    const session = token ? await parseSessionToken(token) : null;
+  const auth = await requireSuperadmin(req);
+  if ('error' in auth) return auth.error;
 
-    if (!session || session.role !== 'SUPERADMIN') {
-      return NextResponse.json(
-        { success: false, error: 'Hanya Superadmin yang berhak menghapus Kategori Bahan!' },
-        { status: 403 }
-      );
-    }
+  try {
 
     const { id } = await params;
 

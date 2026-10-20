@@ -1,23 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { requireAuth, requireSuperadmin, parseSessionToken } from '@/lib/api-auth';
+import { requireSuperadmin } from '@/lib/api-auth';
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireSuperadmin(req);
+  if ('error' in auth) return auth.error;
+
   try {
     const { id } = await params;
-    const token = req.cookies.get('giziflow_session')?.value;
-    const session = token ? await parseSessionToken(token) : null;
-
-    if (!session || session.role !== 'SUPERADMIN') {
-      return NextResponse.json(
-        { success: false, error: 'Hanya Superadmin yang berhak mengubah Unit SPPG!' },
-        { status: 403 }
-      );
-    }
-
     const body = await req.json();
     const updateData: any = {};
     if (body.name) updateData.name = body.name.trim();
@@ -44,17 +37,11 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireSuperadmin(req);
+  if ('error' in auth) return auth.error;
+
   try {
     const { id } = await params;
-    const token = req.cookies.get('giziflow_session')?.value;
-    const session = token ? await parseSessionToken(token) : null;
-
-    if (!session || session.role !== 'SUPERADMIN') {
-      return NextResponse.json(
-        { success: false, error: 'Hanya Superadmin yang berhak menghapus Unit SPPG!' },
-        { status: 403 }
-      );
-    }
 
     // Check if unit has procurement orders
     const ordersCount = await prisma.procurementOrder.count({
