@@ -54,6 +54,7 @@ export function SupplyAllocationModule() {
   const [itemsToAllocate, setItemsToAllocate] = useState<SupplyAllocationItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   // State Modal Pratinjau Surat Jalan Resmi
   const [selectedForPrint, setSelectedForPrint] = useState<SupplyDistribution | null>(null);
@@ -307,12 +308,8 @@ export function SupplyAllocationModule() {
       const res = await addSupplyDistribution(payload);
       if (res.ok) {
         setIsCreateModalOpen(false);
-        // Buka langsung dokumen cetak
-        setSelectedForPrint({
-          ...payload,
-          id: `created-${Date.now()}`,
-          createdAt: new Date().toISOString(),
-        } as SupplyDistribution);
+        setActiveTabMode('history');
+        setSuccessMessage(`✅ Berhasil! Bahan berhasil disebarkan ke 4 Dapur SPPG dengan Nomor Dokumen ${dispatchNumber}.`);
       } else {
         setErrorMessage(res.error || 'Gagal menyimpan alokasi bahan.');
       }
@@ -383,6 +380,24 @@ export function SupplyAllocationModule() {
         )}
       </div>
 
+      {/* Alert Success Message */}
+      {successMessage && (
+        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-center justify-between shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <p className="text-xs sm:text-sm font-bold">{successMessage}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSuccessMessage('')}
+            className="p-1 text-emerald-700 hover:text-emerald-950 rounded-lg hover:bg-emerald-100 transition"
+            title="Tutup Pesan"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* KPI Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
@@ -428,11 +443,11 @@ export function SupplyAllocationModule() {
       </div>
 
       {/* Sub-Tab Navigation: Gudang Sementara vs Riwayat Surat Jalan */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pt-2">
+      <div className="flex items-center gap-2 border-b border-slate-200 pt-2 overflow-x-auto scrollbar-none">
         <button
           type="button"
           onClick={() => setActiveTabMode('warehouse')}
-          className={`flex items-center gap-2 pb-3 px-4 text-xs font-bold border-b-2 transition ${
+          className={`flex items-center gap-2 pb-3 px-4 text-xs font-bold border-b-2 transition shrink-0 whitespace-nowrap ${
             activeTabMode === 'warehouse'
               ? 'border-emerald-600 text-emerald-800'
               : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -445,7 +460,7 @@ export function SupplyAllocationModule() {
         <button
           type="button"
           onClick={() => setActiveTabMode('history')}
-          className={`flex items-center gap-2 pb-3 px-4 text-xs font-bold border-b-2 transition ${
+          className={`flex items-center gap-2 pb-3 px-4 text-xs font-bold border-b-2 transition shrink-0 whitespace-nowrap ${
             activeTabMode === 'history'
               ? 'border-emerald-600 text-emerald-800'
               : 'border-transparent text-slate-500 hover:text-slate-800'
