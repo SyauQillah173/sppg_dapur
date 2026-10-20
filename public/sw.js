@@ -1,5 +1,5 @@
 // Service Worker for SPPG Dapur PWA
-const CACHE_NAME = 'sppg-dapur-v3';
+const CACHE_NAME = 'sppg-dapur-v4';
 const PRECACHE_ASSETS = [
   '/manifest.json',
   '/badan-gizi.png',
@@ -101,8 +101,12 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-// Direct message listener from client pages to display mobile push notification
+// Direct message listener from client pages to display mobile push notification or skip waiting
 self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+    return;
+  }
   if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
     const { title, options } = event.data;
     self.registration.showNotification(title || 'SPPG Dapur - Notifikasi', {
