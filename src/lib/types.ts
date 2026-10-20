@@ -261,7 +261,7 @@ export interface SupplyDistribution {
   driverName: string;
   driverPhone?: string;
   vehiclePlate?: string;
-  status: 'PENDING' | 'IN_DELIVERY' | 'COMPLETED';
+  status: 'PENDING' | 'IN_DELIVERY' | 'COMPLETED' | 'RETURNED';
   notes?: string;
   items: SupplyAllocationItem[];
   headSignerName?: string;

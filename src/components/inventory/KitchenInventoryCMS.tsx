@@ -25,6 +25,7 @@ import {
  Calculator,
  Share2,
  Truck,
+ RotateCcw,
 } from 'lucide-react';
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal';
 import { StockLedgerEntry, IngredientCategory } from '@/lib/types';
@@ -511,6 +512,24 @@ export function KitchenInventoryCMS({ onNavigateToSupplyAllocation }: KitchenInv
  title="Sebar bahan ini ke 4 dapur SPPG"
  >
  <Truck className="h-3.5 w-3.5" />
+ </button>
+ )}
+ {totalAllocated > 0 && (
+ <button
+ type="button"
+ onClick={async () => {
+   if (
+     window.confirm(
+       `Tarik kembali seluruh ${totalAllocated} ${item.defaultUnit} "${item.name}" dari 4 dapur SPPG ke Gudang Sementara?`
+     )
+   ) {
+     await updateIngredient(item.id, { sppgDistribution: { 'SPPG-AA02': 0, 'SPPG-BS02': 0, 'SPPG-DR01': 0, 'SPPG-SM01': 0 } });
+   }
+ }}
+ className="p-1 rounded text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition"
+ title={`Tarik kembali ${totalAllocated} ${item.defaultUnit} dari 4 dapur ke Gudang Sementara`}
+ >
+ <RotateCcw className="h-3.5 w-3.5" />
  </button>
  )}
  <button

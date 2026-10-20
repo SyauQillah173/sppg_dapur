@@ -39,6 +39,7 @@ export function SupplyAllocationModule() {
     addSupplyDistribution,
     updateSupplyDistribution,
     deleteSupplyDistribution,
+    updateIngredient,
     userRole,
   } = useStore();
 
@@ -250,17 +251,37 @@ export function SupplyAllocationModule() {
     setErrorMessage('');
   };
 
-  // Handler Konfirmasi Hapus Alokasi
+  // Handler Konfirmasi Hapus Alokasi (Stok otomatis kembali ke Gudang Sementara)
   const handleConfirmDelete = async () => {
     if (!distributionToDelete) return;
     setIsDeleting(true);
     try {
       const res = await deleteSupplyDistribution(distributionToDelete.id);
       if (res.ok) {
-        setSuccessMessage(`✅ Alokasi ${distributionToDelete.dispatchNumber} berhasil dihapus. Stok bahan di 4 dapur telah dikembalikan ke gudang sementara.`);
+        setSuccessMessage(`✅ Alokasi ${distributionToDelete.dispatchNumber} berhasil dihapus. Seluruh bahan telah dikembalikan ke Gudang Sementara.`);
         setDistributionToDelete(null);
       } else {
         setErrorMessage(res.error || 'Gagal menghapus alokasi bahan.');
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Terjadi kesalahan sistem.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Handler Tarik Kembali Semua Bahan pada Alokasi ke Gudang Sementara
+  const handleReturnAllocation = async (dist: SupplyDistribution) => {
+    if (!window.confirm(`Tarik kembali seluruh bahan pada surat jalan ${dist.dispatchNumber} dari 4 dapur SPPG ke Gudang Sementara?`)) {
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      const res = await updateSupplyDistribution(dist.id, { action: 'return' });
+      if (res.ok) {
+        setSuccessMessage(`✅ Berhasil! Seluruh bahan dari surat jalan ${dist.dispatchNumber} telah ditarik kembali ke Gudang Sementara.`);
+      } else {
+        setErrorMessage(res.error || 'Gagal menarik kembali bahan ke gudang.');
       }
     } catch (err: any) {
       setErrorMessage(err?.message || 'Terjadi kesalahan sistem.');
@@ -543,7 +564,7 @@ export function SupplyAllocationModule() {
             className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm shadow-md transition transform active:scale-95 shrink-0"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Sebar Bahan ke 4 Dapur</span>
+            <span>Sebar Bahan ke 4 Dapur</span>
           </button>
         )}
       </div>
@@ -567,7 +588,7 @@ export function SupplyAllocationModule() {
       )}
 
       {/* KPI Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-2">
             <span className="text-xs font-semibold">Total Pasokan Belanja</span>
@@ -595,18 +616,6 @@ export function SupplyAllocationModule() {
           </div>
           <div className="text-2xl font-black text-indigo-900">{sppgUnits.length} Dapur</div>
           <p className="text-[11px] text-slate-500 mt-1">Penerima Alokasi Logistik</p>
-        </div>
-
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-semibold">Status Alokasi Stok</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          </div>
-          <div className="text-lg font-black text-emerald-700 flex items-center gap-1.5 mt-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Sinkron DB</span>
-          </div>
-          <p className="text-[11px] text-slate-500 mt-1">Saldo unit ter-update otomatis</p>
         </div>
       </div>
 
@@ -749,14 +758,34 @@ export function SupplyAllocationModule() {
                         <td className="py-2.5 px-3 text-center font-mono text-slate-600">{ing.defaultUnit}</td>
                         {isSuperadmin && (
                           <td className="py-2.5 px-3 text-right">
-                            <button
-                              type="button"
-                              onClick={() => handleStartAllocationForSpecificIngredient(ing)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold border border-emerald-200 transition"
-                            >
-                              <Truck className="w-3.5 h-3.5" />
-                              <span>Sebar Bahan</span>
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              {totalAllocated > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    if (window.confirm(`Tarik kembali ${totalAllocated} ${ing.defaultUnit} ${ing.name} dari 4 dapur SPPG ke Gudang Sementara?`)) {
+                                      const res = await updateIngredient(ing.id, { sppgDistribution: { 'SPPG-AA02': 0, 'SPPG-BS02': 0, 'SPPG-DR01': 0, 'SPPG-SM01': 0 } });
+                                      if (res.ok) {
+                                        setSuccessMessage(`✅ Berhasil! Sebaran bahan ${ing.name} telah ditarik kembali ke Gudang Sementara.`);
+                                      }
+                                    }
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold border border-amber-200 transition"
+                                  title={`Tarik kembali ${totalAllocated} ${ing.defaultUnit} ke Gudang Sementara`}
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                  <span>Tarik</span>
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleStartAllocationForSpecificIngredient(ing)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold border border-emerald-200 transition"
+                              >
+                                <Truck className="w-3.5 h-3.5" />
+                                <span>Sebar Bahan</span>
+                              </button>
+                            </div>
                           </td>
                         )}
                       </tr>
@@ -845,8 +874,14 @@ export function SupplyAllocationModule() {
                             <span className="font-mono font-bold text-slate-900 text-sm">
                               {dist.dispatchNumber}
                             </span>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                              {dist.status === 'COMPLETED' ? 'Selesai Disebar' : 'Dalam Perjalanan'}
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              dist.status === 'RETURNED'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                : dist.status === 'COMPLETED'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-blue-100 text-blue-800'
+                            }`}>
+                              {dist.status === 'RETURNED' ? 'Ditarik ke Gudang' : dist.status === 'COMPLETED' ? 'Selesai Disebar' : 'Dalam Perjalanan'}
                             </span>
                           </div>
                           <p className="text-xs text-slate-500 flex items-center gap-2 mt-0.5 flex-wrap">
@@ -864,7 +899,7 @@ export function SupplyAllocationModule() {
                         </div>
                       </div>
 
-                      {/* Action Buttons: Cetak, Edit, Hapus */}
+                      {/* Action Buttons: Cetak, Tarik ke Gudang, Edit, Hapus */}
                       <div className="flex items-center gap-1.5 flex-wrap self-end sm:self-auto">
                         <button
                           type="button"
@@ -875,6 +910,18 @@ export function SupplyAllocationModule() {
                           <Printer className="w-3.5 h-3.5 text-emerald-600" />
                           <span>Cetak Surat Jalan</span>
                         </button>
+
+                        {isSuperadmin && dist.status !== 'RETURNED' && (
+                          <button
+                            type="button"
+                            onClick={() => handleReturnAllocation(dist)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-xs border border-amber-200 transition"
+                            title="Tarik kembali bahan alokasi ini dari 4 dapur ke gudang sementara"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Tarik ke Gudang</span>
+                          </button>
+                        )}
 
                         <button
                           type="button"
@@ -890,7 +937,7 @@ export function SupplyAllocationModule() {
                           type="button"
                           onClick={() => setDistributionToDelete(dist)}
                           className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 transition"
-                          title="Hapus Alokasi Pasokan"
+                          title="Hapus Alokasi Pasokan (Bahan otomatis kembali ke Gudang)"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           <span>Hapus</span>

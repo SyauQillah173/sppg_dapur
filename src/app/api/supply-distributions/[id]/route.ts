@@ -29,8 +29,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 /**
- * PUT: Edit / update riwayat alokasi pasokan bahan belanja.
- * Menyesuaikan perbedaan saldo stok per unit di sppgDistribution secara akurat.
+ * PUT: Edit / update riwayat alokasi pasokan bahan belanja atau tarik kembali ke gudang sementara.
+ * Menyesuaikan saldo stok per unit di sppgDistribution secara akurat.
  */
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireSuperadmin(req);
@@ -47,6 +47,84 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const rawBody = await req.json();
     const body = sanitizeObject(rawBody) as any;
 
+    // Aksi khusus: Tarik Kembali Bahan ke Gudang Sementara tanpa menghapus arsip
+    if (body.action === 'return') {
+      const updated = await prisma.$transaction(async (tx: any) => {
+        const items = (existing.items as any[]) || [];
+        for (const it of items) {
+          if (!it.allocations || typeof it.allocations !== 'object') continue;
+
+          let targetIngId = it.ingredientId;
+          if (!targetIngId && it.name) {
+            const found = await tx.ingredient.findFirst({
+              where: { name: { equals: it.name.trim(), mode: 'insensitive' } },
+            });
+            if (found) targetIngId = found.id;
+          }
+
+          if (targetIngId) {
+            const currentIng = await tx.ingredient.findUnique({ where: { id: targetIngId } });
+            if (currentIng) {
+              const currentDist = (currentIng.sppgDistribution as Record<string, number>) || {};
+              const updatedDist = { ...currentDist };
+              let totalReturned = 0;
+
+              for (const [unitId, qty] of Object.entries(it.allocations)) {
+                const num = Number(qty) || 0;
+                if (num <= 0) continue;
+                totalReturned += num;
+                updatedDist[unitId] = Math.max(0, (Number(updatedDist[unitId]) || 0) - num);
+
+                try {
+                  await tx.stockMovement.create({
+                    data: {
+                      sppgUnitId: unitId,
+                      ingredientId: targetIngId,
+                      type: 'KELUAR',
+                      quantity: num,
+                      unit: it.unit || currentIng.defaultUnit,
+                      referenceNumber: `TARIK-${existing.dispatchNumber}`,
+                      purpose: `Pengembalian Bahan dari Dapur ke Gudang Sementara (${existing.dispatchNumber})`,
+                      recordedBy: 'Superadmin Logistik',
+                      remainingStockAfter: updatedDist[unitId],
+                    },
+                  });
+                } catch (smErr) {
+                  console.warn('Gagal catat stock movement tarik alokasi:', smErr);
+                }
+              }
+
+              const newAllocated = Object.values(updatedDist).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
+              const currentStockNum = Number(currentIng.currentStock) || 0;
+              const neededStock = Math.max(currentStockNum, newAllocated + totalReturned);
+
+              await tx.ingredient.update({
+                where: { id: targetIngId },
+                data: {
+                  sppgDistribution: updatedDist,
+                  currentStock: neededStock,
+                },
+              });
+            }
+          }
+        }
+
+        const record = await tx.supplyDistribution.update({
+          where: { id },
+          data: { status: 'RETURNED' },
+        });
+
+        return record;
+      });
+
+      return NextResponse.json({
+        success: true,
+        data: updated,
+        message: 'Seluruh bahan pada alokasi ini berhasil ditarik kembali ke Gudang Sementara.',
+      });
+    }
+
+    // Aksi normal: Update / Edit data alokasi
     const {
       supplierName,
       driverName,
@@ -64,30 +142,32 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const updated = await prisma.$transaction(async (tx: any) => {
       // 1. Revert alokasi lama dari existing.items
       const oldItems = (existing.items as any[]) || [];
-      for (const it of oldItems) {
-        if (!it.allocations || typeof it.allocations !== 'object') continue;
-        let targetIngId = it.ingredientId;
-        if (!targetIngId && it.name) {
-          const found = await tx.ingredient.findFirst({
-            where: { name: { equals: it.name.trim(), mode: 'insensitive' } },
-          });
-          if (found) targetIngId = found.id;
-        }
-
-        if (targetIngId) {
-          const currentIng = await tx.ingredient.findUnique({ where: { id: targetIngId } });
-          if (currentIng) {
-            const currentDist = (currentIng.sppgDistribution as Record<string, number>) || {};
-            const revertedDist = { ...currentDist };
-            for (const [unitId, qty] of Object.entries(it.allocations)) {
-              const num = Number(qty) || 0;
-              if (num <= 0) continue;
-              revertedDist[unitId] = Math.max(0, (Number(revertedDist[unitId]) || 0) - num);
-            }
-            await tx.ingredient.update({
-              where: { id: targetIngId },
-              data: { sppgDistribution: revertedDist },
+      if (existing.status !== 'RETURNED') {
+        for (const it of oldItems) {
+          if (!it.allocations || typeof it.allocations !== 'object') continue;
+          let targetIngId = it.ingredientId;
+          if (!targetIngId && it.name) {
+            const found = await tx.ingredient.findFirst({
+              where: { name: { equals: it.name.trim(), mode: 'insensitive' } },
             });
+            if (found) targetIngId = found.id;
+          }
+
+          if (targetIngId) {
+            const currentIng = await tx.ingredient.findUnique({ where: { id: targetIngId } });
+            if (currentIng) {
+              const currentDist = (currentIng.sppgDistribution as Record<string, number>) || {};
+              const revertedDist = { ...currentDist };
+              for (const [unitId, qty] of Object.entries(it.allocations)) {
+                const num = Number(qty) || 0;
+                if (num <= 0) continue;
+                revertedDist[unitId] = Math.max(0, (Number(revertedDist[unitId]) || 0) - num);
+              }
+              await tx.ingredient.update({
+                where: { id: targetIngId },
+                data: { sppgDistribution: revertedDist },
+              });
+            }
           }
         }
       }
@@ -132,9 +212,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
                 console.warn('Gagal catat stock movement revisi alokasi:', smErr);
               }
             }
+
+            const totalAllocated = Object.values(appliedDist).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
+            const currentStockNum = Number(currentIng.currentStock) || 0;
+            const neededStock = Math.max(currentStockNum, totalAllocated);
+
             await tx.ingredient.update({
               where: { id: targetIngId },
-              data: { sppgDistribution: appliedDist },
+              data: {
+                sppgDistribution: appliedDist,
+                currentStock: neededStock,
+              },
             });
           }
         }
@@ -150,7 +238,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           vehiclePlate: vehiclePlate !== undefined ? vehiclePlate : existing.vehiclePlate,
           date: date ? new Date(date) : existing.date,
           notes: notes !== undefined ? notes : existing.notes,
-          status: status !== undefined ? status : existing.status,
+          status: status !== undefined ? status : (existing.status === 'RETURNED' ? 'COMPLETED' : existing.status),
           items: safeNewItems,
           headSignerName: headSignerName !== undefined ? headSignerName : existing.headSignerName,
           headSignerTitle: headSignerTitle !== undefined ? headSignerTitle : existing.headSignerTitle,
@@ -172,7 +260,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 /**
- * DELETE: Hapus riwayat alokasi pasokan bahan, sekaligus kurangi kembali stok per unit di sppgDistribution.
+ * DELETE: Hapus riwayat alokasi pasokan bahan, sekaligus kembalikan 100% stok bahan ke Gudang Sementara.
  */
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireSuperadmin(req);
@@ -188,7 +276,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     await prisma.$transaction(async (tx: any) => {
       const items = existing.items as any[];
-      if (Array.isArray(items)) {
+      if (Array.isArray(items) && existing.status !== 'RETURNED') {
         for (const it of items) {
           if (!it.allocations || typeof it.allocations !== 'object') continue;
 
@@ -205,10 +293,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
             if (currentIng) {
               const currentDist = (currentIng.sppgDistribution as Record<string, number>) || {};
               const updatedDist = { ...currentDist };
+              let totalReturned = 0;
 
               for (const [unitId, qty] of Object.entries(it.allocations)) {
                 const numQty = Number(qty) || 0;
                 if (numQty <= 0) continue;
+                totalReturned += numQty;
                 updatedDist[unitId] = Math.max(0, (Number(updatedDist[unitId]) || 0) - numQty);
 
                 try {
@@ -220,7 +310,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
                       quantity: numQty,
                       unit: it.unit || currentIng.defaultUnit,
                       referenceNumber: `BATAL-${existing.dispatchNumber}`,
-                      purpose: `Pembatalan Alokasi Bahan (${existing.dispatchNumber})`,
+                      purpose: `Pengembalian Bahan ke Stok Gudang Sementara (${existing.dispatchNumber})`,
                       recordedBy: 'Superadmin Logistik',
                       remainingStockAfter: updatedDist[unitId],
                     },
@@ -230,9 +320,16 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
                 }
               }
 
+              const newTotalAllocated = Object.values(updatedDist).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
+              const currentStockNum = Number(currentIng.currentStock) || 0;
+              const neededStock = Math.max(currentStockNum, newTotalAllocated + totalReturned);
+
               await tx.ingredient.update({
                 where: { id: targetIngId },
-                data: { sppgDistribution: updatedDist },
+                data: {
+                  sppgDistribution: updatedDist,
+                  currentStock: neededStock,
+                },
               });
             }
           }
@@ -242,7 +339,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       await tx.supplyDistribution.delete({ where: { id } });
     });
 
-    return NextResponse.json({ success: true, message: 'Alokasi bahan berhasil dihapus dan stok unit telah disesuaikan kembali.' });
+    return NextResponse.json({
+      success: true,
+      message: 'Alokasi bahan berhasil dihapus dan seluruh stok bahan telah dikembalikan ke Gudang Sementara.',
+    });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error?.message }, { status: 500 });
   }
