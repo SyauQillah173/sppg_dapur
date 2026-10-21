@@ -3,7 +3,7 @@
  * Jalankan terhadap server yang sudah hidup: npx tsx scripts/check-master-api.ts http://127.0.0.1:3006
  * Butuh kredensial superadmin dari KREDENSIAL-BARU.txt (dibaca otomatis).
  */
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 
 const BASE = process.argv[2] || 'http://127.0.0.1:3006';
 
@@ -17,9 +17,15 @@ const ok = (label: string, cond: boolean, extra?: unknown) => {
 };
 
 async function main() {
-  const cred = readFileSync('KREDENSIAL-BARU.txt', 'utf-8');
-  const password = /^superadmin\s*:\s*(\S+)/m.exec(cred)?.[1];
-  if (!password) throw new Error('Password superadmin tidak ditemukan di KREDENSIAL-BARU.txt');
+  let password = process.env.TEST_SUPERADMIN_PASSWORD || process.env.SUPERADMIN_PASSWORD;
+  if (!password && existsSync('KREDENSIAL-BARU.txt')) {
+    const cred = readFileSync('KREDENSIAL-BARU.txt', 'utf-8');
+    password = /^superadmin\s*:\s*(\S+)/m.exec(cred)?.[1];
+  }
+  if (!password) {
+    console.log('ℹ️ Pengujian dilewati: Silakan sediakan env TEST_SUPERADMIN_PASSWORD atau file lokal KREDENSIAL-BARU.txt.');
+    return;
+  }
 
   const login = await fetch(`${BASE}/api/auth/login`, {
     method: 'POST',

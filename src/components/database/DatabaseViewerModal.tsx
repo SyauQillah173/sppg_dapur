@@ -18,7 +18,7 @@ export function DatabaseViewerModal() {
  const { sppgUnits, procurements, ingredients, categories, units, suppliers, employees, stockLedgers } = useStore();
  const [copied, setCopied] = useState<boolean>(false);
 
- const neonConnectionString = 'postgresql://neondb_owner:npg_password@ep-giziflow-sppg-production.us-east-2.aws.neon.tech/giziflow_db?sslmode=require';
+ const neonConnectionString = 'postgresql://[DB_USER]:••••••••••••@[DB_CLUSTER_HOST].neon.tech/[DB_NAME]?sslmode=require';
 
  const handleCopy = () => {
  navigator.clipboard.writeText(neonConnectionString);
